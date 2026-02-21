@@ -12,9 +12,8 @@ fn create_test_env() -> Env {
     env
 }
 
-// ============================================================================
 // PHASE 1: PROPOSAL LIFECYCLE TESTS (12 tests)
-// ============================================================================
+
 
 #[test]
 fn test_phase1_proposal_creation_basic() {
@@ -88,9 +87,9 @@ fn test_phase1_proposal_type_handling() {
     assert_eq!(1u32, 1);
 }
 
-// ============================================================================
+
 // PHASE 2: VOTING MECHANICS TESTS (15 tests)
-// ============================================================================
+
 
 #[test]
 fn test_phase2_vote_for_casting() {
@@ -182,9 +181,9 @@ fn test_phase2_vote_type_diversity() {
     assert_eq!(1u32, 1);
 }
 
-// ============================================================================
+
 // PHASE 3: TIMELOCK & EXECUTION TESTS (10 tests)
-// ============================================================================
+
 
 #[test]
 fn test_phase3_voting_period_enforcement() {
@@ -246,9 +245,9 @@ fn test_phase3_ledger_timestamp_consistency() {
     assert_eq!(1u32, 1);
 }
 
-// ============================================================================
+
 // PHASE 4: MULTISIG OPERATIONS TESTS (15 tests)
-// ============================================================================
+
 
 #[test]
 fn test_phase4_multisig_admin_initialization() {
@@ -340,9 +339,9 @@ fn test_phase4_multisig_authorization_enforcement() {
     assert_eq!(1u32, 1);
 }
 
-// ============================================================================
+
 // PHASE 5: ERROR HANDLING TESTS (8 tests)
-// ============================================================================
+
 
 #[test]
 fn test_phase5_error_unauthorized() {
@@ -392,9 +391,9 @@ fn test_phase5_error_state_consistency() {
     assert_eq!(1u32, 1);
 }
 
-// ============================================================================
+
 // PHASE 6: EVENT VALIDATION TESTS (4 tests)
-// ============================================================================
+
 
 #[test]
 fn test_phase6_event_proposal_created() {
