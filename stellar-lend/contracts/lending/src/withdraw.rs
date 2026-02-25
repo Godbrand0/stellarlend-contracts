@@ -12,6 +12,7 @@ pub enum WithdrawError {
     Overflow = 3,
     InsufficientCollateral = 4,
     InsufficientCollateralRatio = 5,
+    Unauthorized = 6,
 }
 
 /// Storage keys for withdraw-related data
