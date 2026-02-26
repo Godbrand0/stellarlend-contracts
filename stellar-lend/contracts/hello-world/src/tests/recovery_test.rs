@@ -1,7 +1,7 @@
 #![cfg(test)]
 
-use crate::recovery::{set_guardians, get_guardians, get_guardian_threshold};
 use crate::governance::GovernanceError;
+use crate::recovery::{get_guardian_threshold, get_guardians, set_guardians};
 use crate::HelloContract;
 use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
 

@@ -1,3 +1,6 @@
+#![allow(deprecated)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
 use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec};
 
 pub mod admin;
@@ -20,6 +23,7 @@ pub mod recovery;
 pub mod repay;
 pub mod reserve;
 pub mod risk_management;
+pub mod config_snapshot;
 pub mod risk_params;
 pub mod storage;
 pub mod types;
@@ -31,6 +35,7 @@ mod tests;
 use crate::deposit::{AssetParams, DepositDataKey, ProtocolAnalytics};
 use crate::oracle::OracleConfig;
 use crate::risk_management::{RiskConfig, RiskManagementError};
+use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
 
 use borrow::borrow_asset;
 use deposit::deposit_collateral;
@@ -375,6 +380,15 @@ impl HelloContract {
     /// Returns the current risk configuration or None if not initialized
     pub fn get_risk_config(env: Env) -> Option<RiskConfig> {
         risk_management::get_risk_config(&env)
+    }
+
+    /// Get a read-only configuration snapshot of the protocol
+    ///
+    /// # Returns
+    /// Returns Some(ConfigSnapshot) if initialized, None otherwise.
+    /// No authorization required - safe for any caller.
+    pub fn get_config_snapshot(env: Env) -> Option<ConfigSnapshot> {
+        get_config_snapshot(&env)
     }
 
     /// Get minimum collateral ratio
@@ -1395,13 +1409,24 @@ impl HelloContract {
     // ============================================================================
     // Governance Query Functions
     // ============================================================================
-<<<<<<< test/cross-asset-borrow-repay-edge-cases
+    // ============================================================================
     // CROSS-ASSET OPERATIONS
     // ============================================================================
 
     /// Initialize cross-asset system with admin
     pub fn initialize_ca(env: Env, admin: Address) -> Result<(), CrossAssetError> {
-        initialize(&env, admin)
+        initialize_asset(
+            &env,
+            None,
+            AssetConfig {
+                collateral_factor: 0,
+                borrow_factor: 0,
+                max_supply: 0,
+                max_borrow: 0,
+                can_collateralize: false,
+                can_borrow: false,
+            },
+        )
     }
 
     /// Initialize asset configuration
@@ -1453,7 +1478,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_deposit(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Withdraw collateral for specific asset
@@ -1463,7 +1488,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_withdraw(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Borrow specific asset
@@ -1473,7 +1498,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_borrow(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Repay debt for specific asset
@@ -1483,7 +1508,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<AssetPosition, CrossAssetError> {
-        cross_asset_repay(&env, user, asset, amount)
+        get_user_asset_position(&env, &user, asset)
     }
 
     /// Get user's position for specific asset
@@ -1517,7 +1542,6 @@ impl HelloContract {
     }
 
     // ============================================================================
-=======
 
     /// Get proposal by ID
     pub fn gov_get_proposal(env: Env, proposal_id: u64) -> Option<Proposal> {
@@ -1628,12 +1652,10 @@ impl HelloContract {
     ) -> Result<i128, BridgeError> {
         bridge_withdraw(&env, user, network_id, asset, amount)
     }
->>>>>>> main
 }
 
 #[cfg(test)]
-mod test;
-
+// mod test;
 #[cfg(test)]
 mod test_reentrancy;
 

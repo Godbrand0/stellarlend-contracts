@@ -736,7 +736,7 @@ fn test_accrued_interest_extreme_overflow() {
     let current_time = 100 * SECONDS_PER_YEAR;
 
     let result = calculate_accrued_interest(principal, last_accrual, current_time, rate_bps);
-    
+
     // Should return Overflow error instead of panicking
     assert!(result.is_err());
 }

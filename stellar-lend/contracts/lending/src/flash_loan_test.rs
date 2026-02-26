@@ -243,7 +243,7 @@ fn test_flash_loan_callback_false() {
 
     // Should fail with CallbackFailed (5)
     let result = client.try_flash_loan(&receiver_address, &asset, &amount, &Bytes::new(&env));
-    assert_eq!(result, Err(Ok(FlashLoanError::CallbackFailed.into())));
+    assert_eq!(result, Err(Ok(FlashLoanError::CallbackFailed)));
 }
 
 #[test]

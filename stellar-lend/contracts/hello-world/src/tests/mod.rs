@@ -25,6 +25,8 @@ pub mod amm_impact_test;
 pub mod borrow_cap_test;
 pub mod bridge_test;
 pub mod cross_contract_test;
+pub mod config_snapshot_test;
+pub mod oracle_staleness_fallback_test;
 pub mod gov_asset_test;
 pub mod multisig_governance_execution_test;
 pub mod multisig_test;

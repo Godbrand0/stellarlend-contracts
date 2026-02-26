@@ -11,6 +11,7 @@ pub enum FlashLoanError {
     InvalidFee = 4,
     CallbackFailed = 5,
     Reentrancy = 6,
+    ProtocolPaused = 7,
 }
 
 /// Storage keys for flash loan data

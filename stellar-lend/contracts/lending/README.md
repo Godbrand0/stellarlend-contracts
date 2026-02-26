@@ -11,6 +11,7 @@ A secure, efficient lending protocol built on Soroban that allows users to borro
 - **Interest Accrual**: Automatic interest calculation at 5% APY
 - **Debt Ceiling**: Protocol-level debt limits for risk management
 - **Pause Mechanism**: Granular emergency pause functionality for specific operations (Deposit, Borrow, Repay, Withdraw, Liquidation)
+- **Emergency Lifecycle**: `Normal -> Shutdown -> Recovery -> Normal` flow with guardian-triggered shutdown and admin-controlled recovery
 - **Admin Control**: Secure protocol management with a dedicated admin role
 - **Overflow Protection**: Comprehensive checks against arithmetic overflow
 - **Event Emission**: Track all borrow and pause operations via events
@@ -29,7 +30,7 @@ cargo test
 
 ## Documentation
 
-See [borrow.md](./borrow.md) and [pause.md](./pause.md) for comprehensive documentation including:
+See [borrow.md](./borrow.md), [pause.md](./pause.md), and [emergency_shutdown.md](./emergency_shutdown.md) for comprehensive documentation including:
 
 - Function signatures and parameters
 - Error types and handling
@@ -49,6 +50,10 @@ See [borrow.md](./borrow.md) and [pause.md](./pause.md) for comprehensive docume
 
 - `initialize()` - Set protocol admin, debt ceiling, and minimum borrow amount
 - `set_pause()` - Granular pause for specific operations
+- `set_guardian()` - Configure emergency guardian
+- `emergency_shutdown()` - Trigger hard emergency shutdown (admin or guardian)
+- `start_recovery()` - Enter controlled user unwind mode (admin only)
+- `complete_recovery()` - Return protocol to normal operation (admin only)
 - `get_admin()` - Returns the current protocol admin
 
 ## Security

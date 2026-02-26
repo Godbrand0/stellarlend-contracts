@@ -10,7 +10,7 @@ fn setup_test(env: &Env) -> (LendingContractClient<'static>, Address, Address, A
     let asset1 = Address::generate(env);
     let _asset2 = Address::generate(env);
 
-    let contract_id = env.register_contract(None, LendingContract);
+    let contract_id = env.register(LendingContract, ());
     let client = LendingContractClient::new(env, &contract_id);
 
     client.initialize_admin(&admin);

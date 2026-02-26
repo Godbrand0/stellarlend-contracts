@@ -1,7 +1,5 @@
 use soroban_sdk::{Address, Env};
-use stellarlend_amm::{
-    AmmError, AmmProtocolConfig, LiquidityParams, SwapParams,
-};
+use stellarlend_amm::{AmmError, AmmProtocolConfig, LiquidityParams, SwapParams};
 
 /// Set AMM pool configuration (admin only)
 pub fn set_amm_pool(
@@ -12,9 +10,9 @@ pub fn set_amm_pool(
     // In a real scenario, this would call the deployed AMM contract.
     // Since we are integrating it, we can use the library logic.
     // However, to make it truly integrated as a wrapper, we might want to store the state here
-    // or call another contract. 
+    // or call another contract.
     // For this implementation, we will use the library functions from stellarlend_amm.
-    
+
     stellarlend_amm::add_amm_protocol(&env, admin, protocol_config)
 }
 

@@ -22,7 +22,6 @@ fn test_interest_calculation_extreme_values() {
     // calculate_interest uses I256 intermediate, so it handles large results
     let interest = calculate_interest(&env, &position);
     assert!(interest > 0);
-    assert!(interest <= i128::MAX);
 
     // Test with large amount (10^30) and 3 years (approx 10^8 seconds)
     // Intermediate: 10^30 * 500 * 10^8 = 5 * 10^40 (overflows i128)

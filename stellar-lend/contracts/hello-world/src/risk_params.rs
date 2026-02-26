@@ -254,10 +254,7 @@ pub fn get_liquidation_incentive(env: &Env) -> Result<i128, RiskParamsError> {
 ///
 /// # Returns
 /// Maximum amount that can be liquidated
-pub fn get_max_liquidatable_amount(
-    env: &Env,
-    debt_value: i128,
-) -> Result<i128, RiskParamsError> {
+pub fn get_max_liquidatable_amount(env: &Env, debt_value: i128) -> Result<i128, RiskParamsError> {
     let config = get_risk_params(env).ok_or(RiskParamsError::InvalidParameter)?;
 
     // Calculate: debt * close_factor / BASIS_POINTS_SCALE

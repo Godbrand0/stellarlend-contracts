@@ -73,9 +73,15 @@
 
 use soroban_sdk::{testutils::Address as _, Address, Env, Symbol, Vec};
 
-use crate::admin::{grant_role, has_role, require_admin, require_role_or_admin, revoke_role, set_admin, AdminDataKey, AdminError};
-use crate::reserve::{initialize_reserve_config, set_reserve_factor, set_treasury_address, withdraw_reserve_to_treasury, get_treasury_address, ReserveError, MAX_RESERVE_FACTOR_BPS};
-use crate::deposit::{DepositDataKey};
+use crate::admin::{
+    grant_role, has_role, require_admin, require_role_or_admin, revoke_role, set_admin,
+    AdminDataKey, AdminError,
+};
+use crate::deposit::DepositDataKey;
+use crate::reserve::{
+    get_treasury_address, initialize_reserve_config, set_reserve_factor, set_treasury_address,
+    withdraw_reserve_to_treasury, ReserveError, MAX_RESERVE_FACTOR_BPS,
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Test Setup Helpers
@@ -90,11 +96,11 @@ fn setup_env() -> (Env, Address) {
 fn setup_with_admin() -> (Env, Address, Address) {
     let (env, contract_id) = setup_env();
     let admin = Address::generate(&env);
-    
+
     env.as_contract(&contract_id, || {
         set_admin(&env, admin.clone(), None).unwrap();
     });
-    
+
     (env, contract_id, admin)
 }
 
@@ -102,11 +108,11 @@ fn setup_admin_with_role(role_name: &str) -> (Env, Address, Address, Address) {
     let (env, contract_id, admin) = setup_with_admin();
     let roled_user = Address::generate(&env);
     let role = Symbol::new(&env, role_name);
-    
+
     env.as_contract(&contract_id, || {
         grant_role(&env, admin.clone(), role, roled_user.clone()).unwrap();
     });
-    
+
     (env, contract_id, admin, roled_user)
 }
 
@@ -117,7 +123,7 @@ fn setup_admin_with_role(role_name: &str) -> (Env, Address, Address, Address) {
 #[test]
 fn test_set_admin_unauthorized() {
     //! Tests that unauthorized users cannot set admin.
-    //! 
+    //!
     //! **Security Test:** Verifies that only the current admin can transfer admin rights.
 
     let (env, contract_id, admin) = setup_with_admin();
@@ -128,7 +134,7 @@ fn test_set_admin_unauthorized() {
         // Unauthorized attempt to set admin should fail
         let result = set_admin(&env, new_admin.clone(), Some(unauthorized.clone()));
         assert_eq!(result, Err(AdminError::Unauthorized));
-        
+
         // Verify admin hasn't changed
         let current_admin = crate::admin::get_admin(&env).unwrap();
         assert_eq!(current_admin, admin);
@@ -146,7 +152,7 @@ fn test_set_admin_authorized() {
         // Admin can transfer to new admin
         let result = set_admin(&env, new_admin.clone(), Some(admin.clone()));
         assert!(result.is_ok());
-        
+
         // Verify admin has changed
         let current_admin = crate::admin::get_admin(&env).unwrap();
         assert_eq!(current_admin, new_admin);
@@ -166,7 +172,7 @@ fn test_grant_role_unauthorized() {
         // Unauthorized attempt to grant role should fail
         let result = grant_role(&env, unauthorized.clone(), role.clone(), target.clone());
         assert_eq!(result, Err(AdminError::Unauthorized));
-        
+
         // Verify role wasn't granted
         assert!(!has_role(&env, role, target));
     });
@@ -184,7 +190,7 @@ fn test_grant_role_authorized() {
         // Admin can grant role
         let result = grant_role(&env, admin.clone(), role.clone(), target.clone());
         assert!(result.is_ok());
-        
+
         // Verify role was granted
         assert!(has_role(&env, role, target));
     });
@@ -201,11 +207,11 @@ fn test_revoke_role_unauthorized() {
     env.as_contract(&contract_id, || {
         // Verify role exists
         assert!(has_role(&env, role.clone(), roled_user.clone()));
-        
+
         // Unauthorized attempt to revoke role should fail
         let result = revoke_role(&env, unauthorized.clone(), role.clone(), roled_user.clone());
         assert_eq!(result, Err(AdminError::Unauthorized));
-        
+
         // Verify role still exists
         assert!(has_role(&env, role, roled_user));
     });
@@ -221,11 +227,11 @@ fn test_revoke_role_authorized() {
     env.as_contract(&contract_id, || {
         // Verify role exists
         assert!(has_role(&env, role.clone(), roled_user.clone()));
-        
+
         // Admin can revoke role
         let result = revoke_role(&env, admin.clone(), role.clone(), roled_user.clone());
         assert!(result.is_ok());
-        
+
         // Verify role was revoked
         assert!(!has_role(&env, role, roled_user));
     });
@@ -242,7 +248,7 @@ fn test_require_admin_check() {
         // Admin should pass
         let result = require_admin(&env, &admin);
         assert!(result.is_ok());
-        
+
         // Non-admin should fail
         let result = require_admin(&env, &non_admin);
         assert_eq!(result, Err(AdminError::Unauthorized));
@@ -275,7 +281,7 @@ fn test_require_role_or_admin_with_role() {
         // User with correct role should pass
         let result = require_role_or_admin(&env, &roled_user, role.clone());
         assert!(result.is_ok());
-        
+
         // User with wrong role should fail
         let result = require_role_or_admin(&env, &roled_user, wrong_role);
         assert_eq!(result, Err(AdminError::Unauthorized));
@@ -330,10 +336,10 @@ fn test_set_reserve_factor_authorized() {
 
     env.as_contract(&contract_id, || {
         initialize_reserve_config(&env, asset.clone(), 1000).unwrap();
-        
+
         let result = set_reserve_factor(&env, admin.clone(), asset.clone(), 2000);
         assert!(result.is_ok());
-        
+
         // Verify the change
         let factor = crate::reserve::get_reserve_factor(&env, asset);
         assert_eq!(factor, 2000);
@@ -364,7 +370,7 @@ fn test_set_treasury_address_authorized() {
     env.as_contract(&contract_id, || {
         let result = set_treasury_address(&env, admin.clone(), treasury.clone());
         assert!(result.is_ok());
-        
+
         // Verify the change
         let stored = get_treasury_address(&env).unwrap();
         assert_eq!(stored, treasury);
@@ -406,7 +412,7 @@ fn test_withdraw_reserve_authorized() {
         initialize_reserve_config(&env, asset.clone(), 1000).unwrap();
         set_treasury_address(&env, admin.clone(), treasury.clone()).unwrap();
         crate::reserve::accrue_reserve(&env, asset.clone(), 10000).unwrap();
-        
+
         let result = withdraw_reserve_to_treasury(&env, admin.clone(), asset.clone(), 500);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 500);
@@ -426,7 +432,7 @@ macro_rules! test_unauthorized_access {
             let (env, contract_id, admin) = setup_with_admin();
             let unauthorized = Address::generate(&env);
             let setup_result = $setup(&env, &contract_id, &admin);
-            
+
             env.as_contract(&contract_id, || {
                 let result = $call(&env, &setup_result, &unauthorized);
                 assert_eq!(result, $expected_err);
@@ -439,9 +445,9 @@ macro_rules! test_unauthorized_access {
 #[test]
 fn test_authorized_vs_unauthorized_matrix() {
     //! Comprehensive test for authorized vs unauthorized access patterns.
-    //! 
+    //!
     //! This test verifies the following access control matrix:
-    //! 
+    //!
     //! | Caller Type | Admin Functions | Role Functions | Public Functions |
     //! |-------------|-----------------|----------------|------------------|
     //! | Admin       | ✅ Allowed      | ✅ Allowed     | ✅ Allowed       |
@@ -467,14 +473,23 @@ fn test_authorized_vs_unauthorized_matrix() {
 
     // Test role user access (should succeed for role check, fail for admin check)
     env.as_contract(&contract_id, || {
-        assert_eq!(require_admin(&env, &role_user), Err(AdminError::Unauthorized));
+        assert_eq!(
+            require_admin(&env, &role_user),
+            Err(AdminError::Unauthorized)
+        );
         assert!(require_role_or_admin(&env, &role_user, role.clone()).is_ok());
     });
 
     // Test regular user access (should fail both checks)
     env.as_contract(&contract_id, || {
-        assert_eq!(require_admin(&env, &regular_user), Err(AdminError::Unauthorized));
-        assert_eq!(require_role_or_admin(&env, &regular_user, role.clone()), Err(AdminError::Unauthorized));
+        assert_eq!(
+            require_admin(&env, &regular_user),
+            Err(AdminError::Unauthorized)
+        );
+        assert_eq!(
+            require_role_or_admin(&env, &regular_user, role.clone()),
+            Err(AdminError::Unauthorized)
+        );
     });
 }
 
@@ -485,7 +500,7 @@ fn test_authorized_vs_unauthorized_matrix() {
 #[test]
 fn test_admin_role_change_mid_transaction() {
     //! Tests that admin changes are effective immediately.
-    //! 
+    //!
     //! **Security Test:** Verifies that role changes take effect immediately
     //! and there is no caching or delay in authorization checks.
 
@@ -496,13 +511,16 @@ fn test_admin_role_change_mid_transaction() {
     env.as_contract(&contract_id, || {
         // Verify original admin works
         assert!(require_admin(&env, &old_admin).is_ok());
-        
+
         // Transfer admin
         set_admin(&env, new_admin.clone(), Some(old_admin.clone())).unwrap();
-        
+
         // Old admin should no longer work
-        assert_eq!(require_admin(&env, &old_admin), Err(AdminError::Unauthorized));
-        
+        assert_eq!(
+            require_admin(&env, &old_admin),
+            Err(AdminError::Unauthorized)
+        );
+
         // New admin should work
         assert!(require_admin(&env, &new_admin).is_ok());
     });
@@ -518,10 +536,10 @@ fn test_role_revoke_immediate_effect() {
     env.as_contract(&contract_id, || {
         // Verify role works
         assert!(require_role_or_admin(&env, &roled_user, role.clone()).is_ok());
-        
+
         // Revoke role
         revoke_role(&env, admin.clone(), role.clone(), roled_user.clone()).unwrap();
-        
+
         // User should no longer have role
         assert_eq!(
             require_role_or_admin(&env, &roled_user, role.clone()),
@@ -544,14 +562,14 @@ fn test_multiple_roles_independence() {
         // Grant different roles to different users
         grant_role(&env, admin.clone(), role_a.clone(), user_a.clone()).unwrap();
         grant_role(&env, admin.clone(), role_b.clone(), user_b.clone()).unwrap();
-        
+
         // User A should have role_a but not role_b
         assert!(require_role_or_admin(&env, &user_a, role_a.clone()).is_ok());
         assert_eq!(
             require_role_or_admin(&env, &user_a, role_b.clone()),
             Err(AdminError::Unauthorized)
         );
-        
+
         // User B should have role_b but not role_a
         assert!(require_role_or_admin(&env, &user_b, role_b.clone()).is_ok());
         assert_eq!(
@@ -574,7 +592,7 @@ fn test_same_user_multiple_roles() {
         // Grant multiple roles to same user
         grant_role(&env, admin.clone(), role_1.clone(), user.clone()).unwrap();
         grant_role(&env, admin.clone(), role_2.clone(), user.clone()).unwrap();
-        
+
         // User should pass both role checks
         assert!(require_role_or_admin(&env, &user, role_1).is_ok());
         assert!(require_role_or_admin(&env, &user, role_2).is_ok());
@@ -588,7 +606,7 @@ fn test_same_user_multiple_roles() {
 #[test]
 fn test_regression_admin_transfer_double_spend() {
     //! Regression test: Verify admin cannot be transferred twice by old admin.
-    //! 
+    //!
     //! **Security Vulnerability Prevented:** Old admin attempting to regain control
     //! after transfer by calling transfer again with stale authorization.
 
@@ -599,11 +617,11 @@ fn test_regression_admin_transfer_double_spend() {
     env.as_contract(&contract_id, || {
         // Transfer admin to new_admin
         set_admin(&env, new_admin.clone(), Some(admin.clone())).unwrap();
-        
+
         // Old admin (now unauthorized) tries to transfer again
         let result = set_admin(&env, attacker.clone(), Some(admin.clone()));
         assert_eq!(result, Err(AdminError::Unauthorized));
-        
+
         // Verify new_admin is still the admin
         let current_admin = crate::admin::get_admin(&env).unwrap();
         assert_eq!(current_admin, new_admin);
@@ -622,7 +640,7 @@ fn test_regression_role_grant_self_elevation() {
         // Attacker tries to grant themselves a role
         let result = grant_role(&env, attacker.clone(), role.clone(), attacker.clone());
         assert_eq!(result, Err(AdminError::Unauthorized));
-        
+
         // Verify role was not granted
         assert!(!has_role(&env, role, attacker));
     });
@@ -631,7 +649,7 @@ fn test_regression_role_grant_self_elevation() {
 #[test]
 fn test_regression_admin_cannot_bypass_reserve_limits() {
     //! Regression test: Verify admin cannot exceed reserve limits.
-    //! 
+    //!
     //! Admin should be able to withdraw reserves but not more than available.
 
     let (env, contract_id, admin) = setup_with_admin();
@@ -641,14 +659,14 @@ fn test_regression_admin_cannot_bypass_reserve_limits() {
     env.as_contract(&contract_id, || {
         initialize_reserve_config(&env, asset.clone(), 1000).unwrap();
         set_treasury_address(&env, admin.clone(), treasury.clone()).unwrap();
-        
+
         // Accrue some reserves
         crate::reserve::accrue_reserve(&env, asset.clone(), 1000).unwrap();
-        
+
         // Admin tries to withdraw more than available
         let result = withdraw_reserve_to_treasury(&env, admin.clone(), asset.clone(), 2000);
         assert_eq!(result, Err(ReserveError::InsufficientReserve));
-        
+
         // Verify balance unchanged
         let balance = crate::reserve::get_reserve_balance(&env, asset.clone());
         assert_eq!(balance, 100);
@@ -664,11 +682,16 @@ fn test_regression_reserve_factor_bounds() {
 
     env.as_contract(&contract_id, || {
         initialize_reserve_config(&env, asset.clone(), 1000).unwrap();
-        
+
         // Try to set factor above maximum
-        let result = set_reserve_factor(&env, admin.clone(), asset.clone(), MAX_RESERVE_FACTOR_BPS + 1);
+        let result = set_reserve_factor(
+            &env,
+            admin.clone(),
+            asset.clone(),
+            MAX_RESERVE_FACTOR_BPS + 1,
+        );
         assert_eq!(result, Err(ReserveError::InvalidReserveFactor));
-        
+
         // Verify factor unchanged
         let factor = crate::reserve::get_reserve_factor(&env, asset.clone());
         assert_eq!(factor, 1000);
@@ -682,7 +705,7 @@ fn test_regression_reserve_factor_bounds() {
 #[test]
 fn test_complete_access_control_matrix() {
     //! Comprehensive test of all access control patterns.
-    //! 
+    //!
     //! This test documents and verifies the complete access control matrix
     //! for the StellarLend protocol.
 
@@ -702,7 +725,7 @@ fn test_complete_access_control_matrix() {
     env.as_contract(&contract_id, || {
         // Admin can call admin functions
         assert!(require_admin(&env, &admin).is_ok());
-        
+
         // Admin can call role functions
         assert!(require_role_or_admin(&env, &admin, role.clone()).is_ok());
     });
@@ -712,8 +735,11 @@ fn test_complete_access_control_matrix() {
     // ═══════════════════════════════════════════════════════════════════════
     env.as_contract(&contract_id, || {
         // Role holder cannot call admin functions
-        assert_eq!(require_admin(&env, &role_holder), Err(AdminError::Unauthorized));
-        
+        assert_eq!(
+            require_admin(&env, &role_holder),
+            Err(AdminError::Unauthorized)
+        );
+
         // Role holder can call role functions with matching role
         assert!(require_role_or_admin(&env, &role_holder, role.clone()).is_ok());
     });
@@ -723,8 +749,11 @@ fn test_complete_access_control_matrix() {
     // ═══════════════════════════════════════════════════════════════════════
     env.as_contract(&contract_id, || {
         // Regular user cannot call admin functions
-        assert_eq!(require_admin(&env, &regular_user), Err(AdminError::Unauthorized));
-        
+        assert_eq!(
+            require_admin(&env, &regular_user),
+            Err(AdminError::Unauthorized)
+        );
+
         // Regular user cannot call role functions
         assert_eq!(
             require_role_or_admin(&env, &regular_user, role.clone()),
@@ -741,7 +770,10 @@ fn test_complete_access_control_matrix() {
 
     empty_env.as_contract(&empty_contract, || {
         // Without admin set, require_admin should fail
-        assert_eq!(require_admin(&empty_env, &some_user), Err(AdminError::Unauthorized));
+        assert_eq!(
+            require_admin(&empty_env, &some_user),
+            Err(AdminError::Unauthorized)
+        );
     });
 }
 
@@ -763,7 +795,7 @@ fn test_stress_many_roles() {
             for user_idx in 0..num_users {
                 let user = Address::generate(&env);
                 grant_role(&env, admin.clone(), role.clone(), user.clone()).unwrap();
-                
+
                 // Verify each role assignment
                 assert!(has_role(&env, role.clone(), user.clone()));
             }
@@ -784,7 +816,7 @@ fn test_stress_repeated_role_toggle() {
             // Grant
             grant_role(&env, admin.clone(), role.clone(), user.clone()).unwrap();
             assert!(has_role(&env, role.clone(), user.clone()));
-            
+
             // Revoke
             revoke_role(&env, admin.clone(), role.clone(), user.clone()).unwrap();
             assert!(!has_role(&env, role.clone(), user.clone()));

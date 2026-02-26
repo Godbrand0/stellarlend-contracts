@@ -248,7 +248,8 @@ pub fn borrow_asset(
     }
 
     // Check for reentrancy
-    let _guard = crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| BorrowError::Reentrancy)?;
+    let _guard =
+        crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| BorrowError::Reentrancy)?;
 
     // Check if borrows are paused
     let pause_switches_key = DepositDataKey::PauseSwitches;
@@ -383,7 +384,9 @@ pub fn borrow_asset(
         .ok_or(BorrowError::Overflow)?;
 
     // Amount user actually receives
-    let receive_amount = amount.checked_sub(fee_amount).ok_or(BorrowError::Overflow)?;
+    let receive_amount = amount
+        .checked_sub(fee_amount)
+        .ok_or(BorrowError::Overflow)?;
 
     if receive_amount <= 0 {
         return Err(BorrowError::InvalidAmount);
@@ -407,11 +410,7 @@ pub fn borrow_asset(
                 return Err(BorrowError::InsufficientCollateral);
             }
 
-            token_client.transfer(
-                &env.current_contract_address(),
-                &user,
-                &receive_amount,
-            );
+            token_client.transfer(&env.current_contract_address(), &user, &receive_amount);
         }
 
         // Credit fee to protocol reserve
@@ -424,7 +423,9 @@ pub fn borrow_asset(
                 .unwrap_or(0);
             env.storage().persistent().set(
                 &reserve_key,
-                &(current_reserve.checked_add(fee_amount).ok_or(BorrowError::Overflow)?),
+                &(current_reserve
+                    .checked_add(fee_amount)
+                    .ok_or(BorrowError::Overflow)?),
             );
         }
     }
@@ -466,7 +467,10 @@ pub fn borrow_asset(
     emit_user_activity_tracked_event(env, &user, Symbol::new(env, "borrow"), amount, timestamp);
 
     // Return total debt
-    let total_debt = position.debt.checked_add(position.borrow_interest).ok_or(BorrowError::Overflow)?;
+    let total_debt = position
+        .debt
+        .checked_add(position.borrow_interest)
+        .ok_or(BorrowError::Overflow)?;
     Ok(total_debt)
 }
 
@@ -484,18 +488,36 @@ fn update_user_analytics_borrow(
         .persistent()
         .get::<DepositDataKey, UserAnalytics>(&analytics_key)
         .unwrap_or_else(|| UserAnalytics {
-            total_deposits: 0, total_borrows: 0, total_withdrawals: 0, total_repayments: 0,
-            collateral_value: 0, debt_value: 0, collateralization_ratio: 0, activity_score: 0,
-            transaction_count: 0, first_interaction: timestamp, last_activity: timestamp,
-            risk_level: 0, loyalty_tier: 0,
+            total_deposits: 0,
+            total_borrows: 0,
+            total_withdrawals: 0,
+            total_repayments: 0,
+            collateral_value: 0,
+            debt_value: 0,
+            collateralization_ratio: 0,
+            activity_score: 0,
+            transaction_count: 0,
+            first_interaction: timestamp,
+            last_activity: timestamp,
+            risk_level: 0,
+            loyalty_tier: 0,
         });
 
-    analytics.total_borrows = analytics.total_borrows.checked_add(amount).ok_or(BorrowError::Overflow)?;
-    analytics.debt_value = analytics.debt_value.checked_add(amount).ok_or(BorrowError::Overflow)?;
+    analytics.total_borrows = analytics
+        .total_borrows
+        .checked_add(amount)
+        .ok_or(BorrowError::Overflow)?;
+    analytics.debt_value = analytics
+        .debt_value
+        .checked_add(amount)
+        .ok_or(BorrowError::Overflow)?;
 
     if analytics.debt_value > 0 && analytics.collateral_value > 0 {
-        analytics.collateralization_ratio = analytics.collateral_value.checked_mul(10000)
-            .and_then(|v| v.checked_div(analytics.debt_value)).unwrap_or(0);
+        analytics.collateralization_ratio = analytics
+            .collateral_value
+            .checked_mul(10000)
+            .and_then(|v| v.checked_div(analytics.debt_value))
+            .unwrap_or(0);
     } else {
         analytics.collateralization_ratio = 0;
     }
@@ -510,11 +532,20 @@ fn update_user_analytics_borrow(
 /// Update protocol analytics after borrow
 fn update_protocol_analytics_borrow(env: &Env, amount: i128) -> Result<(), BorrowError> {
     let analytics_key = DepositDataKey::ProtocolAnalytics;
-    let mut analytics = env.storage().persistent()
+    let mut analytics = env
+        .storage()
+        .persistent()
         .get::<DepositDataKey, ProtocolAnalytics>(&analytics_key)
-        .unwrap_or(ProtocolAnalytics { total_deposits: 0, total_borrows: 0, total_value_locked: 0 });
+        .unwrap_or(ProtocolAnalytics {
+            total_deposits: 0,
+            total_borrows: 0,
+            total_value_locked: 0,
+        });
 
-    analytics.total_borrows = analytics.total_borrows.checked_add(amount).ok_or(BorrowError::Overflow)?;
+    analytics.total_borrows = analytics
+        .total_borrows
+        .checked_add(amount)
+        .ok_or(BorrowError::Overflow)?;
     env.storage().persistent().set(&analytics_key, &analytics);
     Ok(())
 }

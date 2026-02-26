@@ -24,11 +24,10 @@
 use soroban_sdk::{Address, Env, Symbol, Vec};
 
 use crate::governance::{
+    approve_proposal, create_proposal, emit_approval_event, emit_proposal_executed_event,
+    execute_multisig_proposal, execute_proposal, get_multisig_admins, get_multisig_threshold,
+    get_proposal, get_proposal_approvals, set_multisig_admins, set_multisig_threshold,
     GovernanceDataKey, GovernanceError, Proposal, ProposalStatus, ProposalType,
-    approve_proposal, create_proposal, execute_multisig_proposal, execute_proposal,
-    get_multisig_admins, get_multisig_threshold, get_proposal, get_proposal_approvals,
-    set_multisig_admins, set_multisig_threshold,
-    emit_approval_event, emit_proposal_executed_event,
 };
 
 // ============================================================================
@@ -99,7 +98,7 @@ pub fn ms_set_admins(
 ///
 /// `new_ratio` is expressed in basis points
 /// (e.g. 15000 = 150%) and must be greater than 100%.
- 
+
 /// # Returns
 /// The ID of the newly created proposal.
 ///
@@ -107,7 +106,6 @@ pub fn ms_set_admins(
 /// - [`GovernanceError::Unauthorized`] if the caller is not an admin.
 /// - [`GovernanceError::InvalidProposal`] if the ratio is economically invalid
 ///   or proposal creation fails.
-
 
 pub fn ms_propose_set_min_cr(
     env: &Env,
@@ -119,7 +117,8 @@ pub fn ms_propose_set_min_cr(
     }
 
     // Delegates auth check + proposal creation to governance.rs
-    let proposal_id = crate::governance::propose_set_min_collateral_ratio(env, proposer.clone(), new_ratio)?;
+    let proposal_id =
+        crate::governance::propose_set_min_collateral_ratio(env, proposer.clone(), new_ratio)?;
 
     // Proposer auto-approves their own proposal
     approve_proposal(env, proposer, proposal_id)?;
@@ -140,11 +139,7 @@ pub fn ms_propose_set_min_cr(
 /// - [`GovernanceError::Unauthorized`] if the caller is not an admin.
 /// - [`GovernanceError::ProposalNotFound`] if the proposal does not exist.
 /// - [`GovernanceError::AlreadyVoted`] if the admin already approved.
-pub fn ms_approve(
-    env: &Env,
-    approver: Address,
-    proposal_id: u64,
-) -> Result<(), GovernanceError> {
+pub fn ms_approve(env: &Env, approver: Address, proposal_id: u64) -> Result<(), GovernanceError> {
     approve_proposal(env, approver, proposal_id)
 }
 
@@ -165,11 +160,7 @@ pub fn ms_approve(
 /// - [`GovernanceError::ProposalAlreadyExecuted`] if the proposal
 ///   was already executed.
 /// - [`GovernanceError::ProposalNotReady`] if a timelock is still active.
-pub fn ms_execute(
-    env: &Env,
-    executor: Address,
-    proposal_id: u64,
-) -> Result<(), GovernanceError> {
+pub fn ms_execute(env: &Env, executor: Address, proposal_id: u64) -> Result<(), GovernanceError> {
     execute_multisig_proposal(env, executor, proposal_id)
 }
 

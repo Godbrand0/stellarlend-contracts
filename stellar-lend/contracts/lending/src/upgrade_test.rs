@@ -1,4 +1,4 @@
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, Error, InvokeError};
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env};
 
 use crate::{LendingContract, LendingContractClient, UpgradeError, UpgradeStage};
 
@@ -7,7 +7,7 @@ fn hash(env: &Env, b: u8) -> BytesN<32> {
 }
 
 fn setup(env: &Env, required_approvals: u32) -> (LendingContractClient<'_>, Address) {
-    let contract_id = env.register_contract(None, LendingContract);
+    let contract_id = env.register(LendingContract, ());
     let client = LendingContractClient::new(env, &contract_id);
     let admin = Address::generate(env);
     client.upgrade_init(&admin, &hash(env, 1), &required_approvals);
@@ -30,7 +30,7 @@ fn assert_contract_error<T, E>(
 fn test_init_sets_defaults() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, admin) = setup(&env, 2);
+    let (client, _admin) = setup(&env, 2);
 
     assert_eq!(client.current_version(), 0);
     assert_eq!(client.current_wasm_hash(), hash(&env, 1));
@@ -40,7 +40,7 @@ fn test_init_sets_defaults() {
 fn test_init_rejects_zero_threshold() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, LendingContract);
+    let contract_id = env.register(LendingContract, ());
     let client = LendingContractClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
 
@@ -135,6 +135,19 @@ fn test_upgrade_rollback_restores_previous() {
         client.upgrade_status(&proposal_id).stage,
         UpgradeStage::RolledBack
     );
+
+    let repeated = client.try_upgrade_rollback(&admin, &proposal_id);
+    assert_failed(repeated);
+}
+
+#[test]
+fn test_upgrade_status_missing_proposal_errors() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _) = setup(&env, 1);
+
+    let result = client.try_upgrade_status(&42);
+    assert_failed(result);
 }
 
 #[test]

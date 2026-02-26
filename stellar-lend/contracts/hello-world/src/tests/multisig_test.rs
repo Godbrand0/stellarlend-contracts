@@ -1,11 +1,14 @@
 #![cfg(test)]
 
+use crate::governance::GovernanceError;
 use crate::multisig::{
     get_ms_admins, get_ms_threshold, ms_approve, ms_execute, ms_propose_set_min_cr, ms_set_admins,
 };
-use crate::governance::GovernanceError;
 use crate::HelloContract;
-use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env, Vec};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, Env, Vec,
+};
 
 fn setup() -> (Env, Address, Address) {
     let env = Env::default();

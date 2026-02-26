@@ -177,7 +177,8 @@ pub fn withdraw_collateral(
     }
 
     // Check for reentrancy
-    let _guard = crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| WithdrawError::Reentrancy)?;
+    let _guard =
+        crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| WithdrawError::Reentrancy)?;
 
     // Check if withdrawals are paused
     let pause_switches_key = DepositDataKey::PauseSwitches;
