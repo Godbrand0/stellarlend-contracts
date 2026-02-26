@@ -683,6 +683,127 @@ impl HelloContract {
     }
 
     // ============================================================================
+    // CROSS-ASSET OPERATIONS
+    // ============================================================================
+
+    /// Initialize cross-asset system with admin
+    pub fn initialize_ca(env: Env, admin: Address) -> Result<(), CrossAssetError> {
+        initialize(&env, admin)
+    }
+
+    /// Initialize asset configuration
+    pub fn initialize_asset(
+        env: Env,
+        asset: Option<Address>,
+        config: AssetConfig,
+    ) -> Result<(), CrossAssetError> {
+        initialize_asset(&env, asset, config)
+    }
+
+    /// Update asset configuration
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_asset_config(
+        env: Env,
+        asset: Option<Address>,
+        collateral_factor: Option<i128>,
+        borrow_factor: Option<i128>,
+        max_supply: Option<i128>,
+        max_borrow: Option<i128>,
+        can_collateralize: Option<bool>,
+        can_borrow: Option<bool>,
+    ) -> Result<(), CrossAssetError> {
+        update_asset_config(
+            &env,
+            asset,
+            collateral_factor,
+            borrow_factor,
+            max_supply,
+            max_borrow,
+            can_collateralize,
+            can_borrow,
+        )
+    }
+
+    /// Update asset price
+    pub fn update_asset_price(
+        env: Env,
+        asset: Option<Address>,
+        price: i128,
+    ) -> Result<(), CrossAssetError> {
+        update_asset_price(&env, asset, price)
+    }
+
+    /// Deposit collateral for specific asset
+    pub fn ca_deposit_collateral(
+        env: Env,
+        user: Address,
+        asset: Option<Address>,
+        amount: i128,
+    ) -> Result<AssetPosition, CrossAssetError> {
+        cross_asset_deposit(&env, user, asset, amount)
+    }
+
+    /// Withdraw collateral for specific asset
+    pub fn ca_withdraw_collateral(
+        env: Env,
+        user: Address,
+        asset: Option<Address>,
+        amount: i128,
+    ) -> Result<AssetPosition, CrossAssetError> {
+        cross_asset_withdraw(&env, user, asset, amount)
+    }
+
+    /// Borrow specific asset
+    pub fn ca_borrow_asset(
+        env: Env,
+        user: Address,
+        asset: Option<Address>,
+        amount: i128,
+    ) -> Result<AssetPosition, CrossAssetError> {
+        cross_asset_borrow(&env, user, asset, amount)
+    }
+
+    /// Repay debt for specific asset
+    pub fn ca_repay_debt(
+        env: Env,
+        user: Address,
+        asset: Option<Address>,
+        amount: i128,
+    ) -> Result<AssetPosition, CrossAssetError> {
+        cross_asset_repay(&env, user, asset, amount)
+    }
+
+    /// Get user's position for specific asset
+    pub fn get_user_asset_position(
+        env: Env,
+        user: Address,
+        asset: Option<Address>,
+    ) -> AssetPosition {
+        get_user_asset_position(&env, &user, asset)
+    }
+
+    /// Get user's unified position summary across all assets
+    pub fn get_user_position_summary(
+        env: Env,
+        user: Address,
+    ) -> Result<UserPositionSummary, CrossAssetError> {
+        get_user_position_summary(&env, &user)
+    }
+
+    /// Get list of all configured assets
+    pub fn get_asset_list(env: Env) -> soroban_sdk::Vec<AssetKey> {
+        get_asset_list(&env)
+    }
+
+    /// Get configuration for specific asset
+    pub fn get_asset_config(
+        env: Env,
+        asset: Option<Address>,
+    ) -> Result<AssetConfig, CrossAssetError> {
+        get_asset_config_by_address(&env, asset)
+    }
+
+    // ============================================================================
 }
 
 #[cfg(test)]
