@@ -145,8 +145,6 @@ fn test_get_liquidation_incentive_amount() {
 /// - Parameter changes are capped at ±10% per update.
 /// - Min collateral ratio must be >= liquidation threshold.
 /// - Close factor in [0, 100%], liquidation incentive in [0, 50%].
-use crate::{HelloContract, HelloContractClient};
-use soroban_sdk::{testutils::Address as _, Address, Env, Symbol};
 
 // =============================================================================
 // HELPERS

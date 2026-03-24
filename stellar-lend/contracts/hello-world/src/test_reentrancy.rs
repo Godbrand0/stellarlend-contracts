@@ -98,6 +98,7 @@ fn setup_test(env: &Env) -> (Address, HelloContractClient<'static>, Address, Add
                 deposit_enabled: true,
                 collateral_factor: 10000,
                 max_deposit: 10_000_000,
+                borrow_fee_bps: 0,
             },
         );
     });
