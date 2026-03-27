@@ -1,5 +1,7 @@
 use soroban_sdk::{contracterror, contracttype, Address, Env, Symbol, Vec, Map};
 
+use crate::constants::{BPS_SCALE, HEALTH_FACTOR_SCALE};
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -120,7 +122,7 @@ pub fn borrow_asset(
     let summary = calculate_position_summary(env, &position.collateral_balances, &debt_balances)?;
     
     // Health factor must be > 1.0 (10000) after borrowing
-    if summary.health_factor < 10000 {
+    if summary.health_factor < HEALTH_FACTOR_SCALE {
         return Err(CrossAssetError::InsufficientCollateral);
     }
 
@@ -183,7 +185,7 @@ pub fn withdraw_asset(
     let summary = calculate_position_summary(env, &collateral_balances, &position.debt_balances)?;
     
     // Only allow withdrawal if health factor remains healthy
-    if summary.total_debt_usd > 0 && summary.health_factor < 10000 {
+    if summary.total_debt_usd > 0 && summary.health_factor < HEALTH_FACTOR_SCALE {
         return Err(CrossAssetError::InsufficientCollateral);
     }
 
@@ -245,7 +247,7 @@ fn calculate_position_summary(
         let value_usd = amount.checked_mul(price).ok_or(CrossAssetError::Overflow)?.checked_div(10000000).ok_or(CrossAssetError::Overflow)?;
         total_collateral_usd = total_collateral_usd.checked_add(value_usd).ok_or(CrossAssetError::Overflow)?;
         
-        let weighted_value = value_usd.checked_mul(params.ltv).ok_or(CrossAssetError::Overflow)?.checked_div(10000).ok_or(CrossAssetError::Overflow)?;
+        let weighted_value = value_usd.checked_mul(params.ltv).ok_or(CrossAssetError::Overflow)?.checked_div(BPS_SCALE).ok_or(CrossAssetError::Overflow)?;
         total_weighted_collateral_usd = total_weighted_collateral_usd.checked_add(weighted_value).ok_or(CrossAssetError::Overflow)?;
     }
 
@@ -259,7 +261,7 @@ fn calculate_position_summary(
     let health_factor = if total_debt_usd == 0 {
         1000000 // Very large number if no debt
     } else {
-        total_weighted_collateral_usd.checked_mul(10000).ok_or(CrossAssetError::Overflow)?.checked_div(total_debt_usd).ok_or(CrossAssetError::Overflow)?
+        total_weighted_collateral_usd.checked_mul(BPS_SCALE).ok_or(CrossAssetError::Overflow)?.checked_div(total_debt_usd).ok_or(CrossAssetError::Overflow)?
     };
 
     Ok(PositionSummary {

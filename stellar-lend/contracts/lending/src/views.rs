@@ -15,12 +15,13 @@ use crate::borrow::{
     get_close_factor_bps, get_liquidation_incentive_bps, get_liquidation_threshold_bps, get_oracle,
     get_user_collateral, get_user_debt, BorrowCollateral, DebtPosition,
 };
+use crate::constants::BPS_SCALE;
 
 /// Scale for oracle price (1e8 = one unit). Value = amount * price / PRICE_SCALE.
 const PRICE_SCALE: i128 = 100_000_000;
 
 /// Health factor scale: 10000 = 1.0 (healthy). Below 10000 = liquidatable.
-pub const HEALTH_FACTOR_SCALE: i128 = 10000;
+pub const HEALTH_FACTOR_SCALE: i128 = BPS_SCALE;
 
 /// Sentinel health factor when user has no debt (position is healthy).
 pub const HEALTH_FACTOR_NO_DEBT: i128 = 100_000_000;
@@ -135,7 +136,7 @@ pub(crate) fn compute_health_factor(
     let hf_scale_256 = I256::from_i128(env, HEALTH_FACTOR_SCALE);
     let debt_256 = I256::from_i128(env, debt_value);
 
-    let weighted_collateral = collat_256.mul(&bps_256).div(&I256::from_i128(env, 10000));
+    let weighted_collateral = collat_256.mul(&bps_256).div(&I256::from_i128(env, BPS_SCALE));
 
     let hf_256 = weighted_collateral.mul(&hf_scale_256).div(&debt_256);
     hf_256.to_i128().unwrap_or(0)
@@ -256,7 +257,7 @@ pub fn get_max_liquidatable_amount(env: &Env, user: &Address) -> i128 {
     let close_factor = get_close_factor_bps(env);
     let debt_256 = I256::from_i128(env, total_debt);
     let cf_256 = I256::from_i128(env, close_factor);
-    let result = debt_256.mul(&cf_256).div(&I256::from_i128(env, 10000));
+    let result = debt_256.mul(&cf_256).div(&I256::from_i128(env, BPS_SCALE));
     result.to_i128().unwrap_or(0)
 }
 
@@ -275,8 +276,8 @@ pub fn get_liquidation_incentive_amount(env: &Env, repay_amount: i128) -> i128 {
     }
     let incentive_bps = get_liquidation_incentive_bps(env);
     let amount_256 = I256::from_i128(env, repay_amount);
-    let scale_256 = I256::from_i128(env, 10000_i128 + incentive_bps);
-    let result = amount_256.mul(&scale_256).div(&I256::from_i128(env, 10000));
+    let scale_256 = I256::from_i128(env, BPS_SCALE + incentive_bps);
+    let result = amount_256.mul(&scale_256).div(&I256::from_i128(env, BPS_SCALE));
     result.to_i128().unwrap_or(i128::MAX)
 }
 

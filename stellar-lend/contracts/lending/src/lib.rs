@@ -4,6 +4,7 @@
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Val, Vec};
 
 mod borrow;
+pub mod constants;
 mod deposit;
 mod flash_loan;
 mod pause;
@@ -59,6 +60,8 @@ pub use stellarlend_common::upgrade::{UpgradeError, UpgradeStage, UpgradeStatus}
 
 #[cfg(test)]
 mod borrow_test;
+#[cfg(test)]
+mod constants_test;
 #[cfg(test)]
 mod deposit_test;
 #[cfg(test)]
