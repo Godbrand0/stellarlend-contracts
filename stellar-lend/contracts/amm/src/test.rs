@@ -6,7 +6,8 @@ fn create_amm_contract<'a>(env: &Env) -> AmmContractClient<'a> {
     AmmContractClient::new(env, &env.register(AmmContract {}, ()))
 }
 
-fn create_test_protocol_config(env: &Env, protocol_addr: &Address) -> AmmProtocolConfig {
+fn create_test_protocol_config(env: &Env) -> AmmProtocolConfig {
+    let protocol_addr = env.register(MockAmm, ());
     let mut supported_pairs = Vec::new(env);
     supported_pairs.push_back(TokenPair {
         token_a: None,                         // Native XLM
@@ -15,7 +16,7 @@ fn create_test_protocol_config(env: &Env, protocol_addr: &Address) -> AmmProtoco
     });
 
     AmmProtocolConfig {
-        protocol_address: protocol_addr.clone(),
+        protocol_address: protocol_addr,
         protocol_name: Symbol::new(env, "TestAMM"),
         enabled: true,
         fee_tier: 30, // 0.3%
@@ -63,8 +64,9 @@ fn test_add_amm_protocol() {
     // Initialize first
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
 
-    // Create protocol config
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    // Create protocol config (registers MockAmm)
+    let protocol_config = create_test_protocol_config(&env);
+    let protocol_addr = protocol_config.protocol_address.clone();
 
     // Add protocol - this should not panic
     contract.add_amm_protocol(&admin, &protocol_config);
@@ -114,21 +116,7 @@ fn test_successful_swap() {
 
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
-    let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
-    let token_b = Address::generate(&env);
-
-    // Initialize
-    contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-
-    // Register protocol with a pair
-    let mut supported_pairs = Vec::new(&env);
-    supported_pairs.push_back(TokenPair {
-        token_a: None, // Native XLM
-        token_b: Some(token_b.clone()),
-        pool_address: Address::generate(&env),
-    });
-
+    let protocol_addr = env.register(MockAmm, ());
     let protocol_config = AmmProtocolConfig {
         protocol_address: protocol_addr.clone(),
         protocol_name: Symbol::new(&env, "TestAMM"),
@@ -170,10 +158,10 @@ fn test_swap_failure_insufficient_output() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let protocol_config = create_test_protocol_config(&env);
+    let protocol_addr = protocol_config.protocol_address.clone();
     contract.add_amm_protocol(&admin, &protocol_config);
 
     let params = SwapParams {
@@ -201,10 +189,10 @@ fn test_swap_failure_deadline_exceeded() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let protocol_config = create_test_protocol_config(&env);
+    let protocol_addr = protocol_config.protocol_address.clone();
     contract.add_amm_protocol(&admin, &protocol_config);
 
     let params = SwapParams {
@@ -236,7 +224,8 @@ fn test_swap_failure_paused() {
     settings.swap_enabled = false;
     contract.update_amm_settings(&admin, &settings);
 
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let protocol_config = create_test_protocol_config(&env);
+    let protocol_addr = protocol_config.protocol_address.clone();
     contract.add_amm_protocol(&admin, &protocol_config);
 
     let params = SwapParams {
@@ -361,10 +350,10 @@ fn test_callback_validation() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let protocol_config = create_test_protocol_config(&env);
+    let protocol_addr = protocol_config.protocol_address.clone();
     contract.add_amm_protocol(&admin, &protocol_config);
 
     let callback_data = AmmCallbackData {
@@ -387,7 +376,6 @@ fn test_auto_swap_for_collateral() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
     let token_out = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
@@ -398,6 +386,9 @@ fn test_auto_swap_for_collateral() {
         token_b: Some(token_out.clone()),
         pool_address: Address::generate(&env),
     });
+
+    // Register MockAmm for auto-swap
+    let protocol_addr = env.register(MockAmm, ());
     let protocol_config = AmmProtocolConfig {
         protocol_address: protocol_addr.clone(),
         protocol_name: Symbol::new(&env, "BestAMM"),
@@ -447,10 +438,10 @@ fn test_swap_failure_invalid_token_pair() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let protocol_config = create_test_protocol_config(&env);
+    let protocol_addr = protocol_config.protocol_address.clone();
     contract.add_amm_protocol(&admin, &protocol_config);
 
     let params = SwapParams {
@@ -482,7 +473,7 @@ fn test_liquidity_failure_paused() {
     settings.liquidity_enabled = false;
     contract.update_amm_settings(&admin, &settings);
 
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let protocol_config = create_test_protocol_config(&env);
     contract.add_amm_protocol(&admin, &protocol_config);
 
     let params = LiquidityParams {
@@ -508,11 +499,10 @@ fn test_get_history_with_limit() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
-    let _token_b = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-    let protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let protocol_config = create_test_protocol_config(&env);
+    let protocol_addr = protocol_config.protocol_address.clone();
     contract.add_amm_protocol(&admin, &protocol_config);
 
     // Perform 3 swaps
@@ -548,19 +538,17 @@ fn test_multiple_protocol_selection() {
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
 
     // Protocol 1: Disabled
-    let protocol1 = Address::generate(&env);
-    let mut config1 = create_test_protocol_config(&env, &protocol1);
+    let mut config1 = create_test_protocol_config(&env);
     config1.enabled = false;
     contract.add_amm_protocol(&admin, &config1);
 
     // Protocol 2: Enabled but doesn't support the pair
-    let protocol2 = Address::generate(&env);
-    let mut config2 = create_test_protocol_config(&env, &protocol2);
+    let mut config2 = create_test_protocol_config(&env);
     config2.supported_pairs = Vec::new(&env); // No pairs supported
     contract.add_amm_protocol(&admin, &config2);
 
     // Protocol 3: Enabled and supports the pair
-    let protocol3 = Address::generate(&env);
+    let protocol3 = env.register(MockAmm, ());
     let mut supported_pairs = Vec::new(&env);
     supported_pairs.push_back(TokenPair {
         token_a: None,
@@ -594,7 +582,7 @@ fn test_swap_failure_max_input_exceeded() {
     let protocol_addr = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-    let mut protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let mut protocol_config = create_test_protocol_config(&env);
     protocol_config.max_swap_amount = 5000;
     contract.add_amm_protocol(&admin, &protocol_config);
 
@@ -832,7 +820,7 @@ fn test_edge_case_min_swap_amount() {
     let protocol_addr = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
-    let mut protocol_config = create_test_protocol_config(&env, &protocol_addr);
+    let mut protocol_config = create_test_protocol_config(&env);
     protocol_config.min_swap_amount = 5000;
     contract.add_amm_protocol(&admin, &protocol_config);
 
@@ -846,6 +834,32 @@ fn test_edge_case_min_swap_amount() {
         deadline: env.ledger().timestamp() + 3600,
     };
 
+    let result = contract.try_execute_swap(&user, &params);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_swap_failure_unauthorized() {
+    let env = Env::default();
+    let contract = create_amm_contract(&env);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    contract.initialize_amm_settings(&admin, &100, &1000, &10000);
+    let protocol_config = create_test_protocol_config(&env);
+    contract.add_amm_protocol(&admin, &protocol_config);
+
+    let params = SwapParams {
+        protocol: protocol_config.protocol_address.clone(),
+        token_in: None,
+        token_out: protocol_config.supported_pairs.get(0).unwrap().token_b,
+        amount_in: 10000,
+        min_amount_out: 5000,
+        slippage_tolerance: 100,
+        deadline: env.ledger().timestamp() + 3600,
+    };
+
+    // try_execute_swap without mock_all_auths or require_auth should fail
     let result = contract.try_execute_swap(&user, &params);
     assert!(result.is_err());
 }
