@@ -64,6 +64,8 @@ mod deposit_test;
 #[cfg(test)]
 mod emergency_shutdown_test;
 #[cfg(test)]
+mod flash_adversarial_test;
+#[cfg(test)]
 mod flash_loan_test;
 #[cfg(test)]
 mod pause_test;
