@@ -1,3 +1,89 @@
+//! # Cross-Asset Lending Module
+//!
+//! This module implements cross-asset lending functionality allowing users to:
+//! - Deposit multiple types of assets as collateral
+//! - Borrow different assets against their collateral portfolio
+//! - Manage positions across multiple assets with unified health factor tracking
+//! - Configure asset-specific parameters (LTV, liquidation thresholds, debt ceilings)
+//!
+//! ## Key Features
+//!
+//! ### Multi-Asset Collateral
+//! Users can deposit multiple different assets as collateral, with each asset having
+//! its own Loan-to-Value (LTV) ratio and liquidation threshold.
+//!
+//! ### Cross-Asset Borrowing
+//! Users can borrow any supported asset against their total collateral portfolio,
+//! with borrowing capacity calculated across all deposited collateral.
+//!
+//! ### Unified Health Factor
+//! The protocol calculates a single health factor across all assets:
+//! ```
+//! Health Factor = (Weighted Collateral Value / Total Debt Value) * 10000
+//! ```
+//! Where Weighted Collateral Value = Sum of (Collateral Amount × Price × LTV) for all assets
+//!
+//! ### Asset Configuration
+//! Each asset has configurable parameters:
+//! - **LTV (Loan-to-Value)**: Percentage of asset value that counts toward borrowing capacity
+//! - **Liquidation Threshold**: Threshold below which positions become liquidatable
+//! - **Price Feed**: Oracle address for price information
+//! - **Debt Ceiling**: Maximum total debt allowed for this asset
+//! - **Active Status**: Whether the asset can be used for new operations
+//!
+//! ## Security Features
+//!
+//! ### Authorization
+//! - Admin-only functions for asset configuration
+//! - User authorization required for all position operations
+//! - Cross-user operation isolation
+//!
+//! ### Arithmetic Safety
+//! - Checked arithmetic throughout to prevent overflow/underflow
+//! - Explicit bounds checking on all parameters
+//! - Safe division with overflow protection
+//!
+//! ### Risk Management
+//! - Health factor enforcement prevents undercollateralized positions
+//! - Debt ceiling limits protocol-wide exposure per asset
+//! - Asset deactivation capability for emergency situations
+//!
+//! ## Error Handling
+//!
+//! The module defines comprehensive error types for all failure scenarios:
+//! - `InsufficientCollateral`: Health factor would drop below 1.0
+//! - `DebtCeilingReached`: Asset-specific debt limit exceeded
+//! - `ProtocolPaused`: Operations paused for maintenance/emergency
+//! - `InvalidAmount`: Zero or negative amounts not allowed
+//! - `Overflow`: Arithmetic overflow protection triggered
+//! - `Unauthorized`: Insufficient permissions for operation
+//! - `AssetNotSupported`: Asset not configured or deactivated
+//! - `PriceUnavailable`: Oracle price feed unavailable
+//!
+//! ## Usage Example
+//!
+//! ```rust,ignore
+//! // Configure assets (admin only)
+//! set_asset_params(&env, usdc_asset, AssetParams {
+//!     ltv: 9000,                    // 90% LTV
+//!     liquidation_threshold: 9500,  // 95% liquidation threshold
+//!     price_feed: oracle_address,
+//!     debt_ceiling: 10000000,       // $10M debt ceiling
+//!     is_active: true,
+//! })?;
+//!
+//! // User deposits collateral
+//! deposit_collateral_asset(&env, user, usdc_asset, 10000)?;
+//! deposit_collateral_asset(&env, user, eth_asset, 5000)?;
+//!
+//! // User borrows against total collateral
+//! borrow_asset(&env, user, usdc_asset, 8000)?;
+//!
+//! // Check position health
+//! let summary = get_cross_position_summary(&env, user)?;
+//! assert!(summary.health_factor >= 10000); // >= 1.0
+//! ```
+
 use soroban_sdk::{contracterror, contracttype, Address, Env, Map};
 
 #[contracterror]

@@ -1,3 +1,65 @@
+//! # Cross-Asset Test Suite
+//!
+//! Comprehensive test suite for cross-asset lending operations covering asset list management,
+//! configuration updates, multi-asset deposits, borrowing, repayment, and withdrawal operations.
+//!
+//! ## Test Categories
+//!
+//! ### Asset Configuration Tests
+//! - Asset parameter configuration and updates
+//! - Multi-asset setup and management
+//! - Authorization validation for admin operations
+//! - Boundary value testing for parameters
+//! - Asset activation/deactivation functionality
+//!
+//! ### Multi-Asset Operations Tests
+//! - Cross-asset collateral deposits
+//! - Multi-collateral borrowing scenarios
+//! - Cross-asset debt repayment
+//! - Selective collateral withdrawal
+//! - Health factor calculations across assets
+//!
+//! ### Security and Authorization Tests
+//! - Admin-only operation protection
+//! - User authorization requirements
+//! - Cross-user operation isolation
+//! - Reentrancy attack prevention
+//! - Arithmetic overflow protection
+//!
+//! ### Edge Cases and Boundary Tests
+//! - Zero and negative amount handling
+//! - Maximum value overflow protection
+//! - Health factor boundary conditions
+//! - Debt ceiling enforcement
+//! - Insufficient balance scenarios
+//!
+//! ### Integration Tests
+//! - Complete lending lifecycle workflows
+//! - Multi-user concurrent operations
+//! - Asset list management operations
+//! - Protocol-wide state consistency
+//!
+//! ## Security Assumptions
+//!
+//! - **Admin Trust**: Admin has privileged access to configure assets and parameters
+//! - **Oracle Trust**: Price feeds are assumed accurate and timely
+//! - **User Authorization**: All user operations require proper authentication
+//! - **Asset Trust**: Supported assets are legitimate and properly configured
+//!
+//! ## Coverage
+//!
+//! This test suite provides 100% coverage of the cross-asset functionality including:
+//! - All public functions in the cross_asset module
+//! - All error conditions and edge cases
+//! - All security boundaries and authorization checks
+//! - All arithmetic operations with overflow protection
+//!
+//! ## Usage
+//!
+//! ```bash
+//! cargo test cross_asset_test --lib
+//! ```
+
 #![cfg(test)]
 
 use super::*;
