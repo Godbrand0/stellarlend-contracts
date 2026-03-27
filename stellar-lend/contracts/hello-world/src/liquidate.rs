@@ -21,7 +21,7 @@
 //! - Interest is accrued on the borrower's position before liquidation.
 
 #![allow(unused)]
-use crate::events::{emit_liquidation, LiquidationEvent};
+use crate::events::{emit_liquidation, emit_liquidation_v1, LiquidationEvent, LiquidationEventV1};
 use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};
 
 use crate::deposit::{
@@ -57,14 +57,16 @@ pub enum LiquidationError {
     InsufficientBalance = 6,
     /// Overflow occurred during calculation
     Overflow = 7,
+    /// Reentrancy detected during liquidation
+    Reentrancy = 8,
     /// Invalid collateral asset
-    InvalidCollateralAsset = 8,
+    InvalidCollateralAsset = 9,
     /// Invalid debt asset
-    InvalidDebtAsset = 9,
+    InvalidDebtAsset = 10,
     /// Price not available for asset
-    PriceNotAvailable = 10,
+    PriceNotAvailable = 11,
     /// Liquidation would leave position undercollateralized
-    InsufficientLiquidation = 11,
+    InsufficientLiquidation = 12,
 }
 
 /// Annual interest rate in basis points (e.g., 500 = 5% per year)
@@ -190,6 +192,7 @@ fn calculate_debt_value(debt: i128, interest: i128) -> Result<i128, LiquidationE
 /// # Security
 /// * Validates liquidation amount > 0
 /// * Checks pause switches
+/// * Uses a reentrancy guard before any external token transfer
 /// * Validates position is undercollateralized
 /// * Enforces close factor limits
 /// * Accrues interest before liquidation
@@ -210,6 +213,10 @@ pub fn liquidate(
     if debt_amount <= 0 {
         return Err(LiquidationError::InvalidAmount);
     }
+
+    // Prevent reentrant token callback flows from observing inconsistent state.
+    let _guard =
+        crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| LiquidationError::Reentrancy)?;
 
     // Check emergency pause
     if is_emergency_paused(env) {
@@ -454,7 +461,20 @@ pub fn liquidate(
         _ => LiquidationError::Overflow,
     })?;
 
-    // Emit liquidation event
+    let borrower_total_debt_after = calculate_debt_value(position.debt, position.borrow_interest)?;
+    let borrower_health_factor_after = if borrower_total_debt_after == 0 {
+        i128::MAX
+    } else {
+        position
+            .collateral
+            .checked_mul(10_000)
+            .ok_or(LiquidationError::Overflow)?
+            .checked_div(borrower_total_debt_after)
+            .ok_or(LiquidationError::Overflow)?
+    };
+    let borrower_risk_level_after = calculate_risk_level(borrower_health_factor_after);
+
+    // Emit liquidation events
     emit_liquidation(
         env,
         LiquidationEvent {
@@ -468,9 +488,35 @@ pub fn liquidate(
             timestamp,
         },
     );
+    emit_liquidation_v1(
+        env,
+        LiquidationEventV1 {
+            schema_version: 1,
+            liquidator: liquidator.clone(),
+            borrower: borrower.clone(),
+            debt_asset: debt_asset.clone(),
+            collateral_asset: collateral_asset.clone(),
+            debt_liquidated: actual_debt_liquidated,
+            collateral_seized: actual_collateral_seized,
+            incentive_amount,
+            borrower_collateral_after: position.collateral,
+            borrower_principal_debt_after: position.debt,
+            borrower_interest_after: position.borrow_interest,
+            borrower_total_debt_after,
+            borrower_health_factor_after,
+            borrower_risk_level_after,
+            timestamp,
+        },
+    );
 
     // Emit position updated event
-    emit_position_updated_event(env, &borrower, &position);
+    emit_position_updated_event(
+        env,
+        &borrower,
+        &position,
+        Symbol::new(env, "liquidate"),
+        timestamp,
+    );
 
     // Emit analytics updated event
     emit_analytics_updated_event(
@@ -495,6 +541,20 @@ pub fn liquidate(
         actual_collateral_seized,
         incentive_amount,
     ))
+}
+
+fn calculate_risk_level(health_factor: i128) -> i128 {
+    if health_factor >= 15_000 {
+        1
+    } else if health_factor >= 12_000 {
+        2
+    } else if health_factor >= 11_000 {
+        3
+    } else if health_factor >= 10_500 {
+        4
+    } else {
+        5
+    }
 }
 
 /// Update analytics after liquidation

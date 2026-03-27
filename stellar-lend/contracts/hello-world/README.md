@@ -22,3 +22,5 @@ This contract exposes the core API for StellarLend, including lending/borrowing,
 
 Refer to `src/lib.rs` for detailed types and events.
 
+For indexer-facing liquidation and borrower-health payloads, see
+`liquidation_events.md`.

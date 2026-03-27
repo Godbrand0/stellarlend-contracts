@@ -1,19 +1,21 @@
-/// # Event Logging System – Tests
-///
-/// Comprehensive tests verifying every `emit_*` helper in the `events` module
-/// emits a correctly structured event that can be read back from
-/// `env.events().all()`.
-///
-/// ## Soroban events API
-/// `env.events().all()` returns `Vec<(Address, Vec<Val>, Val)>`:
-///   - `Address` – contract that emitted the event
-///   - `Vec<Val>` – topic(s) tuple
-///   - `Val` – event data payload
+// Event Logging System – Tests
+//
+// Comprehensive tests verifying every `emit_*` helper in the `events` module
+// emits a correctly structured event that can be read back from
+// `env.events().all()`.
+//
+// Soroban events API:
+// `env.events().all()` returns `Vec<(Address, Vec<Val>, Val)>`:
+//   - `Address` – contract that emitted the event
+//   - `Vec<Val>` – topic(s) tuple
+//   - `Val` – event data payload
+use crate::deposit::{emit_position_updated_event, Position};
 use crate::events::{
-    emit_admin_action, emit_borrow, emit_deposit, emit_flash_loan_initiated,
-    emit_flash_loan_repaid, emit_liquidation, emit_pause_state_changed, emit_price_updated,
-    emit_repay, emit_risk_params_updated, emit_withdrawal, AdminActionEvent, BorrowEvent,
-    DepositEvent, FlashLoanInitiatedEvent, FlashLoanRepaidEvent, LiquidationEvent,
+    emit_admin_action, emit_borrow, emit_borrower_health_v1, emit_deposit,
+    emit_flash_loan_initiated, emit_flash_loan_repaid, emit_liquidation, emit_liquidation_v1,
+    emit_pause_state_changed, emit_price_updated, emit_repay, emit_risk_params_updated,
+    emit_withdrawal, AdminActionEvent, BorrowEvent, BorrowerHealthEventV1, DepositEvent,
+    FlashLoanInitiatedEvent, FlashLoanRepaidEvent, LiquidationEvent, LiquidationEventV1,
     PauseStateChangedEvent, PriceUpdatedEvent, RepayEvent, RiskParamsUpdatedEvent, WithdrawalEvent,
 };
 
@@ -75,6 +77,42 @@ pub struct TestLiquidationEvent {
     pub debt_liquidated: i128,
     pub collateral_seized: i128,
     pub incentive_amount: i128,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct TestLiquidationEventV1 {
+    pub schema_version: u32,
+    pub liquidator: Address,
+    pub borrower: Address,
+    pub debt_asset: Option<Address>,
+    pub collateral_asset: Option<Address>,
+    pub debt_liquidated: i128,
+    pub collateral_seized: i128,
+    pub incentive_amount: i128,
+    pub borrower_collateral_after: i128,
+    pub borrower_principal_debt_after: i128,
+    pub borrower_interest_after: i128,
+    pub borrower_total_debt_after: i128,
+    pub borrower_health_factor_after: i128,
+    pub borrower_risk_level_after: i128,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct TestBorrowerHealthEventV1 {
+    pub schema_version: u32,
+    pub user: Address,
+    pub operation: Symbol,
+    pub collateral: i128,
+    pub principal_debt: i128,
+    pub borrow_interest: i128,
+    pub total_debt: i128,
+    pub health_factor: i128,
+    pub risk_level: i128,
+    pub is_liquidatable: bool,
     pub timestamp: u64,
 }
 
@@ -366,6 +404,96 @@ fn test_liquidation_event_with_token_assets() {
 
         assert_eq!(decoded.debt_asset, Some(debt_asset));
         assert_eq!(decoded.collateral_asset, Some(collateral_asset));
+    });
+}
+
+/// `emit_liquidation_v1` emits a versioned payload with borrower health data.
+#[test]
+fn test_liquidation_event_v1_structure() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(HelloContract, ());
+
+    env.as_contract(&contract_id, || {
+        let liquidator = Address::generate(&env);
+        let borrower = Address::generate(&env);
+
+        emit_liquidation_v1(
+            &env,
+            LiquidationEventV1 {
+                schema_version: 1,
+                liquidator: liquidator.clone(),
+                borrower: borrower.clone(),
+                debt_asset: None,
+                collateral_asset: None,
+                debt_liquidated: 500,
+                collateral_seized: 550,
+                incentive_amount: 50,
+                borrower_collateral_after: 450,
+                borrower_principal_debt_after: 500,
+                borrower_interest_after: 25,
+                borrower_total_debt_after: 525,
+                borrower_health_factor_after: 8571,
+                borrower_risk_level_after: 5,
+                timestamp: 1_000,
+            },
+        );
+
+        let all = env.events().all();
+        assert_eq!(all.len(), 1);
+        let (_c, _t, data) = all.get_unchecked(0);
+        let decoded: TestLiquidationEventV1 =
+            TestLiquidationEventV1::try_from_val(&env, &data).expect("decode liquidation v1");
+
+        assert_eq!(decoded.schema_version, 1);
+        assert_eq!(decoded.liquidator, liquidator);
+        assert_eq!(decoded.borrower, borrower);
+        assert_eq!(decoded.borrower_total_debt_after, 525);
+        assert_eq!(decoded.borrower_health_factor_after, 8571);
+        assert_eq!(decoded.borrower_risk_level_after, 5);
+    });
+}
+
+/// `emit_borrower_health_v1` emits a self-contained borrower health snapshot.
+#[test]
+fn test_borrower_health_event_v1_structure() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(HelloContract, ());
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+
+        emit_borrower_health_v1(
+            &env,
+            BorrowerHealthEventV1 {
+                schema_version: 1,
+                user: user.clone(),
+                operation: Symbol::new(&env, "liquidate"),
+                collateral: 900,
+                principal_debt: 800,
+                borrow_interest: 100,
+                total_debt: 900,
+                health_factor: 10_000,
+                risk_level: 5,
+                is_liquidatable: true,
+                timestamp: 321,
+            },
+        );
+
+        let all = env.events().all();
+        assert_eq!(all.len(), 1);
+        let (_c, _t, data) = all.get_unchecked(0);
+        let decoded: TestBorrowerHealthEventV1 =
+            TestBorrowerHealthEventV1::try_from_val(&env, &data)
+                .expect("decode borrower health event");
+
+        assert_eq!(decoded.schema_version, 1);
+        assert_eq!(decoded.user, user);
+        assert_eq!(decoded.operation, Symbol::new(&env, "liquidate"));
+        assert_eq!(decoded.total_debt, 900);
+        assert_eq!(decoded.health_factor, 10_000);
+        assert!(decoded.is_liquidatable);
     });
 }
 
@@ -832,6 +960,45 @@ fn test_no_sensitive_data_in_liquidation_event() {
         assert_eq!(decoded.borrower, borrower);
         assert_ne!(decoded.liquidator, uninvolved);
         assert_ne!(decoded.borrower, uninvolved);
+    });
+}
+
+/// Shared position update helper emits both the legacy position update and the
+/// stable borrower health snapshot used by indexers.
+#[test]
+fn test_position_update_emits_borrower_health_snapshot() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(HelloContract, ());
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let position = Position {
+            collateral: 1_500,
+            debt: 1_000,
+            borrow_interest: 200,
+            last_accrual_time: 0,
+        };
+
+        emit_position_updated_event(&env, &user, &position, Symbol::new(&env, "borrow"), 777);
+
+        let all = env.events().all();
+        assert_eq!(all.len(), 2);
+
+        let (_c0, _t0, _position_payload) = all.get_unchecked(0);
+        let (_c1, _t1, health_payload) = all.get_unchecked(1);
+        let decoded: TestBorrowerHealthEventV1 =
+            TestBorrowerHealthEventV1::try_from_val(&env, &health_payload)
+                .expect("decode borrower health snapshot");
+
+        assert_eq!(decoded.schema_version, 1);
+        assert_eq!(decoded.user, user);
+        assert_eq!(decoded.operation, Symbol::new(&env, "borrow"));
+        assert_eq!(decoded.total_debt, 1_200);
+        assert_eq!(decoded.health_factor, 12_500);
+        assert_eq!(decoded.risk_level, 2);
+        assert!(!decoded.is_liquidatable);
+        assert_eq!(decoded.timestamp, 777);
     });
 }
 

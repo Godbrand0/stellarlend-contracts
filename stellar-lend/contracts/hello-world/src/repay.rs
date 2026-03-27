@@ -380,7 +380,7 @@ pub fn repay_debt(
     );
 
     // Emit position updated event
-    emit_position_updated_event(env, &user, &position);
+    emit_position_updated_event(env, &user, &position, Symbol::new(env, "repay"), timestamp);
     emit_analytics_updated_event(env, &user, "repay", repay_amount, timestamp);
     emit_user_activity_tracked_event(
         env,
