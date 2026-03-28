@@ -13,10 +13,10 @@ use crate::events::{
 };
 
 use crate::types::{
-    Action, GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalStatus, ProposalType,
-    RecoveryRequest, Vote, VoteInfo, VoteType, BASIS_POINTS_SCALE, DEFAULT_EXECUTION_DELAY,
-    DEFAULT_QUORUM_BPS, DEFAULT_RECOVERY_PERIOD, DEFAULT_TIMELOCK_DURATION, DEFAULT_VOTING_PERIOD,
-    DEFAULT_VOTING_THRESHOLD,
+    Action, GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalStatus,
+    ProposalType, RecoveryRequest, Vote, VoteInfo, VoteType, BASIS_POINTS_SCALE,
+    DEFAULT_EXECUTION_DELAY, DEFAULT_QUORUM_BPS, DEFAULT_RECOVERY_PERIOD,
+    DEFAULT_TIMELOCK_DURATION, DEFAULT_VOTING_PERIOD, DEFAULT_VOTING_THRESHOLD,
 };
 
 // ========================================================================
@@ -1054,18 +1054,35 @@ pub fn can_vote(env: &Env, voter: Address, proposal_id: u64) -> bool {
     crate::storage::can_vote(env, voter, proposal_id)
 }
 
-pub fn set_multisig_admins(env: &Env, caller: Address, admins: Vec<Address>, threshold: u32) -> Result<(), GovernanceError> {
+pub fn set_multisig_admins(
+    env: &Env,
+    caller: Address,
+    admins: Vec<Address>,
+    threshold: u32,
+) -> Result<(), GovernanceError> {
     crate::multisig::ms_set_admins(env, caller, admins, threshold)
 }
 
-pub fn set_multisig_threshold(env: &Env, caller: Address, threshold: u32) -> Result<(), GovernanceError> {
+pub fn set_multisig_threshold(
+    env: &Env,
+    caller: Address,
+    threshold: u32,
+) -> Result<(), GovernanceError> {
     crate::multisig::set_ms_threshold(env, caller, threshold)
 }
 
-pub fn execute_multisig_proposal(env: &Env, executor: Address, proposal_id: u64) -> Result<(), GovernanceError> {
+pub fn execute_multisig_proposal(
+    env: &Env,
+    executor: Address,
+    proposal_id: u64,
+) -> Result<(), GovernanceError> {
     crate::multisig::ms_execute(env, executor, proposal_id)
 }
 
-pub fn propose_set_min_collateral_ratio(env: &Env, proposer: Address, new_ratio: u32) -> Result<u64, GovernanceError> {
+pub fn propose_set_min_collateral_ratio(
+    env: &Env,
+    proposer: Address,
+    new_ratio: u32,
+) -> Result<u64, GovernanceError> {
     crate::multisig::ms_propose_set_min_cr(env, proposer, new_ratio.into())
 }
