@@ -283,7 +283,6 @@ impl HelloContract {
         caller: Address,
         guardians: soroban_sdk::Vec<Address>,
         threshold: u32,
-    ) -> Result<(), governance::GovernanceError> {
     ) -> Result<(), errors::GovernanceError> {
         recovery::set_guardians(&env, caller, guardians, threshold)
     }
@@ -293,7 +292,6 @@ impl HelloContract {
         initiator: Address,
         old_admin: Address,
         new_admin: Address,
-    ) -> Result<(), governance::GovernanceError> {
     ) -> Result<(), errors::GovernanceError> {
         recovery::start_recovery(&env, initiator, old_admin, new_admin)
     }
@@ -301,7 +299,6 @@ impl HelloContract {
     pub fn approve_recovery(
         env: Env,
         approver: Address,
-    ) -> Result<(), governance::GovernanceError> {
     ) -> Result<(), errors::GovernanceError> {
         recovery::approve_recovery(&env, approver)
     }
@@ -309,7 +306,6 @@ impl HelloContract {
     pub fn execute_recovery(
         env: Env,
         executor: Address,
-    ) -> Result<(), governance::GovernanceError> {
     ) -> Result<(), errors::GovernanceError> {
         recovery::execute_recovery(&env, executor)
     }
@@ -319,7 +315,6 @@ impl HelloContract {
         caller: Address,
         admins: soroban_sdk::Vec<Address>,
         threshold: u32,
-    ) -> Result<(), governance::GovernanceError> {
     ) -> Result<(), errors::GovernanceError> {
         multisig::ms_set_admins(&env, caller, admins, threshold)
     }
@@ -328,7 +323,6 @@ impl HelloContract {
         env: Env,
         proposer: Address,
         new_ratio: i128,
-    ) -> Result<u64, governance::GovernanceError> {
     ) -> Result<u64, errors::GovernanceError> {
         multisig::ms_propose_set_min_cr(&env, proposer, new_ratio)
     }
@@ -337,7 +331,6 @@ impl HelloContract {
         env: Env,
         approver: Address,
         proposal_id: u64,
-    ) -> Result<(), governance::GovernanceError> {
     ) -> Result<(), errors::GovernanceError> {
         multisig::ms_approve(&env, approver, proposal_id)
     }
@@ -346,7 +339,6 @@ impl HelloContract {
         env: Env,
         executor: Address,
         proposal_id: u64,
-    ) -> Result<(), governance::GovernanceError> {
     ) -> Result<(), errors::GovernanceError> {
         multisig::ms_execute(&env, executor, proposal_id)
     }
@@ -371,9 +363,6 @@ impl HelloContract {
         crate::repay::repay_debt(&env, user, asset, amount)
     }
 
-    /// Liquidate an undercollateralized position
-    pub fn liquidate(env: Env, caller: Address, paused: bool) -> Result<(), RiskManagementError> {
-        risk_management::set_emergency_pause(&env, caller, paused)
     /// Liquidate an undercollateralized position.
     pub fn liquidate(
         env: Env,
@@ -686,13 +675,6 @@ impl HelloContract {
         )
     }
 
-    /// Set a pause switch for an operation (admin only)
-    pub fn set_pause_switch(
-        env: Env,
-        admin: Address,
-        operation: Symbol,
-        paused: bool,
-    ) -> Result<(), RiskManagementError> {
     /// Set a pause switch for an operation (admin only).
     pub fn set_pause_switch(
         env: Env,
@@ -750,8 +732,13 @@ impl HelloContract {
         auto_swap_threshold: i128,
     ) -> Result<(), AmmError> {
         // Stub implementation
-        require_admin(&env, &admin).map_err(|_| AmmError::InvalidParams)?;
-        Ok(())
+    /// Initialize AMM with default parameters (admin only).
+    pub fn initialize_amm(
+        env: Env,
+        admin: Address,
+        default_slippage: i128,
+        max_slippage: i128,
+        auto_swap_threshold: i128,
     ) -> Result<(), amm::AmmError> {
         amm::initialize_amm(
             env,
@@ -766,29 +753,11 @@ impl HelloContract {
     pub fn set_amm_pool(
         env: Env,
         admin: Address,
-    protocol_config: AmmProtocolConfig,
-    ) -> Result<(), AmmError> {
-// Stub implementation  
-        require_admin(&env, &admin).map_err(|_| AmmError::InvalidParams)?;
-        Ok(())
-    }
-
-    /// Execute swap through AMM
-    pub fn amm_swap(env: Env, user: Address, params: SwapParams) -> Result<i128, AmmError> {
-        // Stub implementation
-        Ok(0)
         protocol_config: amm::AmmProtocolConfig,
     ) -> Result<(), amm::AmmError> {
         amm::set_amm_pool(env, admin, protocol_config)
     }
 
-    /// Register a bridge
-    ///
-    /// # Arguments
-    /// * `caller` - Admin address for authorization
-    /// * `network_id` - ID of the remote network
-    /// * `bridge` - Address of the bridge contract
-    /// * `fee_bps` - Fee in basis points
     /// Execute swap through AMM.
     pub fn amm_swap(
         env: Env,
@@ -796,6 +765,7 @@ impl HelloContract {
         params: amm::SwapParams,
     ) -> Result<i128, amm::AmmError> {
         amm::amm_swap(env, user, params)
+    }
     }
 
     // ============================================================================
@@ -1170,28 +1140,13 @@ impl HelloContract {
     }
 
     // ============================================================================
-    pub fn initialize_ca(env: Env, admin: Address) -> Result<(), CrossAssetError> {
-        cross_asset::initialize(&env, admin)
-    // Governance Query Functions
-    // ============================================================================
     // ============================================================================
     // CROSS-ASSET OPERATIONS
     // ============================================================================
 
     /// Initialize cross-asset system with admin
     pub fn initialize_ca(env: Env, admin: Address) -> Result<(), CrossAssetError> {
-        initialize_asset(
-            &env,
-            None,
-            AssetConfig {
-                collateral_factor: 0,
-                borrow_factor: 0,
-                max_supply: 0,
-                max_borrow: 0,
-                can_collateralize: false,
-                can_borrow: false,
-            },
-        )
+        cross_asset::initialize(&env, admin)
     }
 
     /// Initialize asset configuration
@@ -1368,11 +1323,6 @@ impl HelloContract {
     pub fn gov_can_vote(env: Env, voter: Address, proposal_id: u64) -> bool {
         governance::can_vote(&env, voter, proposal_id)
     }
-}
-
-#[cfg(test)]
-mod tests;
-
 
     // --- Bridge ---
 
@@ -1429,6 +1379,9 @@ mod tests;
         bridge::bridge_withdraw(&env, user, network_id, asset, amount)
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 // Legacy standalone tests currently mismatch contract API.
 // #[cfg(test)]

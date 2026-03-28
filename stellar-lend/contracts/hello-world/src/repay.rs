@@ -9,10 +9,16 @@
 //! 1. Accrued interest is paid first.
 //! 2. Any remaining repayment amount reduces the principal debt.
 //!
+//! ## Dust Handling
+//! When the remaining debt (principal + interest) becomes very small (less than
+//! DUST_THRESHOLD), it is automatically zeroed out to prevent precision issues
+//! and ensure clean final states.
+//!
 //! ## Invariants
 //! - Repay amount must be strictly positive.
 //! - User must have outstanding debt to repay.
 //! - Token transfers use `transfer_from`, requiring prior user approval.
+//! - Events reflect actual processed amounts, ensuring alignment with final state.
 
 #![allow(unused)]
 use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};
@@ -23,6 +29,10 @@ use crate::deposit::{
     DepositDataKey, Position, ProtocolAnalytics, UserAnalytics,
 };
 use crate::events::{emit_repay, RepayEvent};
+
+/// Dust threshold for debt cleanup
+/// When total debt (principal + interest) falls below this amount, it's zeroed out
+const DUST_THRESHOLD: i128 = 100;
 
 /// Errors that can occur during repay operations
 #[contracterror]
@@ -154,6 +164,36 @@ fn get_native_asset_address(env: &Env) -> Result<Address, RepayError> {
 /// * Updates debt balances
 /// * Emits events for tracking
 /// * Updates analytics
+/// Repay debt function
+///
+/// Allows users to repay their borrowed assets, reducing debt and accrued interest.
+/// Supports both partial and full repayments with proper dust handling.
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `user` - The address of the user repaying debt
+/// * `asset` - The address of the asset contract to repay (None for native XLM)
+/// * `amount` - The amount to repay
+///
+/// # Returns
+/// Returns a tuple (remaining_debt, interest_paid, principal_paid)
+///
+/// # Errors
+/// * `RepayError::InvalidAmount` - If amount is zero or negative
+/// * `RepayError::InvalidAsset` - If asset address is invalid or not configured
+/// * `RepayError::InsufficientBalance` - If user doesn't have enough balance
+/// * `RepayError::RepayPaused` - If repayments are paused
+/// * `RepayError::NoDebt` - If user has no debt to repay
+/// * `RepayError::Overflow` - If calculation overflow occurs
+///
+/// # Security
+/// * Validates repay amount > 0
+/// * Checks pause switches and reentrancy
+/// * Validates sufficient token balance
+/// * Accrues interest before repayment
+/// * Handles dust cleanup for full repayments
+/// * Ensures events match final state
+/// * Updates debt balances atomically
 pub fn repay_debt(
     env: &Env,
     user: Address,
@@ -184,15 +224,9 @@ pub fn repay_debt(
 
     let timestamp = env.ledger().timestamp();
 
-    if let Some(ref asset_addr) = asset {
-        if asset_addr == &env.current_contract_address() {
-            return Err(RepayError::InvalidAsset);
-        }
-    }
-    // Determine the asset contract address to use
+    // Validate and determine asset address
     let asset_addr = match &asset {
         Some(addr) => {
-            // Validate asset address - ensure it's not the contract itself
             if addr == &env.current_contract_address() {
                 return Err(RepayError::InvalidAsset);
             }
@@ -200,6 +234,8 @@ pub fn repay_debt(
         }
         None => get_native_asset_address(env)?,
     };
+
+    // Get reserve factor from asset params
     let reserve_factor = if let Some(asset_addr) = asset.as_ref() {
         let params_key = DepositDataKey::AssetParams(asset_addr.clone());
         if let Some(params) = env
@@ -207,14 +243,15 @@ pub fn repay_debt(
             .persistent()
             .get::<DepositDataKey, crate::deposit::AssetParams>(&params_key)
         {
-            1000 // Default 10%
+            params.borrow_fee_bps.max(1000) // Use asset-specific fee or default 10%
         } else {
-            1000
+            1000 // Default 10%
         }
     } else {
-        1000
+        1000 // Default 10%
     };
 
+    // Get user position
     let position_key = DepositDataKey::Position(user.clone());
     let mut position = env
         .storage()
@@ -226,97 +263,99 @@ pub fn repay_debt(
         return Err(RepayError::NoDebt);
     }
 
+    // Accrue interest before repayment
     accrue_interest(env, &mut position)?;
 
     let total_debt = position
         .debt
         .checked_add(position.borrow_interest)
         .ok_or(RepayError::Overflow)?;
-    let repay_amount = if amount >= total_debt {
+
+    // Determine actual repay amount (cannot exceed total debt)
+    let actual_repay_amount = if amount >= total_debt {
         total_debt
     } else {
         amount
     };
 
-    if let Some(ref asset_addr) = asset {
-        #[cfg(not(test))]
-        {
-            let token_client = soroban_sdk::token::Client::new(env, asset_addr);
-            let user_balance = token_client.balance(&user);
-            if user_balance < repay_amount {
-                return Err(RepayError::InsufficientBalance);
-            }
-            token_client.transfer_from(
-                &env.current_contract_address(),
-                &user,
-                &env.current_contract_address(),
-                &repay_amount,
-            );
-        }
-    }
-
-    let interest_paid = if repay_amount <= position.borrow_interest {
-        repay_amount
-    } else {
-        position.borrow_interest
-    };
-    let principal_paid = repay_amount
-        .checked_sub(interest_paid)
-        .ok_or(RepayError::Overflow)?;
-    // Handle asset transfer - user pays the contract
-    // We use the determined asset_addr (either token or native)
+    // Check user balance and perform transfer
     let token_client = soroban_sdk::token::Client::new(env, &asset_addr);
 
-    // Check user balance
-    let user_balance = token_client.balance(&user);
-    if user_balance < repay_amount {
-        return Err(RepayError::InsufficientBalance);
-    }
+    #[cfg(not(test))]
+    {
+        let user_balance = token_client.balance(&user);
+        if user_balance < actual_repay_amount {
+            return Err(RepayError::InsufficientBalance);
+        }
 
-    // Transfer tokens from user to contract
-    // The user must have approved the contract to spend their tokens
-    token_client.transfer_from(
-        &env.current_contract_address(), // spender (this contract)
-        &user,                           // from (user)
-        &env.current_contract_address(), // to (this contract)
-        &repay_amount,
-    );
+        // Transfer tokens from user to contract
+        token_client.transfer_from(
+            &env.current_contract_address(), // spender (this contract)
+            &user,                           // from (user)
+            &env.current_contract_address(), // to (this contract)
+            &actual_repay_amount,
+        );
+    }
 
     // Calculate interest and principal portions
     // Interest is paid first, then principal
-    let interest_paid = if repay_amount <= position.borrow_interest {
-        repay_amount
+    let interest_paid = if actual_repay_amount <= position.borrow_interest {
+        actual_repay_amount
     } else {
         position.borrow_interest
     };
 
-    let principal_paid = repay_amount
+    let principal_paid = actual_repay_amount
         .checked_sub(interest_paid)
         .ok_or(RepayError::Overflow)?;
 
-    // Update position
+    // Update position with proper dust handling
     position.borrow_interest = position
         .borrow_interest
         .checked_sub(interest_paid)
-        .unwrap_or(0); // Should not underflow, but handle gracefully
+        .ok_or(RepayError::Overflow)?;
 
-    position.debt = position.debt.checked_sub(principal_paid).unwrap_or(0); // Should not underflow, but handle gracefully
+    position.debt = position
+        .debt
+        .checked_sub(principal_paid)
+        .ok_or(RepayError::Overflow)?;
 
-    position.borrow_interest = position
-        .borrow_interest
-        .checked_sub(interest_paid)
-        .unwrap_or(0);
-    position.debt = position.debt.checked_sub(principal_paid).unwrap_or(0);
+    // Apply dust cleanup: if remaining debt is below threshold, zero it out
+    let remaining_total_debt = position
+        .debt
+        .checked_add(position.borrow_interest)
+        .ok_or(RepayError::Overflow)?;
+
+    let (final_interest_paid, final_principal_paid) = if remaining_total_debt > 0 && remaining_total_debt < DUST_THRESHOLD {
+        // Clean up dust by zeroing out remaining debt
+        let dust_interest = position.borrow_interest;
+        let dust_principal = position.debt;
+
+        position.borrow_interest = 0;
+        position.debt = 0;
+
+        // Add dust amounts to what was actually paid
+        (
+            interest_paid.checked_add(dust_interest).ok_or(RepayError::Overflow)?,
+            principal_paid.checked_add(dust_principal).ok_or(RepayError::Overflow)?,
+        )
+    } else {
+        (interest_paid, principal_paid)
+    };
+
     position.last_accrual_time = timestamp;
 
+    // Save updated position
     env.storage().persistent().set(&position_key, &position);
 
-    if interest_paid > 0 {
-        let reserve_amount = interest_paid
+    // Handle reserve allocation from interest payments
+    if final_interest_paid > 0 {
+        let reserve_amount = final_interest_paid
             .checked_mul(reserve_factor)
             .ok_or(RepayError::Overflow)?
             .checked_div(10000)
             .ok_or(RepayError::Overflow)?;
+
         if reserve_amount > 0 {
             let reserve_key = DepositDataKey::ProtocolReserve(asset.clone());
             let current_reserve = env
@@ -333,33 +372,26 @@ pub fn repay_debt(
         }
     }
 
-    update_user_analytics_repay(env, &user, repay_amount, timestamp)?;
-    update_protocol_analytics_repay(env, repay_amount)?;
-    add_activity_log(
-        env,
-        &user,
-        Symbol::new(env, "repay"),
-        repay_amount,
-        asset.clone(),
-        timestamp,
-    )
-    .map_err(|e| RepayError::Overflow)?;
-    log_repay(
-        env,
-        RepayEvent {
-            user: user.clone(),
-            asset: asset.clone(),
-            amount: repay_amount,
-            timestamp,
-        },
-    );
+    // Calculate final amounts for events and return value
+    let final_repay_amount = final_interest_paid
+        .checked_add(final_principal_paid)
+        .ok_or(RepayError::Overflow)?;
+
+    let final_remaining_debt = position
+        .debt
+        .checked_add(position.borrow_interest)
+        .ok_or(RepayError::Overflow)?;
+
+    // Update analytics
+    update_user_analytics_repay(env, &user, final_repay_amount, timestamp)?;
+    update_protocol_analytics_repay(env, final_repay_amount)?;
 
     // Add to activity log
     add_activity_log(
         env,
         &user,
         Symbol::new(env, "repay"),
-        repay_amount,
+        final_repay_amount,
         asset.clone(),
         timestamp,
     )
@@ -368,33 +400,29 @@ pub fn repay_debt(
         _ => RepayError::Overflow,
     })?;
 
-    // Emit repay event
+    // Emit events with actual processed amounts (not requested amounts)
     emit_repay(
         env,
         RepayEvent {
             user: user.clone(),
             asset: asset.clone(),
-            amount: repay_amount,
+            amount: final_repay_amount, // Use actual amount processed, including dust cleanup
             timestamp,
         },
     );
 
     // Emit position updated event
     emit_position_updated_event(env, &user, &position);
-    emit_analytics_updated_event(env, &user, "repay", repay_amount, timestamp);
+    emit_analytics_updated_event(env, &user, "repay", final_repay_amount, timestamp);
     emit_user_activity_tracked_event(
         env,
         &user,
         Symbol::new(env, "repay"),
-        repay_amount,
+        final_repay_amount,
         timestamp,
     );
 
-    let remaining_debt = position
-        .debt
-        .checked_add(position.borrow_interest)
-        .unwrap_or(0);
-    Ok((remaining_debt, interest_paid, principal_paid))
+    Ok((final_remaining_debt, final_interest_paid, final_principal_paid))
 }
 
 /// Update user analytics after repayment

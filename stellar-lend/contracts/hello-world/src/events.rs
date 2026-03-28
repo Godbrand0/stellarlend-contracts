@@ -35,6 +35,18 @@ pub struct BorrowEvent {
     pub timestamp: u64,
 }
 
+/// Repay event emitted when debt is repaid
+///
+/// # Fields
+/// * `user` - The user who repaid debt
+/// * `asset` - The asset that was repaid (None for native XLM)
+/// * `amount` - The actual amount repaid (includes dust cleanup if applicable)
+/// * `timestamp` - When the repayment occurred
+///
+/// # Dust Handling
+/// The amount field reflects the actual amount processed, which may include
+/// dust cleanup. When remaining debt falls below the dust threshold, it's
+/// automatically zeroed out and included in the repayment amount.
 #[contractevent]
 #[derive(Clone, Debug)]
 pub struct RepayEvent {

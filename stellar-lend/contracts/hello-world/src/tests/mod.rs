@@ -50,3 +50,5 @@ pub mod gov_asset_test;
 pub mod multisig_governance_execution_test;
 pub mod multisig_test;
 pub mod recovery_test;
+pub mod repay_test;
+pub mod repay_dust_test;
