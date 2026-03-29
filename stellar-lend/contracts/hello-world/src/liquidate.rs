@@ -35,10 +35,12 @@ pub enum LiquidationError {
     InsufficientBalance = 6,
     /// Overflow occurred during calculation
     Overflow = 7,
+    /// Reentrancy detected during liquidation
+    Reentrancy = 8,
     /// Invalid collateral asset
-    InvalidCollateralAsset = 8,
+    InvalidCollateralAsset = 9,
     /// Invalid debt asset
-    InvalidDebtAsset = 9,
+    InvalidDebtAsset = 10,
     /// Price not available for asset
     PriceNotAvailable = 10,
 }
