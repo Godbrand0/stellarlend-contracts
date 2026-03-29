@@ -23,15 +23,14 @@
 #![allow(unused)]
 use soroban_sdk::{Address, Env, Symbol, Vec};
 
+use crate::errors::GovernanceError;
 use crate::governance::{
     approve_proposal, create_proposal, emit_approval_event, emit_proposal_executed_event,
-    execute_proposal, get_proposal, get_proposal_approvals, get_multisig_config,
-    execute_multisig_proposal, execute_proposal, get_multisig_admins, get_multisig_threshold,
-    get_proposal, get_proposal_approvals, set_multisig_admins, set_multisig_threshold,
-    GovernanceDataKey, GovernanceError, Proposal, ProposalStatus, ProposalType,
+    execute_multisig_proposal, execute_proposal, get_multisig_admins, get_multisig_config,
+    get_multisig_threshold, get_proposal, get_proposal_approvals, set_multisig_admins,
+    set_multisig_threshold,
 };
 use crate::storage::GovernanceDataKey;
-use crate::errors::GovernanceError;
 use crate::types::{Proposal, ProposalStatus, ProposalType};
 
 // ============================================================================
@@ -130,9 +129,13 @@ pub fn ms_propose_set_min_cr(
     }
 
     // Delegates auth check + proposal creation to governance.rs
-    let proposal_id =
-        crate::governance::propose_set_min_collateral_ratio(env, proposer.clone(), new_ratio.try_into().map_err(|_| GovernanceError::MathOverflow)?)?;
-        crate::governance::propose_set_min_collateral_ratio(env, proposer.clone(), new_ratio)?;
+    let proposal_id = crate::governance::propose_set_min_collateral_ratio(
+        env,
+        proposer.clone(),
+        new_ratio
+            .try_into()
+            .map_err(|_| GovernanceError::MathOverflow)?,
+    )?;
 
     // Proposer auto-approves their own proposal
     approve_proposal(env, proposer, proposal_id)?;
@@ -175,7 +178,6 @@ pub fn ms_approve(env: &Env, approver: Address, proposal_id: u64) -> Result<(), 
 ///   was already executed.
 /// - [`GovernanceError::ProposalNotReady`] if a timelock is still active.
 pub fn ms_execute(env: &Env, executor: Address, proposal_id: u64) -> Result<(), GovernanceError> {
-    execute_proposal(env, executor, proposal_id)
     execute_multisig_proposal(env, executor, proposal_id)
 }
 
@@ -190,7 +192,9 @@ pub fn get_ms_admins(env: &Env) -> Option<Vec<Address>> {
 
 /// Return the multisig approval threshold (defaults to `1`).
 pub fn get_ms_threshold(env: &Env) -> u32 {
-    get_multisig_config(env).map(|config| config.threshold).unwrap_or(1)
+    get_multisig_config(env)
+        .map(|config| config.threshold)
+        .unwrap_or(1)
 }
 
 /// Returns a proposal by its ID, if it exists.
@@ -206,23 +210,25 @@ pub fn get_ms_approvals(env: &Env, proposal_id: u64) -> Option<Vec<Address>> {
 /// Set the multisig approval threshold (admin only).
 pub fn set_ms_threshold(env: &Env, caller: Address, threshold: u32) -> Result<(), GovernanceError> {
     caller.require_auth();
-    
+
     if threshold == 0 {
         return Err(GovernanceError::InvalidThreshold);
     }
-    
+
     let config = get_multisig_config(env).ok_or(GovernanceError::NotInitialized)?;
     if !config.admins.contains(&caller) {
         return Err(GovernanceError::Unauthorized);
     }
-    
+
     if threshold > config.admins.len() as u32 {
         return Err(GovernanceError::InvalidThreshold);
     }
-    
+
     let mut new_config = config;
     new_config.threshold = threshold;
-    
-    env.storage().instance().set(&GovernanceDataKey::MultisigConfig, &new_config);
+
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::MultisigConfig, &new_config);
     Ok(())
 }

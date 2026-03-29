@@ -34,7 +34,7 @@ impl MaliciousToken {
             let token_opt = Some(env.current_contract_address());
 
             // Try deposit
-            let res = client.try_deposit_collateral(user, &token_opt, &100);
+            let res = client.try_ca_deposit_collateral(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on deposit, got {:?}",
@@ -42,7 +42,7 @@ impl MaliciousToken {
             );
 
             // Try withdraw
-            let res = client.try_withdraw_collateral(user, &token_opt, &100);
+            let res = client.try_ca_withdraw_collateral(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on withdraw, got {:?}",
@@ -50,7 +50,7 @@ impl MaliciousToken {
             );
 
             // Try borrow
-            let res = client.try_borrow_asset(user, &token_opt, &100);
+            let res = client.try_ca_borrow_asset(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on borrow, got {:?}",
@@ -58,7 +58,7 @@ impl MaliciousToken {
             );
 
             // Try repay
-            let res = client.try_repay_debt(user, &token_opt, &100);
+            let res = client.try_ca_repay_debt(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on repay, got {:?}",
@@ -98,6 +98,7 @@ fn setup_test(env: &Env) -> (Address, HelloContractClient<'static>, Address, Add
                 deposit_enabled: true,
                 collateral_factor: 10000,
                 max_deposit: 10_000_000,
+                borrow_fee_bps: 0,
             },
         );
     });
@@ -114,7 +115,8 @@ fn test_reentrancy_on_deposit() {
     let env = Env::default();
     let (_, client, token_id, user) = setup_test(&env);
 
-    client.deposit_collateral(&user, &Some(token_id), &1000);
+    let res = client.try_ca_deposit_collateral(&user, &Some(token_id), &1000);
+    assert!(res.is_err());
 }
 
 #[test]
@@ -138,7 +140,8 @@ fn test_reentrancy_on_withdraw() {
         );
     });
 
-    client.withdraw_collateral(&user, &Some(token_id), &500);
+    let res = client.try_ca_withdraw_collateral(&user, &Some(token_id), &500);
+    assert!(res.is_err());
 }
 
 #[test]
@@ -163,7 +166,8 @@ fn test_reentrancy_on_borrow() {
         );
     });
 
-    client.borrow_asset(&user, &Some(token_id), &500);
+    let res = client.try_ca_borrow_asset(&user, &Some(token_id), &500);
+    assert!(res.is_err());
 }
 
 #[test]
@@ -184,5 +188,5 @@ fn test_reentrancy_on_repay() {
         );
     });
 
-    client.repay_debt(&user, &Some(token_id), &500);
+    client.ca_repay_debt(&user, &Some(token_id), &500);
 }
