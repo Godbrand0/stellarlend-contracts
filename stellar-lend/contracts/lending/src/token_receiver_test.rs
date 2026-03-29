@@ -1,5 +1,5 @@
 use crate::{borrow::BorrowError, LendingContract, LendingContractClient};
-use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Symbol};
+use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Symbol, Vec};
 
 #[test]
 fn test_receive_deposit_success() {
@@ -70,6 +70,19 @@ fn test_receive_invalid_action() {
 
     let result = client.try_receive(&asset, &from, &50_000, &payload);
     assert_eq!(result, Err(Ok(BorrowError::AssetNotSupported)));
+}
+
+#[test]
+fn test_receive_empty_payload() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+    let from = Address::generate(&env);
+    let asset = Address::generate(&env);
+    let payload = Vec::new(&env);
+    let result = client.try_receive(&asset, &from, &50_000, &payload);
+    assert!(result.is_err());
 }
 
 #[test]

@@ -1,3 +1,5 @@
+#![cfg(not(tarpaulin))]
+
 //! StellarLend Blockchain Integration Layer
 //!
 //! This library provides a comprehensive blockchain integration layer for interacting with

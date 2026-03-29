@@ -20,6 +20,8 @@ pub enum RiskParamsError {
     InvalidCloseFactor = 6,
     /// Liquidation incentive out of valid range (0-50%)
     InvalidLiquidationIncentive = 7,
+    /// Calculation overflow occurred
+    Overflow = 8,
 }
 
 /// Storage keys for risk params data
@@ -255,13 +257,22 @@ pub fn get_liquidation_incentive(env: &Env) -> Result<i128, RiskParamsError> {
 ///
 /// # Returns
 /// Maximum amount that can be liquidated
-pub fn get_max_liquidatable_amount(env: &Env, debt_value: i128) -> Result<i128, RiskParamsError> {
+/// Get the maximum amount that can be liquidated for a given debt position.
+/// Uses the configured close factor (default 5000 bps = 50%).
+/// Uses I256 for safe intermediate multiplication.
+pub fn get_max_liquidatable_amount(
+    env: &Env,
+    debt_value: i128,
+) -> Result<i128, RiskParamsError> {
     let config = get_risk_params(env).ok_or(RiskParamsError::InvalidParameter)?;
 
-    // Calculate: debt * close_factor / BASIS_POINTS_SCALE
-    let max_amount = (debt_value * config.close_factor)
-        .checked_div(BASIS_POINTS_SCALE)
-        .ok_or(RiskParamsError::InvalidParameter)?; // Return generic error for overflow since we dropped Overflow variant
+    // Calculate: debt * close_factor / BASIS_POINTS_SCALE using I256 to prevent overflow
+    let debt_256 = I256::from_i128(env, debt_value);
+    let close_factor_256 = I256::from_i128(env, config.close_factor);
+    let scale_256 = I256::from_i128(env, BASIS_POINTS_SCALE);
+
+    let max_amount_256 = debt_256.mul(&close_factor_256).div(&scale_256);
+    let max_amount = max_amount_256.to_i128().ok_or(RiskParamsError::Overflow)?;
 
     Ok(max_amount)
 }
@@ -276,18 +287,24 @@ pub fn get_max_liquidatable_amount(env: &Env, debt_value: i128) -> Result<i128, 
 ///
 /// # Returns
 /// Liquidation incentive amount
+/// Get the bonus incentive amount for a liquidation.
+/// Uses the configured liquidation incentive (default 1000 bps = 10%).
+/// Returns incentive in the same units as the liquidated amount.
 pub fn get_liquidation_incentive_amount(
     env: &Env,
     liquidated_amount: i128,
 ) -> Result<i128, RiskParamsError> {
     let config = get_risk_params(env).ok_or(RiskParamsError::InvalidParameter)?;
 
-    // Calculate: amount * liquidation_incentive / BASIS_POINTS_SCALE
-    let incentive = (liquidated_amount * config.liquidation_incentive)
-        .checked_div(BASIS_POINTS_SCALE)
-        .ok_or(RiskParamsError::InvalidParameter)?;
+    // Calculate: amount * liquidation_incentive / BASIS_POINTS_SCALE using I256
+    let amount_256 = I256::from_i128(env, liquidated_amount);
+    let incentive_256 = I256::from_i128(env, config.liquidation_incentive);
+    let scale_256 = I256::from_i128(env, BASIS_POINTS_SCALE);
 
-    Ok(incentive)
+    let result_256 = amount_256.mul(&incentive_256).div(&scale_256);
+    let result = result_256.to_i128().ok_or(RiskParamsError::Overflow)?;
+
+    Ok(result)
 }
 
 /// Require minimum collateral ratio

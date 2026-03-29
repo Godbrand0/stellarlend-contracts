@@ -1,7 +1,8 @@
 {
   "generators": {
     "address": 4,
-    "nonce": 0
+    "nonce": 0,
+    "mux_id": 0
   },
   "auth": [
     [],
@@ -13,7 +14,7 @@
     []
   ],
   "ledger": {
-    "protocol_version": 22,
+    "protocol_version": 23,
     "sequence_number": 0,
     "timestamp": 0,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -68,10 +69,7 @@
                             "symbol": "amount"
                           },
                           "val": {
-                            "i128": {
-                              "hi": 0,
-                              "lo": 500
-                            }
+                            "i128": "500"
                           }
                         },
                         {
@@ -95,7 +93,59 @@
                             "symbol": "timestamp"
                           },
                           "val": {
-                            "u64": 0
+                            "u64": "0"
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "user"
+                          },
+                          "val": {
+                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "map": [
+                        {
+                          "key": {
+                            "symbol": "activity_type"
+                          },
+                          "val": {
+                            "symbol": "repay"
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "amount"
+                          },
+                          "val": {
+                            "i128": "500"
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "asset"
+                          },
+                          "val": {
+                            "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "metadata"
+                          },
+                          "val": {
+                            "map": []
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "timestamp"
+                          },
+                          "val": {
+                            "u64": "0"
                           }
                         },
                         {
@@ -195,13 +245,18 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "borrow_fee_bps"
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "collateral_factor"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 10000
-                        }
+                        "i128": "10000"
                       }
                     },
                     {
@@ -217,10 +272,7 @@
                         "symbol": "max_deposit"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 10000000
-                        }
+                        "i128": "10000000"
                       }
                     }
                   ]
@@ -278,6 +330,118 @@
             "key": {
               "vec": [
                 {
+                  "symbol": "InterestRateConfig"
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "InterestRateConfig"
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "map": [
+                    {
+                      "key": {
+                        "symbol": "base_rate_bps"
+                      },
+                      "val": {
+                        "i128": "100"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "emergency_adjustment_bps"
+                      },
+                      "val": {
+                        "i128": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "jump_multiplier_bps"
+                      },
+                      "val": {
+                        "i128": "10000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "kink_utilization_bps"
+                      },
+                      "val": {
+                        "i128": "8000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "last_update"
+                      },
+                      "val": {
+                        "u64": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "multiplier_bps"
+                      },
+                      "val": {
+                        "i128": "2000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "rate_ceiling_bps"
+                      },
+                      "val": {
+                        "i128": "10000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "rate_floor_bps"
+                      },
+                      "val": {
+                        "i128": "50"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "spread_bps"
+                      },
+                      "val": {
+                        "i128": "200"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          4095
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+            "key": {
+              "vec": [
+                {
                   "symbol": "Position"
                 },
                 {
@@ -313,10 +477,7 @@
                         "symbol": "borrow_interest"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -324,10 +485,7 @@
                         "symbol": "collateral"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 10000
-                        }
+                        "i128": "10000"
                       }
                     },
                     {
@@ -335,10 +493,7 @@
                         "symbol": "debt"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 500
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -346,7 +501,7 @@
                         "symbol": "last_accrual_time"
                       },
                       "val": {
-                        "u64": 0
+                        "u64": "0"
                       }
                     }
                   ]
@@ -394,10 +549,7 @@
                         "symbol": "total_borrows"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "-500"
                       }
                     },
                     {
@@ -405,10 +557,7 @@
                         "symbol": "total_deposits"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -416,10 +565,7 @@
                         "symbol": "total_value_locked"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     }
                   ]
@@ -464,54 +610,10 @@
                   "map": [
                     {
                       "key": {
-                        "symbol": "close_factor"
-                      },
-                      "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 5000
-                        }
-                      }
-                    },
-                    {
-                      "key": {
                         "symbol": "last_update"
                       },
                       "val": {
-                        "u64": 0
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "liquidation_incentive"
-                      },
-                      "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 1000
-                        }
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "liquidation_threshold"
-                      },
-                      "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 10500
-                        }
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "min_collateral_ratio"
-                      },
-                      "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 11000
-                        }
+                        "u64": "0"
                       }
                     },
                     {
@@ -579,6 +681,86 @@
             "key": {
               "vec": [
                 {
+                  "symbol": "RiskParamsConfig"
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "RiskParamsConfig"
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "map": [
+                    {
+                      "key": {
+                        "symbol": "close_factor"
+                      },
+                      "val": {
+                        "i128": "5000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "last_update"
+                      },
+                      "val": {
+                        "u64": "0"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "liquidation_incentive"
+                      },
+                      "val": {
+                        "i128": "1000"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "liquidation_threshold"
+                      },
+                      "val": {
+                        "i128": "10500"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "min_collateral_ratio"
+                      },
+                      "val": {
+                        "i128": "11000"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          4095
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+            "key": {
+              "vec": [
+                {
                   "symbol": "UserAnalytics"
                 },
                 {
@@ -614,10 +796,7 @@
                         "symbol": "activity_score"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -625,10 +804,7 @@
                         "symbol": "collateral_value"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -636,10 +812,7 @@
                         "symbol": "collateralization_ratio"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -647,10 +820,7 @@
                         "symbol": "debt_value"
                       },
                       "val": {
-                        "i128": {
-                          "hi": -1,
-                          "lo": 18446744073709551116
-                        }
+                        "i128": "-500"
                       }
                     },
                     {
@@ -658,7 +828,7 @@
                         "symbol": "first_interaction"
                       },
                       "val": {
-                        "u64": 0
+                        "u64": "0"
                       }
                     },
                     {
@@ -666,7 +836,7 @@
                         "symbol": "last_activity"
                       },
                       "val": {
-                        "u64": 0
+                        "u64": "0"
                       }
                     },
                     {
@@ -682,10 +852,7 @@
                         "symbol": "risk_level"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -693,10 +860,7 @@
                         "symbol": "total_borrows"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -704,10 +868,7 @@
                         "symbol": "total_deposits"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -715,10 +876,7 @@
                         "symbol": "total_repayments"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 500
-                        }
+                        "i128": "500"
                       }
                     },
                     {
@@ -726,10 +884,7 @@
                         "symbol": "total_withdrawals"
                       },
                       "val": {
-                        "i128": {
-                          "hi": 0,
-                          "lo": 0
-                        }
+                        "i128": "0"
                       }
                     },
                     {
@@ -737,7 +892,7 @@
                         "symbol": "transaction_count"
                       },
                       "val": {
-                        "u64": 1
+                        "u64": "1"
                       }
                     }
                   ]
@@ -871,111 +1026,47 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
         "type_": "contract",
         "body": {
           "v0": {
             "topics": [
               {
-                "symbol": "repay"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                "symbol": "repay_event"
               }
             ],
             "data": {
-              "vec": [
+              "map": [
                 {
-                  "symbol": "user"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "symbol": "amount"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 500
+                  "key": {
+                    "symbol": "amount"
+                  },
+                  "val": {
+                    "i128": "500"
                   }
                 },
                 {
-                  "symbol": "interest_paid"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 0
+                  "key": {
+                    "symbol": "asset"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                   }
                 },
                 {
-                  "symbol": "principal_paid"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 500
+                  "key": {
+                    "symbol": "timestamp"
+                  },
+                  "val": {
+                    "u64": "0"
                   }
                 },
                 {
-                  "symbol": "asset"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                },
-                {
-                  "symbol": "timestamp"
-                },
-                {
-                  "u64": 0
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "position_updated"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-              }
-            ],
-            "data": {
-              "vec": [
-                {
-                  "symbol": "user"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "symbol": "collateral"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 10000
-                  }
-                },
-                {
-                  "symbol": "debt"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 500
+                  "key": {
+                    "symbol": "user"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                   }
                 }
               ]
@@ -988,46 +1079,48 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
         "type_": "contract",
         "body": {
           "v0": {
             "topics": [
               {
-                "symbol": "analytics_updated"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                "symbol": "repay_event"
               }
             ],
             "data": {
-              "vec": [
+              "map": [
                 {
-                  "symbol": "user"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "symbol": "activity_type"
-                },
-                {
-                  "string": "repay"
-                },
-                {
-                  "symbol": "amount"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 500
+                  "key": {
+                    "symbol": "amount"
+                  },
+                  "val": {
+                    "i128": "500"
                   }
                 },
                 {
-                  "symbol": "timestamp"
+                  "key": {
+                    "symbol": "asset"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  }
                 },
                 {
-                  "u64": 0
+                  "key": {
+                    "symbol": "timestamp"
+                  },
+                  "val": {
+                    "u64": "0"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "user"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
                 }
               ]
             }
@@ -1039,46 +1132,146 @@
     {
       "event": {
         "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
         "type_": "contract",
         "body": {
           "v0": {
             "topics": [
               {
-                "symbol": "user_activity_tracked"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                "symbol": "position_updated_event"
               }
             ],
             "data": {
-              "vec": [
+              "map": [
                 {
-                  "symbol": "user"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "symbol": "operation"
-                },
-                {
-                  "symbol": "repay"
-                },
-                {
-                  "symbol": "amount"
-                },
-                {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 500
+                  "key": {
+                    "symbol": "collateral"
+                  },
+                  "val": {
+                    "i128": "10000"
                   }
                 },
                 {
-                  "symbol": "timestamp"
+                  "key": {
+                    "symbol": "debt"
+                  },
+                  "val": {
+                    "i128": "0"
+                  }
                 },
                 {
-                  "u64": 0
+                  "key": {
+                    "symbol": "user"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "analytics_updated_event"
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "activity_type"
+                  },
+                  "val": {
+                    "string": "repay"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "amount"
+                  },
+                  "val": {
+                    "i128": "500"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "timestamp"
+                  },
+                  "val": {
+                    "u64": "0"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "user"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "user_activity_tracked_event"
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "amount"
+                  },
+                  "val": {
+                    "i128": "500"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "operation"
+                  },
+                  "val": {
+                    "symbol": "repay"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "timestamp"
+                  },
+                  "val": {
+                    "u64": "0"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "user"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
                 }
               ]
             }

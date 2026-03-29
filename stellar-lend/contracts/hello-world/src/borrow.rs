@@ -462,7 +462,7 @@ pub fn borrow_asset(
     );
 
     // Emit position updated event
-    emit_position_updated_event(env, &user, &position);
+    emit_position_updated_event(env, &user, &position, Symbol::new(env, "borrow"), timestamp);
     emit_analytics_updated_event(env, &user, "borrow", amount, timestamp);
     emit_user_activity_tracked_event(env, &user, Symbol::new(env, "borrow"), amount, timestamp);
 

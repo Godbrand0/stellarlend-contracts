@@ -58,6 +58,25 @@ fn position_of(env: &Env, contract_id: &Address, user: &Address) -> Option<Posit
     })
 }
 
+/// Seed a user position directly in storage for state-invariance tests.
+fn seed_position(env: &Env, contract_id: &Address, user: &Address, collateral: i128, debt: i128) {
+    env.as_contract(contract_id, || {
+        env.storage().persistent().set(
+            &DepositDataKey::CollateralBalance(user.clone()),
+            &collateral,
+        );
+        env.storage().persistent().set(
+            &DepositDataKey::Position(user.clone()),
+            &Position {
+                collateral,
+                debt,
+                borrow_interest: 0,
+                last_accrual_time: env.ledger().timestamp(),
+            },
+        );
+    });
+}
+
 // ============================================================================
 // 1. DEPOSIT — Zero-Amount Tests
 // ============================================================================
@@ -470,7 +489,65 @@ fn test_zero_repay_between_valid_repayments() {
 }
 
 // ============================================================================
-// 5. RISK MANAGEMENT — Zero-Value Tests
+// 5. LIQUIDATE — Zero-Amount Tests
+// ============================================================================
+
+#[test]
+#[should_panic(expected = "InvalidAmount")]
+fn test_zero_liquidate_reverts() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+    let borrower = Address::generate(&env);
+    let liquidator = Address::generate(&env);
+
+    client.liquidate(&liquidator, &borrower, &None, &None, &0);
+}
+
+#[test]
+#[should_panic(expected = "InvalidAmount")]
+fn test_negative_liquidate_reverts() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+    let borrower = Address::generate(&env);
+    let liquidator = Address::generate(&env);
+
+    client.liquidate(&liquidator, &borrower, &None, &None, &(-100));
+}
+
+#[test]
+fn test_zero_liquidate_no_state_change() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+    let borrower = Address::generate(&env);
+    let liquidator = Address::generate(&env);
+
+    seed_position(&env, &contract_id, &borrower, 1_000, 700);
+    let position_before = position_of(&env, &contract_id, &borrower).unwrap();
+    let balance_before = collateral_balance(&env, &contract_id, &borrower);
+
+    let result = client.try_liquidate(&liquidator, &borrower, &None, &None, &0);
+    assert!(result.is_err(), "Zero liquidation should revert");
+
+    let position_after = position_of(&env, &contract_id, &borrower).unwrap();
+    let balance_after = collateral_balance(&env, &contract_id, &borrower);
+    assert_eq!(
+        position_after, position_before,
+        "Borrower position must not change after zero liquidation"
+    );
+    assert_eq!(
+        balance_after, balance_before,
+        "Collateral balance must not change after zero liquidation"
+    );
+}
+
+// ============================================================================
+// 6. RISK MANAGEMENT — Zero-Value Tests
 // ============================================================================
 
 #[test]
@@ -562,7 +639,7 @@ fn test_min_collateral_ratio_zero_debt() {
     client.initialize(&admin);
 
     // Zero debt → collateral ratio check should pass (any collateral is sufficient)
-    let result = client.try_require_min_collateral_ratio(&1000, &0);
+    let result = client.try_check_min_collateral_ratio(&1000, &0);
     assert!(
         result.is_ok(),
         "Zero debt should satisfy any collateral ratio requirement"
@@ -580,7 +657,7 @@ fn test_min_collateral_ratio_both_zero() {
     client.initialize(&admin);
 
     // Both zero → should pass (no debt to satisfy)
-    let result = client.try_require_min_collateral_ratio(&0, &0);
+    let result = client.try_check_min_collateral_ratio(&0, &0);
     assert!(
         result.is_ok(),
         "Both zero should satisfy collateral ratio (no debt)"
@@ -588,7 +665,7 @@ fn test_min_collateral_ratio_both_zero() {
 }
 
 // ============================================================================
-// 6. CROSS-OPERATION — Zero-Amount Sequence Tests
+// 7. CROSS-OPERATION — Zero-Amount Sequence Tests
 // ============================================================================
 
 #[test]
