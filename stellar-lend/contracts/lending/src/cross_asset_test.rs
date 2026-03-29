@@ -110,7 +110,7 @@ fn create_asset_params(
 fn setup_multi_asset_config(
     env: &Env,
     client: &LendingContractClient,
-    admin: &Address,
+    _admin: &Address,
     asset_usdc: &Address,
     asset_eth: &Address,
 ) {
@@ -132,7 +132,7 @@ fn setup_multi_asset_config(
 #[test]
 fn test_set_asset_params_success() {
     let env = Env::default();
-    let (client, admin, _, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, _, _, asset_usdc, _) = setup_test(&env);
 
     let params = create_asset_params(&env, 8000, 8500, 1000000, true);
 
@@ -169,7 +169,7 @@ fn test_set_asset_params_unauthorized() {
 #[test]
 fn test_asset_config_boundary_values() {
     let env = Env::default();
-    let (client, admin, _, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, _, _, asset_usdc, _) = setup_test(&env);
 
     env.mock_all_auths();
 
@@ -185,7 +185,7 @@ fn test_asset_config_boundary_values() {
 #[test]
 fn test_asset_config_updates() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, _) = setup_test(&env);
 
     env.mock_all_auths();
 
@@ -625,7 +625,7 @@ fn test_very_small_amounts() {
 #[test]
 fn test_arithmetic_overflow_protection() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, _) = setup_test(&env);
 
     env.mock_all_auths();
 
@@ -700,7 +700,7 @@ fn test_complete_lending_cycle_multi_asset() {
 #[test]
 fn test_asset_list_management() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
     env.mock_all_auths();
 
@@ -758,7 +758,7 @@ fn test_reentrancy_protection() {
 #[test]
 fn test_admin_only_operations() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, _user1, _, asset_usdc, _) = setup_test(&env);
 
     // Only admin should be able to set asset parameters
     let params = create_asset_params(&env, 8000, 8500, 1000000, true);
