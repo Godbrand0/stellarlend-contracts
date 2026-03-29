@@ -9,6 +9,7 @@
 //! - Collateral and debt values depend on the oracle; ensure the oracle is correct and trusted.
 //! - Health factor uses the admin-set liquidation threshold consistently.
 
+use crate::constants::BPS_SCALE;
 use soroban_sdk::{contracttype, Address, Env, IntoVal, Symbol, I256};
 
 use crate::borrow::{
