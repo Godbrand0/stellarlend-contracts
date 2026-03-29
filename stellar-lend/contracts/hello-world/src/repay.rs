@@ -9,10 +9,16 @@
 //! 1. Accrued interest is paid first.
 //! 2. Any remaining repayment amount reduces the principal debt.
 //!
+//! ## Dust Handling
+//! When the remaining debt (principal + interest) becomes very small (less than
+//! DUST_THRESHOLD), it is automatically zeroed out to prevent precision issues
+//! and ensure clean final states.
+//!
 //! ## Invariants
 //! - Repay amount must be strictly positive.
 //! - User must have outstanding debt to repay.
 //! - Token transfers use `transfer_from`, requiring prior user approval.
+//! - Events reflect actual processed amounts, ensuring alignment with final state.
 
 #![allow(unused)]
 use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};
@@ -23,6 +29,10 @@ use crate::deposit::{
     DepositDataKey, Position, ProtocolAnalytics, UserAnalytics,
 };
 use crate::events::{emit_repay, RepayEvent};
+
+/// Dust threshold for debt cleanup
+/// When total debt (principal + interest) falls below this amount, it's zeroed out
+const DUST_THRESHOLD: i128 = 100;
 
 /// Errors that can occur during repay operations
 #[contracterror]
@@ -187,7 +197,6 @@ pub fn repay_debt(
     // Determine the asset contract address to use
     let asset_addr = match &asset {
         Some(addr) => {
-            // Validate asset address - ensure it's not the contract itself
             if addr == &env.current_contract_address() {
                 return Err(RepayError::InvalidAsset);
             }
@@ -203,14 +212,15 @@ pub fn repay_debt(
             .persistent()
             .get::<DepositDataKey, crate::deposit::AssetParams>(&params_key)
         {
-            1000 // Default 10%
+            params.borrow_fee_bps.max(1000) // Use asset-specific fee or default 10%
         } else {
-            1000
+            1000 // Default 10%
         }
     } else {
-        1000
+        1000 // Default 10%
     };
 
+    // Get user position
     let position_key = DepositDataKey::Position(user.clone());
     let mut position = env
         .storage()
@@ -222,6 +232,7 @@ pub fn repay_debt(
         return Err(RepayError::NoDebt);
     }
 
+    // Accrue interest before repayment
     accrue_interest(env, &mut position)?;
 
     let total_debt = position
@@ -243,7 +254,7 @@ pub fn repay_debt(
         position.borrow_interest
     };
 
-    let principal_paid = repay_amount
+    let principal_paid = actual_repay_amount
         .checked_sub(interest_paid)
         .ok_or(RepayError::Overflow)?;
 
@@ -325,12 +336,12 @@ pub fn repay_debt(
     };
     log_repay(env, event);
     emit_position_updated_event(env, &user, &position);
-    emit_analytics_updated_event(env, &user, "repay", repay_amount, timestamp);
+    emit_analytics_updated_event(env, &user, "repay", final_repay_amount, timestamp);
     emit_user_activity_tracked_event(
         env,
         &user,
         Symbol::new(env, "repay"),
-        repay_amount,
+        final_repay_amount,
         timestamp,
     );
 

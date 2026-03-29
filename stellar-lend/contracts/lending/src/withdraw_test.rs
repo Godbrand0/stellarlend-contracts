@@ -455,3 +455,35 @@ fn test_withdraw_deposit_withdraw_cycle() {
     let pos = client.get_user_collateral_deposit(&user, &asset);
     assert_eq!(pos.amount, 0);
 }
+
+#[test]
+fn test_withdraw_global_pause() {
+    let (env, client) = setup_env();
+    let user = Address::generate(&env);
+    let asset = Address::generate(&env);
+
+    setup_with_deposit(&env, &client, &user, &asset, 50_000);
+
+    // Set global pause instead of withdraw-specific pause
+    let admin = client.get_admin().unwrap();
+    client.set_pause(&admin, &crate::pause::PauseType::All, &true);
+
+    let result = client.try_withdraw(&user, &asset, &10_000);
+    assert_eq!(result, Err(Ok(WithdrawError::WithdrawPaused)));
+}
+
+#[test]
+fn test_withdraw_invalid_min_amount_setup() {
+    let (env, client) = setup_env();
+    let user = Address::generate(&env);
+    let asset = Address::generate(&env);
+
+    setup_with_deposit(&env, &client, &user, &asset, 50_000);
+
+    // Set min withdraw to 500
+    client.initialize_withdraw_settings(&500);
+
+    // Withdrawal for 499 should fail
+    let result = client.try_withdraw(&user, &asset, &499);
+    assert_eq!(result, Err(Ok(WithdrawError::InvalidAmount)));
+}

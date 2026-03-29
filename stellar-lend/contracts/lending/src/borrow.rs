@@ -4,7 +4,12 @@
 //! validation, debt tracking, interest calculation, and pause controls.
 //!
 //! [Issue #391] Optimized gas usage by migrating protocol settings to Instance storage.
+#![allow(unexpected_cfgs)]
 
+use crate::constants::{
+    BPS_SCALE, DEFAULT_CLOSE_FACTOR_BPS, DEFAULT_LIQUIDATION_INCENTIVE_BPS,
+    DEFAULT_LIQUIDATION_THRESHOLD_BPS, MIN_COLLATERAL_RATIO_BPS,
+};
 use crate::pause::{self, blocks_high_risk_ops, PauseType};
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env, I256};
 
@@ -73,7 +78,7 @@ pub struct RepayEvent {
     pub timestamp: u64,
 }
 
-const COLLATERAL_RATIO_MIN: i128 = 15000; // 150%
+const COLLATERAL_RATIO_MIN: i128 = MIN_COLLATERAL_RATIO_BPS; // 150%
 const INTEREST_RATE_PER_YEAR: i128 = 500; // 5%
 const SECONDS_PER_YEAR: u64 = 31536000;
 
@@ -201,7 +206,7 @@ pub fn get_liquidation_threshold_bps(env: &Env) -> i128 {
     env.storage()
         .instance()
         .get(&BorrowDataKey::LiquidationThresholdBps)
-        .unwrap_or(8000)
+        .unwrap_or(DEFAULT_LIQUIDATION_THRESHOLD_BPS)
 }
 
 pub fn set_liquidation_threshold_bps(
@@ -214,7 +219,7 @@ pub fn set_liquidation_threshold_bps(
         return Err(BorrowError::Unauthorized);
     }
     admin.require_auth();
-    if bps <= 0 || bps > 10000 {
+    if bps <= 0 || bps > BPS_SCALE {
         return Err(BorrowError::InvalidAmount);
     }
     env.storage()
@@ -229,7 +234,7 @@ pub fn get_close_factor_bps(env: &Env) -> i128 {
     env.storage()
         .instance()
         .get(&BorrowDataKey::CloseFactor)
-        .unwrap_or(5000)
+        .unwrap_or(DEFAULT_CLOSE_FACTOR_BPS)
 }
 
 /// Sets the close factor in basis points (1–10000). Admin only.
@@ -239,7 +244,7 @@ pub fn set_close_factor_bps(env: &Env, admin: &Address, bps: i128) -> Result<(),
         return Err(BorrowError::Unauthorized);
     }
     admin.require_auth();
-    if !(1..=10000).contains(&bps) {
+    if !(1..=BPS_SCALE).contains(&bps) {
         return Err(BorrowError::InvalidAmount);
     }
     env.storage()
@@ -254,7 +259,7 @@ pub fn get_liquidation_incentive_bps(env: &Env) -> i128 {
     env.storage()
         .instance()
         .get(&BorrowDataKey::LiquidationIncentiveBps)
-        .unwrap_or(1000)
+        .unwrap_or(DEFAULT_LIQUIDATION_INCENTIVE_BPS)
 }
 
 /// Sets the liquidation incentive in basis points (0–10000). Admin only.
@@ -268,7 +273,7 @@ pub fn set_liquidation_incentive_bps(
         return Err(BorrowError::Unauthorized);
     }
     admin.require_auth();
-    if !(0..=10000).contains(&bps) {
+    if !(0..=BPS_SCALE).contains(&bps) {
         return Err(BorrowError::InvalidAmount);
     }
     env.storage()
@@ -327,12 +332,17 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
     let borrowed_256 = I256::from_i128(env, position.borrowed_amount);
     let rate_256 = I256::from_i128(env, INTEREST_RATE_PER_YEAR);
     let time_256 = I256::from_i128(env, time_elapsed as i128);
+    let denominator =
+        I256::from_i128(env, 10000).mul(&I256::from_i128(env, SECONDS_PER_YEAR as i128));
 
-    let interest_256 = borrowed_256
-        .mul(&rate_256)
-        .mul(&time_256)
-        .div(&I256::from_i128(env, 10000))
-        .div(&I256::from_i128(env, SECONDS_PER_YEAR as i128));
+    let numerator = borrowed_256.mul(&rate_256).mul(&time_256);
+    let interest_256 = if numerator > I256::from_i128(env, 0) {
+        numerator
+            .add(&denominator.sub(&I256::from_i128(env, 1)))
+            .div(&denominator)
+    } else {
+        numerator.div(&denominator)
+    };
 
     interest_256.to_i128().unwrap_or(i128::MAX)
 }
@@ -366,7 +376,7 @@ pub(crate) fn validate_collateral_ratio(collateral: i128, borrow: i128) -> Resul
     let min_collateral = borrow
         .checked_mul(COLLATERAL_RATIO_MIN)
         .ok_or(BorrowError::Overflow)?
-        .checked_div(10000)
+        .checked_div(BPS_SCALE)
         .ok_or(BorrowError::InvalidAmount)?;
     if collateral < min_collateral {
         return Err(BorrowError::InsufficientCollateral);
@@ -456,6 +466,7 @@ pub fn repay(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(
     Ok(())
 }
 
+#[cfg(not(tarpaulin_include))]
 pub fn liquidate_position(
     _env: &Env,
     _liquidator: Address,

@@ -1,5 +1,6 @@
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env};
 
+use crate::constants::BPS_SCALE;
 use crate::deposit::{DepositCollateral, DepositDataKey};
 
 /// Errors that can occur during withdraw operations
@@ -35,7 +36,7 @@ pub struct WithdrawEvent {
 }
 
 /// Minimum collateral ratio in basis points (150%)
-const MIN_COLLATERAL_RATIO_BPS: i128 = 15000;
+const MIN_COLLATERAL_RATIO_BPS: i128 = crate::constants::MIN_COLLATERAL_RATIO_BPS;
 
 /// Withdraw collateral from the protocol
 ///
@@ -128,7 +129,7 @@ fn validate_collateral_ratio_after_withdraw(
             let min_collateral = total_debt
                 .checked_mul(MIN_COLLATERAL_RATIO_BPS)
                 .ok_or(WithdrawError::Overflow)?
-                .checked_div(10000)
+                .checked_div(BPS_SCALE)
                 .ok_or(WithdrawError::Overflow)?;
 
             if remaining_collateral < min_collateral {
@@ -154,7 +155,13 @@ pub fn initialize_withdraw_settings(
     Ok(())
 }
 
-/// Set withdraw pause state
+/// Set the legacy withdraw pause flag (kept for storage-layer compatibility).
+///
+/// Prefer using the unified `set_pause(PauseType::Withdraw, …)` entry point
+/// on the contract, which routes through the granular pause system and emits
+/// a `pause_event`. This inner helper only writes the legacy key; it is
+/// intentionally kept so that the persistent-storage layout remains stable.
+#[allow(dead_code)]
 pub fn set_withdraw_paused(env: &Env, paused: bool) -> Result<(), WithdrawError> {
     env.storage()
         .persistent()

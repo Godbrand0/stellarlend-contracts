@@ -150,6 +150,49 @@ fn test_borrow_interest_accrual() {
 }
 
 #[test]
+fn test_borrow_interest_rounds_up_for_protocol_safety() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 1000;
+    });
+
+    let (client, _admin, user, asset, collateral_asset) = setup_test(&env);
+    client.borrow(&user, &asset, &100_000, &collateral_asset, &200_000);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 1001;
+    });
+
+    let debt = client.get_user_debt(&user);
+    assert_eq!(debt.borrowed_amount, 100_000);
+    assert_eq!(debt.interest_accrued, 1);
+}
+
+#[test]
+fn test_repay_clears_rounded_up_fractional_interest_before_principal() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 10_000;
+    });
+
+    let (client, _admin, user, asset, collateral_asset) = setup_test(&env);
+    client.borrow(&user, &asset, &100_000, &collateral_asset, &200_000);
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = 10_001;
+    });
+
+    client.repay(&user, &asset, &1);
+    let debt_after_interest_payment = client.get_user_debt(&user);
+    assert_eq!(debt_after_interest_payment.interest_accrued, 0);
+    assert_eq!(debt_after_interest_payment.borrowed_amount, 100_000);
+}
+
+#[test]
 fn test_collateral_ratio_validation() {
     let env = Env::default();
     env.mock_all_auths();
