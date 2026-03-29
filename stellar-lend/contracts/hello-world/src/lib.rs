@@ -1219,6 +1219,9 @@ mod test_reentrancy;
 #[cfg(test)]
 mod flash_loan_test;
 
+#[cfg(test)]
+mod amm_pause_integration_test;  
+
 // mod governance_test;
 
 // monitor_test references Monitor contract types not present in this crate
