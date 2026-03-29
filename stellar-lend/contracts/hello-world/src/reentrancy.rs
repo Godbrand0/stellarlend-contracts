@@ -1,6 +1,3 @@
-#![cfg(not(tarpaulin_include))]
-#![allow(unexpected_cfgs)]
-use soroban_sdk::{Env, Symbol};
 //! Reentrancy protection for same-transaction nested calls.
 //!
 //! Soroban executes contract invocations synchronously within a single invocation tree. A
@@ -11,6 +8,10 @@ use soroban_sdk::{Env, Symbol};
 //! The guard does not persist across transactions and does not replace authorization,
 //! pause-switch, or collateral checks. It is a defense-in-depth layer for fund-moving entry
 //! points that perform external contract calls.
+
+#![cfg(not(tarpaulin_include))]
+#![allow(unexpected_cfgs)]
+use soroban_sdk::{Env, Symbol};
 
 use soroban_sdk::{contracttype, Env};
 
