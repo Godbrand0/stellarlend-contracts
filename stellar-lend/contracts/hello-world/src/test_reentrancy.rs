@@ -134,7 +134,9 @@ fn reentrancy_guard_rejects_nested_entry_and_unlocks_after_drop() {
 fn deposit_rejects_callback_reentry_and_releases_lock() {
     let (env, contract_id, client, token_id, user) = setup_test();
 
-    client.deposit_collateral(&user, &Some(token_id), &1_000).unwrap();
+    client
+        .deposit_collateral(&user, &Some(token_id), &1_000)
+        .unwrap();
 
     env.as_contract(&contract_id, || {
         assert!(!is_locked(&env));
@@ -146,7 +148,9 @@ fn withdraw_rejects_callback_reentry_and_releases_lock() {
     let (env, contract_id, client, token_id, user) = setup_test();
     seed_position(&env, &contract_id, &user, 1_000, 0);
 
-    client.withdraw_collateral(&user, &Some(token_id), &500).unwrap();
+    client
+        .withdraw_collateral(&user, &Some(token_id), &500)
+        .unwrap();
 
     env.as_contract(&contract_id, || {
         assert!(!is_locked(&env));

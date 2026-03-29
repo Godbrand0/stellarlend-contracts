@@ -55,8 +55,7 @@ fn contract_id(env: &Env) -> Address {
 #[test]
 fn storage_layout_admin_key_present_after_init() {
     let (env, admin, _client) = setup();
-    let cid = env
-        .register(HelloContract, ());
+    let cid = env.register(HelloContract, ());
     // Use a fresh contract to avoid double-init; re-use the already-initialized one via as_contract
     // We need the contract_id from setup — re-register and init
     let env2 = Env::default();
@@ -134,10 +133,22 @@ fn storage_layout_risk_params_key_present_with_defaults() {
             .expect("RiskParamsConfig must be readable");
 
         // Snapshot the default values — any change here is a breaking upgrade
-        assert_eq!(params.min_collateral_ratio, 11_000, "default min_collateral_ratio = 11000 bps (110%)");
-        assert_eq!(params.liquidation_threshold, 10_500, "default liquidation_threshold = 10500 bps (105%)");
-        assert_eq!(params.close_factor, 5_000, "default close_factor = 5000 bps (50%)");
-        assert_eq!(params.liquidation_incentive, 1_000, "default liquidation_incentive = 1000 bps (10%)");
+        assert_eq!(
+            params.min_collateral_ratio, 11_000,
+            "default min_collateral_ratio = 11000 bps (110%)"
+        );
+        assert_eq!(
+            params.liquidation_threshold, 10_500,
+            "default liquidation_threshold = 10500 bps (105%)"
+        );
+        assert_eq!(
+            params.close_factor, 5_000,
+            "default close_factor = 5000 bps (50%)"
+        );
+        assert_eq!(
+            params.liquidation_incentive, 1_000,
+            "default liquidation_incentive = 1000 bps (10%)"
+        );
     });
 }
 
@@ -229,7 +240,10 @@ fn storage_layout_emergency_pause_key_stable_after_toggle() {
             .persistent()
             .get(&RiskDataKey::EmergencyPause)
             .expect("EmergencyPause key must be present after toggle");
-        assert!(paused, "EmergencyPause must be true after set_emergency_pause(true)");
+        assert!(
+            paused,
+            "EmergencyPause must be true after set_emergency_pause(true)"
+        );
     });
 
     client.set_emergency_pause(&admin, &false);
@@ -240,7 +254,10 @@ fn storage_layout_emergency_pause_key_stable_after_toggle() {
             .persistent()
             .get(&RiskDataKey::EmergencyPause)
             .expect("EmergencyPause key must be present after second toggle");
-        assert!(!paused, "EmergencyPause must be false after set_emergency_pause(false)");
+        assert!(
+            !paused,
+            "EmergencyPause must be false after set_emergency_pause(false)"
+        );
     });
 }
 
@@ -337,7 +354,9 @@ fn storage_layout_config_snapshot_matches_storage() {
     let admin = Address::generate(&env);
     client.initialize(&admin);
 
-    let snapshot = client.get_config_snapshot().expect("snapshot must be Some after init");
+    let snapshot = client
+        .get_config_snapshot()
+        .expect("snapshot must be Some after init");
 
     env.as_contract(&cid, || {
         let params: RiskParams = env
@@ -369,7 +388,13 @@ fn storage_layout_config_snapshot_reflects_param_update() {
     let admin = Address::generate(&env);
     client.initialize(&admin);
 
-    client.set_risk_params(&admin, &Some(12_000), &Some(11_000), &Some(5_500), &Some(1_100));
+    client.set_risk_params(
+        &admin,
+        &Some(12_000),
+        &Some(11_000),
+        &Some(5_500),
+        &Some(1_100),
+    );
 
     let snapshot = client.get_config_snapshot().unwrap();
     assert_eq!(snapshot.min_collateral_ratio, 12_000);

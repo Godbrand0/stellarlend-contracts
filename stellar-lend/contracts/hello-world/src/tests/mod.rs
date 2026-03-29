@@ -1,8 +1,8 @@
 pub mod config_snapshot_test;
 pub mod config_test;
-pub mod storage_layout_test;
 pub mod governance_test;
 pub mod oracle_test;
+pub mod storage_layout_test;
 pub mod withdraw_test;
 
 // Disabled — pre-existing runtime failures (cross_asset not fully implemented)
@@ -54,12 +54,12 @@ pub mod test_helpers;
 pub mod amm_impact_test;
 pub mod borrow_cap_test;
 pub mod bridge_test;
-pub mod cross_contract_test;
 pub mod config_snapshot_test;
-pub mod oracle_staleness_fallback_test;
+pub mod cross_contract_test;
+pub mod fuzz_test;
 pub mod gov_asset_test;
 pub mod multisig_governance_execution_test;
 pub mod multisig_test;
+pub mod oracle_staleness_fallback_test;
 pub mod recovery_test;
-pub mod fuzz_test;
 // pub mod fees_test;
