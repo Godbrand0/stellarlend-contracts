@@ -12,12 +12,9 @@ use crate::types::RecoveryRequest;
 const DEFAULT_RECOVERY_PERIOD: u64 = 3 * 24 * 60 * 60;
 
 fn require_multisig_admin(env: &Env, caller: &Address) -> Result<(), GovernanceError> {
-    let admins: Vec<Address> = env
-        .storage()
-        .persistent()
-        .get(&GovernanceDataKey::MultisigAdmins)
-        .ok_or(GovernanceError::Unauthorized)?;
-    if !admins.contains(caller.clone()) {
+    let config = crate::governance::get_multisig_config(env)
+        .ok_or(GovernanceError::NotInitialized)?;
+    if !config.admins.contains(caller.clone()) {
         return Err(GovernanceError::Unauthorized);
     }
     Ok(())
@@ -280,22 +277,21 @@ pub fn execute_recovery(env: &Env, executor: Address) -> Result<(), GovernanceEr
         return Err(GovernanceError::InsufficientApprovals);
     }
 
-    let admins: Vec<Address> = env
-        .storage()
-        .persistent()
-        .get(&GovernanceDataKey::MultisigAdmins)
-        .unwrap_or_else(|| Vec::new(env));
+    let mut config = crate::governance::get_multisig_config(env)
+        .ok_or(GovernanceError::NotInitialized)?;
 
     let mut new_admins = Vec::new(env);
-    for a in admins.iter() {
+    for a in config.admins.iter() {
         if a != recovery.old_admin {
             new_admins.push_back(a);
         }
     }
     new_admins.push_back(recovery.new_admin.clone());
+    
+    config.admins = new_admins;
     env.storage()
-        .persistent()
-        .set(&GovernanceDataKey::MultisigAdmins, &new_admins);
+        .instance()
+        .set(&GovernanceDataKey::MultisigConfig, &config);
 
     env.storage()
         .persistent()

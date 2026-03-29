@@ -39,4 +39,5 @@ pub enum GovernanceError {
     NotInitialized = 133,
     InvalidProposal = 134,
     InvalidThreshold = 135,
+    ProposalAlreadyExecuted = 136,
 }

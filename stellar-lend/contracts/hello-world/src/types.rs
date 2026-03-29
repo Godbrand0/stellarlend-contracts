@@ -63,6 +63,7 @@ pub struct Proposal {
     pub end_time: u64,
     pub execution_time: Option<u64>,
     pub voting_threshold: i128, // In basis points (e.g., 5000 = 50%)
+    pub multisig_threshold: Option<u32>, // Required approvals for multisig proposals
     pub for_votes: i128,
     pub against_votes: i128,
     pub abstain_votes: i128,

@@ -894,12 +894,12 @@ fn execute_amm_swap(
     // Prepare arguments for external AMM protocol call
     // Standard AMM interface: swap(executor, token_in, token_out, amount_in, min_amount_out, callback_data)
     let mut args: Vec<Val> = Vec::new(env);
-    args.push_back(callback_data.user.to_val());
-    args.push_back(params.token_in.to_val());
-    args.push_back(params.token_out.to_val());
+    args.push_back(callback_data.user.into_val(env));
+    args.push_back(params.token_in.into_val(env));
+    args.push_back(params.token_out.into_val(env));
     args.push_back(params.amount_in.into_val(env));
     args.push_back(params.min_amount_out.into_val(env));
-    args.push_back(callback_data.to_val());
+    args.push_back(callback_data.into_val(env));
 
     // Invoke the external AMM protocol contract
     // We expect the protocol to return the actual amount_out received

@@ -56,6 +56,8 @@ use crate::interest_rate::{
     InterestRateError,
 };
 use crate::liquidate::liquidate;
+use crate::amm::{SwapParams, AmmError};
+
 use crate::oracle::OracleConfig;
 use crate::risk_management::{
     check_emergency_pause, initialize_risk_management, is_emergency_paused, is_operation_paused,
@@ -67,8 +69,8 @@ use crate::risk_params::{
 };
 use crate::storage::GuardianConfig;
 use crate::types::{
-    GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalType, RecoveryRequest,
-    VoteInfo, VoteType,
+    GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalStatus, ProposalType,
+    RecoveryRequest, VoteInfo, VoteType,
 };
 
 /// The StellarLend core contract.
@@ -106,8 +108,12 @@ impl HelloContract {
                 RiskManagementError::Unauthorized
             }
         })?;
+
         Ok(())
     }
+
+
+
 
     /// Transfer super admin rights.
     pub fn transfer_admin(
@@ -185,16 +191,6 @@ impl HelloContract {
         native_asset: Address,
     ) -> Result<(), crate::deposit::DepositError> {
         crate::deposit::set_native_asset_address(&env, caller, native_asset)
-    }
-
-    /// Withdraw collateral from the protocol.
-    pub fn withdraw_collateral(
-        env: Env,
-        user: Address,
-        asset: Option<Address>,
-        amount: i128,
-    ) -> Result<i128, crate::withdraw::WithdrawError> {
-        crate::withdraw::withdraw_collateral(&env, user, asset, amount)
     }
 
     /// Set risk parameters (admin only).
@@ -316,7 +312,6 @@ impl HelloContract {
         crate::repay::repay_debt(&env, user, asset, amount)
     }
 
-    /// Liquidate an undercollateralized position.
     pub fn liquidate(
         env: Env,
         liquidator: Address,
@@ -325,7 +320,7 @@ impl HelloContract {
         collateral_asset: Option<Address>,
         amount: i128,
     ) -> Result<i128, crate::liquidate::LiquidationError> {
-        let (repaid, _seized, _fee) = liquidate(&env, caller, borrower, asset, None, amount)?;
+        let (repaid, _seized, _fee) = crate::liquidate::liquidate(&env, liquidator, borrower, debt_asset, collateral_asset, amount)?;
         Ok(repaid)
     }
 
@@ -385,11 +380,6 @@ impl HelloContract {
         interest_rate::calculate_supply_rate(&env).unwrap_or(0)
     }
 
-    /// Get protocol utilization in basis points.
-    pub fn get_utilization(env: Env) -> i128 {
-        analytics::get_protocol_utilization(&env).unwrap_or(0)
-    }
-
     /// Configure flash-loan parameters (admin only).
     pub fn configure_flash_loan(
         env: Env,
@@ -446,22 +436,8 @@ impl HelloContract {
     }
 
     /// Get current protocol utilization in basis points (0–10 000).
-    pub fn get_utilization(env: Env) -> i128 {
-        interest_rate::calculate_utilization(&env).unwrap_or(0)
-    }
-
-    /// Set an emergency rate adjustment (admin only).
-    ///
-    /// The adjustment is added to the calculated borrow rate.
-    /// Bounded to ±10 000 bps (±100%).
-    pub fn set_emergency_rate_adjustment(
-        env: Env,
-        admin: Address,
-        adjustment_bps: i128,
-    ) -> Result<(), RiskManagementError> {
-        require_admin(&env, &admin)?;
-        interest_rate::set_emergency_rate_adjustment(&env, admin, adjustment_bps)
-            .map_err(|_| RiskManagementError::InvalidParameter)
+    pub fn get_protocol_utilization(env: Env) -> i128 {
+        analytics::get_protocol_utilization(&env).unwrap_or(0)
     }
 
     /// Get the current interest rate configuration.
@@ -727,10 +703,9 @@ impl HelloContract {
     pub fn amm_swap(
         env: Env,
         user: Address,
-        params: SwapParams,
-    ) -> Result<i128, AmmError> {
-        amm::amm_swap(env, user, params)
-    }
+        params: crate::amm::SwapParams,
+    ) -> Result<i128, crate::amm::AmmError> {
+        crate::amm::amm_swap(env, user, params)
     }
 
     // ============================================================================
@@ -980,10 +955,10 @@ impl HelloContract {
         timelock_duration: Option<u64>,
         default_voting_threshold: Option<i128>,
     ) -> Result<(), errors::GovernanceError> {
-        governance::initialize(
+        governance::initialize_governance(
             &env,
             admin,
-            vote_token,
+            Some(vote_token),
             voting_period,
             execution_delay,
             quorum_bps,
@@ -1000,9 +975,41 @@ impl HelloContract {
         proposal_type: ProposalType,
         description: soroban_sdk::String,
         voting_threshold: Option<i128>,
+        execution_delay: Option<u64>,
+        expires_at: Option<u64>,
     ) -> Result<u64, errors::GovernanceError> {
-        let soroban_desc = soroban_sdk::String::from_str(&env, &description.to_string());
-        governance::create_proposal(&env, proposer, proposal_type, soroban_desc, voting_threshold)
+        governance::create_proposal(
+            &env,
+            proposer,
+            proposal_type,
+            description,
+            voting_threshold,
+            None,
+            execution_delay,
+            expires_at,
+        )
+    }
+    
+    /// Create a new proposal (alias for backward compatibility).
+    pub fn create_proposal(
+        env: Env,
+        proposer: Address,
+        proposal_type: ProposalType,
+        description: Symbol,
+        voting_threshold: Option<i128>,
+        execution_delay: Option<u64>,
+        expires_at: Option<u64>,
+    ) -> Result<u64, errors::GovernanceError> {
+        governance::create_proposal(
+            &env,
+            proposer,
+            proposal_type,
+            soroban_sdk::String::from_str(&env, &description.to_string()),
+            voting_threshold,
+            None,
+            execution_delay,
+            expires_at,
+        )
     }
 
     /// Cast a vote on a proposal.
@@ -1210,7 +1217,7 @@ impl HelloContract {
 
     /// Check if an address can vote on a proposal.
     pub fn gov_can_vote(env: Env, voter: Address, proposal_id: u64) -> bool {
-        governance::can_vote(&env, voter, proposal_id)
+        crate::governance::can_vote(&env, voter, proposal_id)
     }
 }
 
