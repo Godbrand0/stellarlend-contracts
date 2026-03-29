@@ -30,8 +30,13 @@ pub mod risk_management;
 pub mod risk_params;
 pub mod storage;
 pub mod types;
+pub mod vesting;
 pub mod withdraw;
 
+#[cfg(test)]
+mod test_reentrancy;
+#[cfg(test)]
+mod test_vesting;
 #[cfg(test)]
 mod tests;
 // Legacy test suite currently mismatches contract API and is excluded from CI compile.
