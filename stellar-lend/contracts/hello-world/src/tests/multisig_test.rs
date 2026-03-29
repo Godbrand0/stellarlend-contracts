@@ -15,6 +15,9 @@ fn setup() -> (Env, Address, Address) {
     env.mock_all_auths();
     let contract_id = env.register(HelloContract, ());
     let admin = Address::generate(&env);
+    env.as_contract(&contract_id, || {
+        crate::governance::initialize(&env, admin.clone()).unwrap();
+    });
     (env, contract_id, admin)
 }
 
