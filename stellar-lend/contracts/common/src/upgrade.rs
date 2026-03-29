@@ -670,26 +670,29 @@ mod tests {
     #[test]
     fn add_remove_approver_and_status_flow() {
         let (env, contract_id, admin, approver, wasm_hash) = setup();
-
         env.as_contract(&contract_id, || {
             UpgradeManager::init(env.clone(), admin.clone(), wasm_hash.clone(), 2);
-            UpgradeManager::add_approver(env.clone(), admin.clone(), approver.clone());
-
-            let proposal_id =
-                UpgradeManager::upgrade_propose(env.clone(), admin.clone(), wasm_hash.clone(), 1);
-            let status_before = UpgradeManager::upgrade_status(env.clone(), proposal_id);
-            assert_eq!(status_before.stage, UpgradeStage::Proposed);
-            assert_eq!(status_before.approval_count, 1);
-
-            let count = UpgradeManager::upgrade_approve(env.clone(), approver.clone(), proposal_id);
-            assert_eq!(count, 2);
-
-            let status_after = UpgradeManager::upgrade_status(env.clone(), proposal_id);
-            assert_eq!(status_after.stage, UpgradeStage::Approved);
-            assert_eq!(status_after.approval_count, 2);
-
-            UpgradeManager::remove_approver(env.clone(), admin.clone(), approver.clone());
         });
+        env.as_contract(&contract_id, || {
+            UpgradeManager::add_approver(env.clone(), admin.clone(), approver.clone());
+        });
+        let proposal_id = env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_propose(env.clone(), admin.clone(), wasm_hash.clone(), 1)
+        });
+        let status_before = env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_status(env.clone(), proposal_id)
+        });
+        assert_eq!(status_before.stage, UpgradeStage::Proposed);
+        assert_eq!(status_before.approval_count, 1);
+        let count = env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_approve(env.clone(), approver.clone(), proposal_id)
+        });
+        assert_eq!(count, 2);
+        let status_after = env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_status(env.clone(), proposal_id)
+        });
+        assert_eq!(status_after.stage, UpgradeStage::Approved);
+        assert_eq!(status_after.approval_count, 2);
     }
 
     #[test]
@@ -715,26 +718,38 @@ mod tests {
 
         env.as_contract(&contract_id, || {
             UpgradeManager::init(env.clone(), admin.clone(), wasm_hash.clone(), 2);
-            UpgradeManager::add_approver(env.clone(), admin.clone(), approver.clone());
-
-            let proposal_id =
-                UpgradeManager::upgrade_propose(env.clone(), admin.clone(), next_hash.clone(), 1);
-            UpgradeManager::upgrade_approve(env.clone(), approver.clone(), proposal_id);
-            UpgradeManager::upgrade_execute(env.clone(), approver.clone(), proposal_id);
-
-            assert_eq!(UpgradeManager::current_version(env.clone()), 1);
-            assert_eq!(UpgradeManager::current_wasm_hash(env.clone()), next_hash);
-
-            let executed_status = UpgradeManager::upgrade_status(env.clone(), proposal_id);
-            assert_eq!(executed_status.stage, UpgradeStage::Executed);
-
-            UpgradeManager::upgrade_rollback(env.clone(), admin.clone(), proposal_id);
-            assert_eq!(UpgradeManager::current_version(env.clone()), 0);
-            assert_eq!(UpgradeManager::current_wasm_hash(env.clone()), wasm_hash);
-
-            let rolled_back_status = UpgradeManager::upgrade_status(env.clone(), proposal_id);
-            assert_eq!(rolled_back_status.stage, UpgradeStage::RolledBack);
         });
+        env.as_contract(&contract_id, || {
+            UpgradeManager::add_approver(env.clone(), admin.clone(), approver.clone());
+        });
+        let proposal_id = env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_propose(env.clone(), admin.clone(), next_hash.clone(), 1)
+        });
+        env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_approve(env.clone(), approver.clone(), proposal_id);
+        });
+        env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_execute(env.clone(), approver.clone(), proposal_id);
+        });
+
+        assert_eq!(env.as_contract(&contract_id, || UpgradeManager::current_version(env.clone())), 1);
+        assert_eq!(env.as_contract(&contract_id, || UpgradeManager::current_wasm_hash(env.clone())), next_hash);
+
+        let executed_status = env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_status(env.clone(), proposal_id)
+        });
+        assert_eq!(executed_status.stage, UpgradeStage::Executed);
+
+        env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_rollback(env.clone(), admin.clone(), proposal_id);
+        });
+        assert_eq!(env.as_contract(&contract_id, || UpgradeManager::current_version(env.clone())), 0);
+        assert_eq!(env.as_contract(&contract_id, || UpgradeManager::current_wasm_hash(env.clone())), wasm_hash);
+
+        let rolled_back_status = env.as_contract(&contract_id, || {
+            UpgradeManager::upgrade_status(env.clone(), proposal_id)
+        });
+        assert_eq!(rolled_back_status.stage, UpgradeStage::RolledBack);
     }
 
     #[test]
@@ -746,7 +761,7 @@ mod tests {
                 UpgradeManager::init(env.clone(), admin.clone(), wasm_hash.clone(), 1);
                 env.storage()
                     .persistent()
-                    .set(&UpgradeKey::NextProposalId, &u64::MAX);
+                    .set(&UpgradeKey::UpNextPropId, &u64::MAX);
                 UpgradeManager::upgrade_propose(env.clone(), admin.clone(), wasm_hash.clone(), 1);
             });
         }));
