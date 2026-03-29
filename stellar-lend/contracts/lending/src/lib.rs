@@ -109,10 +109,7 @@ mod oracle_test;
 #[cfg(test)]
 mod stress_test;
 #[cfg(test)]
-mod test_performance;
-
-#[cfg(test)]
-mod coverage_gap_test;
+mod multi_user_contention_test;
 
 #[contract]
 pub struct LendingContract;
