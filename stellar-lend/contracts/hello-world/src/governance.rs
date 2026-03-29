@@ -103,6 +103,11 @@ const MAX_TIMELOCK_DURATION: u64 = 30 * 24 * 60 * 60;
 /// Sets up the governance config, multisig (admin as sole signer with threshold 1),
 /// and an empty guardian set. Can only be called once.
 ///
+/// # Authorization
+///
+/// Uses Soroban's `require_auth()` to ensure the caller is the intended admin.
+/// The admin address must sign the initialization transaction.
+///
 /// # Arguments
 ///
 /// * `env` - The contract environment.
@@ -235,6 +240,11 @@ pub fn initialize(
 /// proposal starts in `Pending` status and transitions to `Active` when
 /// the voting window begins (immediately, since `start_time == now`).
 ///
+/// # Authorization
+///
+/// Uses Soroban's `require_auth()` to verify the proposer's identity.
+/// This ensures only the intended proposer can create proposals on their behalf.
+///
 /// # Arguments
 ///
 /// * `proposer` - Address creating the proposal (must authorize).
@@ -355,6 +365,12 @@ pub fn create_proposal(
 /// The voter's token balance at the time of voting determines their voting
 /// power. Each address can vote exactly once per proposal. Voting is only
 /// allowed while the proposal is `Active` and within the voting window.
+///
+/// # Authorization
+///
+/// Uses Soroban's `require_auth()` to ensure the voter is the one
+/// casting the vote. This prevents vote spoofing and ensures each voter
+/// can only vote with their own token balance.
 ///
 /// # Arguments
 ///
