@@ -7,6 +7,11 @@ members = [
   "contracts/common",
   "contracts/hello-world",
   "contracts/lending",
+  "indexing_system",
+]
+exclude = [
+  "contracts/hello-world",
+  "indexing_system"
 ]
 
 [workspace.dependencies]

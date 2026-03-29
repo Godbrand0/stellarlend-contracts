@@ -26,8 +26,9 @@
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Map, Symbol, Val, Vec};
 
 use crate::events::{
-    emit_analytics_updated, emit_deposit, emit_position_updated, emit_user_activity_tracked,
-    AnalyticsUpdatedEvent, DepositEvent, PositionUpdatedEvent, UserActivityTrackedEvent,
+    emit_analytics_updated, emit_borrower_health_v1, emit_deposit, emit_position_updated,
+    emit_user_activity_tracked, AnalyticsUpdatedEvent, BorrowerHealthEventV1, DepositEvent,
+    PositionUpdatedEvent, UserActivityTrackedEvent,
 };
 
 /// Errors that can occur during deposit operations
@@ -356,7 +357,13 @@ pub fn deposit_collateral(
     );
 
     // Emit position updated event
-    emit_position_updated_event(env, &user, &position);
+    emit_position_updated_event(
+        env,
+        &user,
+        &position,
+        Symbol::new(env, "deposit"),
+        timestamp,
+    );
 
     // Emit analytics updated event
     emit_analytics_updated_event(env, &user, "deposit", amount, timestamp);
@@ -504,8 +511,14 @@ pub fn add_activity_log(
     Ok(())
 }
 
-/// Emit position updated event
-pub fn emit_position_updated_event(env: &Env, user: &Address, position: &Position) {
+/// Emit legacy position and stable borrower-health events for indexers.
+pub fn emit_position_updated_event(
+    env: &Env,
+    user: &Address,
+    position: &Position,
+    operation: Symbol,
+    timestamp: u64,
+) {
     emit_position_updated(
         env,
         PositionUpdatedEvent {
@@ -514,6 +527,71 @@ pub fn emit_position_updated_event(env: &Env, user: &Address, position: &Positio
             debt: position.debt,
         },
     );
+
+    let snapshot = build_borrower_health_snapshot(position);
+    emit_borrower_health_v1(
+        env,
+        BorrowerHealthEventV1 {
+            schema_version: 1,
+            user: user.clone(),
+            operation,
+            collateral: position.collateral,
+            principal_debt: position.debt,
+            borrow_interest: position.borrow_interest,
+            total_debt: snapshot.total_debt,
+            health_factor: snapshot.health_factor,
+            risk_level: snapshot.risk_level,
+            is_liquidatable: snapshot.is_liquidatable,
+            timestamp,
+        },
+    );
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+struct BorrowerHealthSnapshot {
+    total_debt: i128,
+    health_factor: i128,
+    risk_level: i128,
+    is_liquidatable: bool,
+}
+
+fn build_borrower_health_snapshot(position: &Position) -> BorrowerHealthSnapshot {
+    let total_debt = position
+        .debt
+        .checked_add(position.borrow_interest)
+        .unwrap_or(i128::MAX);
+    let health_factor = if total_debt == 0 {
+        i128::MAX
+    } else {
+        position
+            .collateral
+            .checked_mul(10_000)
+            .and_then(|value| value.checked_div(total_debt))
+            .unwrap_or(0)
+    };
+    let risk_level = calculate_risk_level(health_factor);
+    let is_liquidatable = total_debt > 0 && health_factor < 10_500;
+
+    BorrowerHealthSnapshot {
+        total_debt,
+        health_factor,
+        risk_level,
+        is_liquidatable,
+    }
+}
+
+fn calculate_risk_level(health_factor: i128) -> i128 {
+    if health_factor >= 15_000 {
+        1
+    } else if health_factor >= 12_000 {
+        2
+    } else if health_factor >= 11_000 {
+        3
+    } else if health_factor >= 10_500 {
+        4
+    } else {
+        5
+    }
 }
 
 /// Emit analytics updated event
