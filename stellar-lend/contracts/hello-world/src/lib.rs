@@ -2,8 +2,10 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol, Vec,
+};
 use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec};
-use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec, contracttype, contracterror};
 
 pub mod admin;
 pub mod amm;
@@ -57,8 +59,6 @@ fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError>
     Ok(())
 }
 
-
-
 use borrow::borrow_asset;
 use deposit::deposit_collateral;
 use repay::repay_debt;
@@ -67,13 +67,13 @@ use risk_management::{
     check_emergency_pause, initialize_risk_management, is_emergency_paused, is_operation_paused,
 };
 
+use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use risk_params::{
     can_be_liquidated, get_liquidation_incentive_amount, get_max_liquidatable_amount,
     initialize_risk_params, require_min_collateral_ratio, RiskParamsError,
 };
 use withdraw::withdraw_collateral;
-use crate::deposit::{DepositDataKey, ProtocolAnalytics};
-use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
 
 use crate::analytics::{
     generate_protocol_report, generate_user_report, get_recent_activity, get_user_activity_feed,
@@ -98,14 +98,13 @@ use bridge::{
     set_bridge_fee, BridgeConfig, BridgeError,
 };
 
-
+use crate::amm::{AmmError, SwapParams};
 #[allow(unused_imports)]
 use crate::interest_rate::{
     initialize_interest_rate_config, update_interest_rate_config, InterestRateConfig,
     InterestRateError,
 };
 use crate::liquidate::liquidate;
-use crate::amm::{SwapParams, AmmError};
 
 use crate::oracle::OracleConfig;
 use crate::risk_management::{
@@ -144,7 +143,6 @@ pub enum AmmError {
 }
 
 pub mod reentrancy;
-
 
 /// The StellarLend core contract.
 #[contract]
@@ -185,9 +183,6 @@ impl HelloContract {
 
         Ok(())
     }
-
-
-
 
     /// Transfer super admin rights.
     pub fn transfer_admin(
@@ -388,7 +383,14 @@ impl HelloContract {
         collateral_asset: Option<Address>,
         amount: i128,
     ) -> Result<i128, crate::liquidate::LiquidationError> {
-        let (repaid, _seized, _fee) = crate::liquidate::liquidate(&env, liquidator, borrower, debt_asset, collateral_asset, amount)?;
+        let (repaid, _seized, _fee) = crate::liquidate::liquidate(
+            &env,
+            liquidator,
+            borrower,
+            debt_asset,
+            collateral_asset,
+            amount,
+        )?;
         Ok(repaid)
     }
 
@@ -421,7 +423,6 @@ impl HelloContract {
     ) -> Result<(), RiskManagementError> {
         risk_management::set_emergency_pause(&env, admin, paused)
     }
-
 
     /// Get minimum collateral ratio.
     /// Get a read-only configuration snapshot of the protocol
@@ -1083,7 +1084,7 @@ impl HelloContract {
             expires_at,
         )
     }
-    
+
     /// Create a new proposal (alias for backward compatibility).
     pub fn create_proposal(
         env: Env,
@@ -1320,18 +1321,17 @@ impl HelloContract {
 #[cfg(test)]
 mod tests;
 
-
 // Legacy standalone tests currently mismatch contract API.
 // #[cfg(test)]
 // mod test_reentrancy;
+mod flash_loan_test;
 #[cfg(test)]
 // mod test;
 #[cfg(test)]
 mod test_reentrancy;
-mod flash_loan_test;
 
 #[cfg(test)]
-mod amm_pause_integration_test;  
+mod amm_pause_integration_test;
 
 // mod governance_test;
 

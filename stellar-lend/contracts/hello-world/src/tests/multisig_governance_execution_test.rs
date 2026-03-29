@@ -16,15 +16,15 @@
 #![cfg(test)]
 
 use crate::errors::GovernanceError;
-use crate::types::{ProposalType};
+use crate::errors::GovernanceError;
 use crate::governance::{
     approve_proposal, create_proposal, execute_multisig_proposal, get_multisig_admins,
-    get_multisig_config, get_multisig_threshold, get_proposal, get_proposal_approvals, initialize_governance,
-    propose_set_min_collateral_ratio, set_multisig_admins, set_multisig_config,
-    set_multisig_threshold,
+    get_multisig_config, get_multisig_threshold, get_proposal, get_proposal_approvals,
+    initialize_governance, propose_set_min_collateral_ratio, set_multisig_admins,
+    set_multisig_config, set_multisig_threshold,
 };
-use crate::errors::GovernanceError;
-use crate::types::{ProposalStatus, ProposalType, Action, GovernanceConfig, MultisigConfig};
+use crate::types::ProposalType;
+use crate::types::{Action, GovernanceConfig, MultisigConfig, ProposalStatus, ProposalType};
 use crate::{HelloContract, HelloContractClient};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -1109,12 +1109,22 @@ fn test_multisig_with_different_proposal_types() {
         with_contract!(env, &cid, {
             // create_proposal does NOT auto-approve; approvals list starts empty
             let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
-            assert_eq!(approvals.len(), 0, "Proposal {} should start with 0 approvals", i);
+            assert_eq!(
+                approvals.len(),
+                0,
+                "Proposal {} should start with 0 approvals",
+                i
+            );
 
             // Admin (proposer) adds their approval
             approve_proposal(&env, admin.clone(), proposal_id).unwrap();
             let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
-            assert_eq!(approvals.len(), 1, "Proposal {} should have 1 approval after proposer", i);
+            assert_eq!(
+                approvals.len(),
+                1,
+                "Proposal {} should have 1 approval after proposer",
+                i
+            );
 
             // Add second approval
             approve_proposal(&env, admin2.clone(), proposal_id).unwrap();

@@ -14,7 +14,7 @@ fn setup(env: &Env) -> (Address, Address) {
     env.mock_all_auths();
     let contract_id = env.register(HelloContract, ());
     let admin = Address::generate(env);
-    
+
     let client = HelloContractClient::new(env, &contract_id);
     client.initialize(&admin);
 
@@ -30,9 +30,10 @@ fn setup(env: &Env) -> (Address, Address) {
             None,
             None,
             None,
-        ).unwrap();
+        )
+        .unwrap();
     });
-    
+
     (contract_id, admin)
 }
 
