@@ -54,6 +54,34 @@ pub struct LiquidationEvent {
     pub debt_liquidated: i128,
     pub collateral_seized: i128,
     pub incentive_amount: i128,
+    pub debt_price: i128,
+    pub collateral_price: i128,
+    pub timestamp: u64,
+}
+
+/// Stable liquidation payload for downstream indexers.
+///
+/// This versioned event preserves the legacy `LiquidationEvent` while exposing
+/// a self-contained post-liquidation borrower snapshot. Indexers can rely on
+/// the explicit `schema_version` field and the included health metrics instead
+/// of deriving borrower state from multiple sources.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct LiquidationEventV1 {
+    pub schema_version: u32,
+    pub liquidator: Address,
+    pub borrower: Address,
+    pub debt_asset: Option<Address>,
+    pub collateral_asset: Option<Address>,
+    pub debt_liquidated: i128,
+    pub collateral_seized: i128,
+    pub incentive_amount: i128,
+    pub borrower_collateral_after: i128,
+    pub borrower_principal_debt_after: i128,
+    pub borrower_interest_after: i128,
+    pub borrower_total_debt_after: i128,
+    pub borrower_health_factor_after: i128,
+    pub borrower_risk_level_after: i128,
     pub timestamp: u64,
 }
 
@@ -119,6 +147,26 @@ pub struct PositionUpdatedEvent {
     pub user: Address,
     pub collateral: i128,
     pub debt: i128,
+}
+
+/// Stable borrower health snapshot for downstream indexers.
+///
+/// Emitted alongside position updates so indexers do not need to reimplement
+/// on-chain health calculations or infer which operation changed the state.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct BorrowerHealthEventV1 {
+    pub schema_version: u32,
+    pub user: Address,
+    pub operation: Symbol,
+    pub collateral: i128,
+    pub principal_debt: i128,
+    pub borrow_interest: i128,
+    pub total_debt: i128,
+    pub health_factor: i128,
+    pub risk_level: i128,
+    pub is_liquidatable: bool,
+    pub timestamp: u64,
 }
 
 #[contractevent]
@@ -399,6 +447,10 @@ pub fn emit_liquidation(e: &Env, event: LiquidationEvent) {
     event.publish(e);
 }
 
+pub fn emit_liquidation_v1(e: &Env, event: LiquidationEventV1) {
+    event.publish(e);
+}
+
 pub fn emit_flash_loan_initiated(e: &Env, event: FlashLoanInitiatedEvent) {
     event.publish(e);
 }
@@ -424,6 +476,10 @@ pub fn emit_pause_state_changed(e: &Env, event: PauseStateChangedEvent) {
 }
 
 pub fn emit_position_updated(e: &Env, event: PositionUpdatedEvent) {
+    event.publish(e);
+}
+
+pub fn emit_borrower_health_v1(e: &Env, event: BorrowerHealthEventV1) {
     event.publish(e);
 }
 

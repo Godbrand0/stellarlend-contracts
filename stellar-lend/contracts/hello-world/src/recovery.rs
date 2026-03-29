@@ -4,11 +4,9 @@ use soroban_sdk::{Address, Env, Vec};
 use crate::governance::{
     emit_guardian_added_event, emit_guardian_removed_event, emit_recovery_approved_event,
     emit_recovery_executed_event, emit_recovery_started_event,
-    emit_recovery_executed_event, emit_recovery_started_event, GovernanceDataKey, GovernanceError,
-    RecoveryRequest,
 };
-use crate::storage::GovernanceDataKey;
 use crate::errors::GovernanceError;
+use crate::storage::GovernanceDataKey;
 use crate::types::RecoveryRequest;
 
 const DEFAULT_RECOVERY_PERIOD: u64 = 3 * 24 * 60 * 60;
@@ -147,6 +145,8 @@ pub fn start_recovery(
     old_admin: Address,
     new_admin: Address,
 ) -> Result<(), GovernanceError> {
+    initiator.require_auth();
+
     let guardians: Vec<Address> = env
         .storage()
         .persistent()
@@ -189,6 +189,8 @@ pub fn start_recovery(
 }
 
 pub fn approve_recovery(env: &Env, approver: Address) -> Result<(), GovernanceError> {
+    approver.require_auth();
+
     let guardians: Vec<Address> = env
         .storage()
         .persistent()
@@ -233,6 +235,8 @@ pub fn approve_recovery(env: &Env, approver: Address) -> Result<(), GovernanceEr
 }
 
 pub fn execute_recovery(env: &Env, executor: Address) -> Result<(), GovernanceError> {
+    executor.require_auth();
+
     let recovery: RecoveryRequest = env
         .storage()
         .persistent()
@@ -259,7 +263,20 @@ pub fn execute_recovery(env: &Env, executor: Address) -> Result<(), GovernanceEr
         .get(&GovernanceDataKey::RecoveryApprovals)
         .unwrap_or_else(|| Vec::new(env));
 
-    if approvals.len() < threshold {
+    let guardians: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&GovernanceDataKey::Guardians)
+        .unwrap_or_else(|| Vec::new(env));
+
+    let mut valid_approvals = 0;
+    for approval in approvals.iter() {
+        if guardians.contains(approval) {
+            valid_approvals += 1;
+        }
+    }
+
+    if valid_approvals < threshold {
         return Err(GovernanceError::InsufficientApprovals);
     }
 

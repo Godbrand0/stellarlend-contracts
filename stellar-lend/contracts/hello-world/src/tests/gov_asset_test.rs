@@ -113,7 +113,7 @@ fn test_governance_asset_config_update() {
     client.gov_execute_proposal(&voter, &proposal_id);
 
     // Verify changes
-    let updated_config = client.get_asset_config(&Some(usdc.clone())).unwrap();
+    let updated_config = client.get_asset_config(&Some(usdc.clone()));
     assert_eq!(updated_config.collateral_factor, 8000);
     assert_eq!(updated_config.max_borrow, 600_000);
     // Unchanged fields

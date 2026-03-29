@@ -4,12 +4,20 @@
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Val, Vec};
 
 mod borrow;
+mod cross_asset;
 mod deposit;
 mod flash_loan;
+mod oracle;
 mod pause;
 mod token_receiver;
 mod withdraw;
 
+use cross_asset::{
+    borrow_asset as cross_borrow_asset, deposit_collateral_asset as cross_deposit_collateral,
+    get_cross_position_summary as cross_position_summary, initialize_admin as cross_init_admin,
+    repay_asset as cross_repay_asset, set_asset_params as cross_set_asset_params,
+    withdraw_asset as cross_withdraw_asset, AssetParams, CrossAssetError, PositionSummary,
+};
 use borrow::{
     borrow as borrow_impl, deposit as borrow_deposit, get_admin as get_protocol_admin,
     get_close_factor_bps as get_close_factor_impl,
@@ -21,6 +29,7 @@ use borrow::{
     set_liquidation_threshold_bps as set_liq_threshold_impl, set_oracle as set_oracle_impl,
     BorrowCollateral, BorrowError, DebtPosition,
 };
+use oracle::{OracleConfig, OracleError};
 use deposit::{
     deposit as deposit_impl, get_user_collateral as get_deposit_collateral_impl,
     initialize_deposit_settings as init_deposit_settings_impl, DepositCollateral, DepositError,
@@ -60,9 +69,13 @@ pub use stellarlend_common::upgrade::{UpgradeError, UpgradeStage, UpgradeStatus}
 #[cfg(test)]
 mod borrow_test;
 #[cfg(test)]
+mod cross_asset_test;
+#[cfg(test)]
 mod deposit_test;
 #[cfg(test)]
 mod emergency_shutdown_test;
+#[cfg(test)]
+mod flash_adversarial_test;
 #[cfg(test)]
 mod flash_loan_test;
 #[cfg(test)]
@@ -86,11 +99,16 @@ mod upgrade_test;
 mod withdraw_test;
 
 #[cfg(test)]
-mod lending_facade_test;
+mod borrow_test_booster;
 #[cfg(test)]
 mod liquidation_boundary_test;
 #[cfg(test)]
+mod oracle_test;
+#[cfg(test)]
 mod stress_test;
+
+#[cfg(test)]
+mod coverage_gap_test;
 
 #[contract]
 pub struct LendingContract;
@@ -309,6 +327,83 @@ impl LendingContract {
     /// Set oracle address for price feeds (admin only).
     pub fn set_oracle(env: Env, admin: Address, oracle: Address) -> Result<(), BorrowError> {
         set_oracle_impl(&env, &admin, oracle)
+    }
+
+    /// Configure oracle staleness parameters (admin only).
+    ///
+    /// # Errors
+    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
+    /// - `OracleError::InvalidPrice` — `max_staleness_seconds` is zero.
+    pub fn configure_oracle(
+        env: Env,
+        caller: Address,
+        config: OracleConfig,
+    ) -> Result<(), OracleError> {
+        oracle::configure_oracle(&env, caller, config)
+    }
+
+    /// Register the primary oracle address for `asset` (admin only).
+    ///
+    /// # Errors
+    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
+    /// - `OracleError::InvalidOracle` — oracle address is the contract itself.
+    pub fn set_primary_oracle(
+        env: Env,
+        caller: Address,
+        asset: Address,
+        primary_oracle: Address,
+    ) -> Result<(), OracleError> {
+        oracle::set_primary_oracle(&env, caller, asset, primary_oracle)
+    }
+
+    /// Register the fallback oracle address for `asset` (admin only).
+    ///
+    /// # Errors
+    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
+    /// - `OracleError::InvalidOracle` — oracle address is the contract itself.
+    pub fn set_fallback_oracle(
+        env: Env,
+        caller: Address,
+        asset: Address,
+        fallback_oracle: Address,
+    ) -> Result<(), OracleError> {
+        oracle::set_fallback_oracle(&env, caller, asset, fallback_oracle)
+    }
+
+    /// Submit a price update for `asset`.
+    ///
+    /// Caller must be the admin, the registered primary oracle, or the registered
+    /// fallback oracle for this asset.
+    ///
+    /// # Errors
+    /// - `OracleError::OraclePaused` — oracle updates are paused.
+    /// - `OracleError::Unauthorized` — caller is not authorized.
+    /// - `OracleError::InvalidPrice` — price is zero or negative.
+    pub fn update_price_feed(
+        env: Env,
+        caller: Address,
+        asset: Address,
+        price: i128,
+    ) -> Result<(), OracleError> {
+        oracle::update_price_feed(&env, caller, asset, price)
+    }
+
+    /// Get the current price for `asset` (primary → fallback → error).
+    ///
+    /// # Errors
+    /// - `OracleError::StalePrice` — best available price is stale.
+    /// - `OracleError::NoPriceFeed` — no price has been submitted for this asset.
+    pub fn get_price(env: Env, asset: Address) -> Result<i128, OracleError> {
+        oracle::get_price(&env, &asset)
+    }
+
+    /// Pause or unpause oracle price updates (admin only).
+    pub fn set_oracle_paused(
+        env: Env,
+        caller: Address,
+        paused: bool,
+    ) -> Result<(), OracleError> {
+        oracle::set_oracle_paused(&env, caller, paused)
     }
 
     /// Set liquidation threshold in basis points, e.g. 8000 = 80% (admin only).
@@ -574,6 +669,69 @@ impl LendingContract {
 
     pub fn data_key_exists(env: Env, key: soroban_sdk::String) -> bool {
         data_store::DataStore::key_exists(env, key)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Cross-Asset Operations
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Initialize admin for cross-asset operations
+    pub fn initialize_admin(env: Env, admin: Address) {
+        cross_init_admin(&env, admin);
+    }
+
+    /// Set parameters for a specific asset (admin only)
+    pub fn set_asset_params(
+        env: Env,
+        asset: Address,
+        params: AssetParams,
+    ) -> Result<(), CrossAssetError> {
+        cross_set_asset_params(&env, asset, params)
+    }
+
+    /// Deposit collateral for a specific asset
+    pub fn deposit_collateral_asset(
+        env: Env,
+        user: Address,
+        asset: Address,
+        amount: i128,
+    ) -> Result<(), CrossAssetError> {
+        cross_deposit_collateral(&env, user, asset, amount)
+    }
+
+    /// Borrow a specific asset against cross-asset collateral
+    pub fn borrow_asset(
+        env: Env,
+        user: Address,
+        asset: Address,
+        amount: i128,
+    ) -> Result<(), CrossAssetError> {
+        cross_borrow_asset(&env, user, asset, amount)
+    }
+
+    /// Repay debt for a specific asset
+    pub fn repay_asset(
+        env: Env,
+        user: Address,
+        asset: Address,
+        amount: i128,
+    ) -> Result<(), CrossAssetError> {
+        cross_repay_asset(&env, user, asset, amount)
+    }
+
+    /// Withdraw collateral for a specific asset
+    pub fn withdraw_asset(
+        env: Env,
+        user: Address,
+        asset: Address,
+        amount: i128,
+    ) -> Result<(), CrossAssetError> {
+        cross_withdraw_asset(&env, user, asset, amount)
+    }
+
+    /// Get cross-asset position summary for a user
+    pub fn get_cross_position_summary(env: Env, user: Address) -> Result<PositionSummary, CrossAssetError> {
+        cross_position_summary(&env, user)
     }
 }
 

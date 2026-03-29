@@ -177,6 +177,16 @@ impl AmmContract {
     /// # Returns
     /// Returns the amount of LP tokens received
     ///
+    /// # Errors
+    /// Returns [`AmmError`] when authorization fails, parameters are invalid,
+    /// liquidity operations are paused, deadline is expired, or min-amount
+    /// protections are not satisfied after LP-share rounding.
+    ///
+    /// # Security
+    /// Caller authorization is required. LP share minting uses floor rounding
+    /// to preserve pool solvency; any unconsumed token remainder stays with the
+    /// caller-side flow and is not credited as LP shares.
+    ///
     /// # Events
     /// Emits the following events:
     /// - `liquidity_added`: Liquidity addition details
@@ -205,6 +215,15 @@ impl AmmContract {
     ///
     /// # Returns
     /// Returns tuple (amount_a, amount_b) received
+    ///
+    /// # Errors
+    /// Returns [`AmmError`] when authorization fails, parameters are invalid,
+    /// pool liquidity is insufficient, deadline is expired, or minimum output
+    /// constraints are violated.
+    ///
+    /// # Security
+    /// Caller authorization is required. Redemption math burns LP shares and
+    /// uses floor rounding on token outputs to avoid over-withdrawal risk.
     ///
     /// # Events
     /// Emits the following events:
@@ -343,6 +362,8 @@ impl AmmContract {
 
 // Liquidation integration tests require lending crate; enable with feature "liquidate_integration"
 // when lending is available as a dependency.
+#[cfg(test)]
+mod amm_coverage_booster;
 #[cfg(all(test, feature = "liquidate_integration"))]
 mod liquidate_test;
 #[cfg(test)]

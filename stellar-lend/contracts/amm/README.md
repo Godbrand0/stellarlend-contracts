@@ -33,15 +33,22 @@ This contract provides Automated Market Maker (AMM) integration for the StellarL
 - Callback validation with nonce-based replay protection and deadline (expiry) checks
 - Admin-only configuration functions
 - Comprehensive parameter validation
-- Emergency pause functionality integration (`swap_enabled` / `liquidity_enabled` in settings)
+- Emergency pause functionality integration
+- Authorization checks (`require_auth`) on admin/user/protocol entrypoints
+
+## Liquidity Share Math and Rounding
+
+- Initial LP minting uses `floor(sqrt(amount_a * amount_b))`.
+- Subsequent LP minting uses `floor(min(amount_a * total_lp / reserve_a, amount_b * total_lp / reserve_b))`.
+- LP burns return `floor(lp_burned * reserve / total_lp)` per token.
+- All rounding is floor-biased to preserve solvency and prevent over-credit/over-withdraw.
 
 ## Trust Boundaries
 
-- **Admin**: `initialize_amm_settings`, `add_amm_protocol`, and `update_amm_settings` configure the router. The stored `Admin` address must match the caller for updates (see contract implementation).
-- **Registered AMM protocols**: Only addresses present in the protocol map may participate. Each entry includes an `enabled` flag; disabled protocols cannot complete callbacks.
-- **`validate_amm_callback`**: Intended for **external** AMM contracts calling back into this router. The `caller` argument must **authorize** the invocation (Soroban `require_auth` on the protocol address) so arbitrary users cannot spoof a registered protocol. Validation checks: registered + enabled protocol, `ledger_timestamp <= deadline`, and a per-user monotonic nonce (replay attempts fail after the first successful consume).
-- **Internal mock execution**: The bundled mock path validates callbacks via the same nonce and deadline rules but **without** requiring protocol auth, because the router invokes itself during tests/simulation. Integrating a real on-chain AMM should route through the external protocol contract and use `validate_amm_callback` from there; remove redundant internal validation to avoid consuming the nonce twice.
-- **Tokens**: This crate’s mock swap/liquidity logic does not perform actual token transfers; production integrations must compose token contracts and allowance flows separately.
+- **Admin authority**: can initialize and update AMM settings, and register protocol configs.
+- **User authority**: users must authorize their own swap/add/remove operations.
+- **Protocol callbacks**: registered AMM protocol addresses must authorize callback validation calls.
+- **Token transfer flows**: this integration tracks AMM routing/LP accounting and callback safety; actual token transfer semantics depend on the integrated AMM/token contracts.
 
 ## Events
 

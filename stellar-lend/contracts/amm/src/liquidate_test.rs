@@ -16,7 +16,7 @@ fn setup_protocol(
     contract: &AmmContractClient<'_>,
     admin: &Address,
 ) -> (Address, Address) {
-    let protocol_addr = Address::generate(env);
+    let protocol_addr = env.register(MockAmm, ());
     let token_out = Address::generate(env);
 
     contract.initialize_amm_settings(admin, &100, &1_000, &10_000);

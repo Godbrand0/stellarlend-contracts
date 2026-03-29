@@ -28,7 +28,6 @@ impl CacheService {
         query_ttl: u64,
     ) -> IndexerResult<Self> {
         let client = redis::Client::open(redis_url).map_err(|e| IndexerError::Cache(e))?;
-
         let connection_manager = ConnectionManager::new(client)
             .await
             .map_err(|e| IndexerError::Cache(e))?;
@@ -370,5 +369,18 @@ impl CacheService {
             .map_err(|e| IndexerError::Cache(e))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_keys() {
+        assert_eq!(CacheService::event_key("123"), "event:123");
+        assert_eq!(CacheService::query_key("hash"), "query:hash");
+        assert_eq!(CacheService::stats_key(), "stats:global");
+        assert_eq!(CacheService::_metadata_key("0xabc"), "metadata:0xabc");
     }
 }

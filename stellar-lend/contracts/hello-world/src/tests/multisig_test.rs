@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use crate::governance::GovernanceError;
+use crate::errors::GovernanceError;
 use crate::multisig::{
     get_ms_admins, get_ms_threshold, ms_approve, ms_execute, ms_propose_set_min_cr, ms_set_admins,
 };
@@ -15,9 +15,6 @@ fn setup() -> (Env, Address, Address) {
     env.mock_all_auths();
     let contract_id = env.register(HelloContract, ());
     let admin = Address::generate(&env);
-    env.as_contract(&contract_id, || {
-        crate::governance::initialize_governance(&env, admin.clone()).unwrap();
-    });
     (env, contract_id, admin)
 }
 

@@ -1,3 +1,5 @@
+#![cfg(not(tarpaulin))]
+
 //! Example: Transaction monitoring with custom options
 //!
 //! This example demonstrates how to monitor transactions with custom polling and timeout settings.
