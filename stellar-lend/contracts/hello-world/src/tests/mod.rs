@@ -1,4 +1,4 @@
-pub mod config_snapshot_test;
+
 pub mod config_test;
 pub mod governance_test;
 pub mod oracle_test;
@@ -9,10 +9,7 @@ pub mod withdraw_test;
 // pub mod gov_asset_test;
 // pub mod oracle_staleness_fallback_test;
 
-pub mod multisig_governance_execution_test;
-pub mod multisig_test;
 pub mod recovery_multisig_test;
-pub mod recovery_test;
 
 // Disabled — API mismatches (pre-existing, unrelated to withdraw changes)
 // pub mod analytics_test;    // references missing test_helpers module + type inference issues

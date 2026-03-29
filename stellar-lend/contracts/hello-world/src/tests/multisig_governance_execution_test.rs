@@ -16,14 +16,12 @@
 #![cfg(test)]
 
 use crate::errors::GovernanceError;
-use crate::errors::GovernanceError;
 use crate::governance::{
     approve_proposal, create_proposal, execute_multisig_proposal, get_multisig_admins,
     get_multisig_config, get_multisig_threshold, get_proposal, get_proposal_approvals,
     initialize_governance, propose_set_min_collateral_ratio, set_multisig_admins,
     set_multisig_config, set_multisig_threshold,
 };
-use crate::types::ProposalType;
 use crate::types::{Action, GovernanceConfig, MultisigConfig, ProposalStatus, ProposalType};
 use crate::{HelloContract, HelloContractClient};
 use soroban_sdk::{
@@ -286,7 +284,7 @@ fn test_multisig_insufficient_approvals_fail() {
 
     with_contract!(env, &cid, {
         // Check we have 3 approvals but still blocked by timelock
-        let approvals = get_proposal_approvals(&env, 1).unwrap();
+        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
         assert_eq!(approvals.len(), 3);
     });
 }
@@ -370,7 +368,7 @@ fn test_proposer_auto_approves() {
 
     with_contract!(env, &cid, {
         // Proposer should already have approved
-        let approvals = get_proposal_approvals(&env, 1).unwrap();
+        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
         assert_eq!(approvals.len(), 1);
         assert!(approvals.contains(admin.clone()));
     });
@@ -981,7 +979,7 @@ fn test_full_multisig_governance_flow_2_of_3() {
         assert_eq!(proposal.status, ProposalStatus::Active);
 
         // Verify auto-approval
-        let approvals = get_proposal_approvals(&env, 1).unwrap();
+        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
         assert_eq!(approvals.len(), 1);
         assert!(approvals.contains(admin1.clone()));
     });
@@ -989,7 +987,7 @@ fn test_full_multisig_governance_flow_2_of_3() {
     // Step 2: Approve by admin2
     with_contract!(env, &cid, {
         approve_proposal(&env, admin2.clone(), proposal_id).unwrap();
-        let approvals = get_proposal_approvals(&env, 1).unwrap();
+        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
         assert_eq!(approvals.len(), 2);
         assert!(approvals.contains(admin1.clone()));
         assert!(approvals.contains(admin2.clone()));
@@ -1045,7 +1043,7 @@ fn test_full_multisig_governance_flow_3_of_5() {
         approve_proposal(&env, admin3.clone(), proposal_id).unwrap();
 
         // 3 approvals (threshold met)
-        let approvals = get_proposal_approvals(&env, 1).unwrap();
+        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
         assert_eq!(approvals.len(), 3);
     });
 
@@ -1128,7 +1126,7 @@ fn test_multisig_with_different_proposal_types() {
 
             // Add second approval
             approve_proposal(&env, admin2.clone(), proposal_id).unwrap();
-            let approvals = get_proposal_approvals(&env, 1).unwrap();
+            let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
             assert_eq!(approvals.len(), 2, "Proposal {} should have 2 approvals", i);
         });
     }
