@@ -1,6 +1,3 @@
-// Active test modules — only include modules that compile cleanly
-// against the current contract API surface.
-
 pub mod config_snapshot_test;
 pub mod config_test;
 pub mod governance_test;
@@ -33,19 +30,36 @@ pub mod withdraw_test;
 // pub mod events_test;
 // pub mod integration_test;      // wrong arg counts
 // pub mod interest_accrual_test;
-pub mod interest_rate_test;    // re-enabled: API aligned with new entrypoints
-// pub mod liquidate_test;
-// pub mod multisig_governance_execution_test; // private governance types + missing functions
-// pub mod pause_test;            // set_pause_switches API mismatch
-// pub mod repay_test;
-// pub mod reserve_test;
-// pub mod security_test;
-// pub mod storage_test;
-// pub mod test;                  // inline pub mod inside function body (merge artifact)
-// pub mod test_cross_asset;
-// pub mod test_cross_asset_borrow_repay_edge_cases;
-pub mod test_helpers;
+pub mod interest_rate_test; // re-enabled: API aligned with new entrypoints
+                            // pub mod liquidate_test;
+                            // pub mod multisig_governance_execution_test; // private governance types + missing functions
+                            // pub mod pause_test;            // set_pause_switches API mismatch
+                            // pub mod repay_test;
+pub mod reserve_test; // re-enabled: reserve module tests aligned with implementation
+                      // pub mod security_test;
+                      // pub mod storage_test;
+                      // pub mod test;                  // inline pub mod inside function body (merge artifact)
+                      // pub mod test_cross_asset;
+                      // pub mod test_cross_asset_borrow_repay_edge_cases;
 pub mod cross_asset_test;
 pub mod collateral_factor_max_borrow_spec;
+pub mod test_helpers;
 // pub mod views_test;
+// Cross-asset tests re-enabled when contract exposes full CA API (try_* return Result; get_user_asset_position; try_ca_repay_debt)
+// pub mod test_cross_asset;
+// Legacy API mismatch with current contract surface.
+// pub mod bridge_test;
+// pub mod cross_contract_test;
+// pub mod multisig_governance_execution_test;
+pub mod amm_impact_test;
+pub mod borrow_cap_test;
+pub mod bridge_test;
+pub mod cross_contract_test;
+pub mod config_snapshot_test;
+pub mod oracle_staleness_fallback_test;
+pub mod gov_asset_test;
+pub mod multisig_governance_execution_test;
+pub mod multisig_test;
+pub mod recovery_test;
+pub mod fuzz_test;
 // pub mod fees_test;

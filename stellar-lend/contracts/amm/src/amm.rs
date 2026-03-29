@@ -593,9 +593,7 @@ fn validate_amm_callback_core(
         return Err(AmmError::InvalidCallback);
     }
 
-    let next_nonce = expected_nonce
-        .checked_add(1)
-        .ok_or(AmmError::Overflow)?;
+    let next_nonce = expected_nonce.checked_add(1).ok_or(AmmError::Overflow)?;
     env.storage().persistent().set(&nonce_key, &next_nonce);
 
     emit_callback_validated_event(env, caller, callback_data);
@@ -970,8 +968,14 @@ fn execute_amm_add_liquidity(
         return Err(AmmError::MinOutputNotMet);
     }
 
-    pool.reserve_a = pool.reserve_a.checked_add(used_a).ok_or(AmmError::Overflow)?;
-    pool.reserve_b = pool.reserve_b.checked_add(used_b).ok_or(AmmError::Overflow)?;
+    pool.reserve_a = pool
+        .reserve_a
+        .checked_add(used_a)
+        .ok_or(AmmError::Overflow)?;
+    pool.reserve_b = pool
+        .reserve_b
+        .checked_add(used_b)
+        .ok_or(AmmError::Overflow)?;
     pool.total_lp_shares = pool
         .total_lp_shares
         .checked_add(minted_lp)
@@ -1400,7 +1404,11 @@ fn set_pool_state(
 }
 
 fn min_i128(a: i128, b: i128) -> i128 {
-    if a < b { a } else { b }
+    if a < b {
+        a
+    } else {
+        b
+    }
 }
 
 /// Integer square root with floor rounding.

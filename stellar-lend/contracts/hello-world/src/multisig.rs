@@ -130,7 +130,7 @@ pub fn ms_propose_set_min_cr(
 
     // Delegates auth check + proposal creation to governance.rs
     let proposal_id =
-        crate::governance::propose_set_min_collateral_ratio(env, proposer.clone(), new_ratio.try_into().map_err(|_| GovernanceError::MathOverflow)?)? ;
+        crate::governance::propose_set_min_collateral_ratio(env, proposer.clone(), new_ratio.try_into().map_err(|_| GovernanceError::MathOverflow)?)?;
 
     // Proposer auto-approves their own proposal
     approve_proposal(env, proposer, proposal_id)?;
