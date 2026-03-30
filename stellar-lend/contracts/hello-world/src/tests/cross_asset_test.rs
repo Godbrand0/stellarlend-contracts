@@ -633,6 +633,153 @@ fn test_deposit_unlimited_supply_cap() {
 }
 /// A borrow that would push total borrows above the asset's borrow cap must be rejected.
 ///
+
+
+// ============================================================================
+// 6. Withdraw
+// ============================================================================
+
+#[test]
+fn test_withdraw_success_no_debt() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &1000_0000000);
+    let position = client.cross_asset_withdraw(&user, &None, &400_0000000);
+
+    assert_eq!(position.collateral, 600_0000000);
+}
+
+#[test]
+fn test_withdraw_full_amount_no_debt() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &1000_0000000);
+    let position = client.cross_asset_withdraw(&user, &None, &1000_0000000);
+
+    assert_eq!(position.collateral, 0);
+}
+
+#[test]
+fn test_withdraw_updates_total_supply() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &1000_0000000);
+    client.cross_asset_withdraw(&user, &None, &400_0000000);
+
+    let total = client.get_total_supply_for(&None);
+    assert_eq!(total, 600_0000000);
+}
+
+#[test]
+#[should_panic]
+fn test_withdraw_zero_amount_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &1000_0000000);
+    client.cross_asset_withdraw(&user, &None, &0);
+}
+
+#[test]
+#[should_panic]
+fn test_withdraw_more_than_balance_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &1000_0000000);
+    client.cross_asset_withdraw(&user, &None, &1001_0000000);
+}
+
+#[test]
+#[should_panic]
+fn test_withdraw_unhealthy_position_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    // Deposit 10000 ($10000 at $1), borrow 6000 ($6000)
+    client.cross_asset_deposit(&user, &None, &10000_0000000);
+    client.cross_asset_borrow(&user, &None, &6000_0000000);
+
+    // Try to withdraw 5000 — would drop collateral to 5000 ($5000)
+    // Weighted collateral = 5000 * 0.80 = 4000, debt = 6000
+    // Health = 4000 / 6000 * 10000 = 6666 < 10000 → unhealthy
+    client.cross_asset_withdraw(&user, &None, &5000_0000000);
+}
+
+// ============================================================================
+// 7. Borrow
+// ============================================================================
+
+#[test]
+fn test_borrow_success() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &10000_0000000);
+    let position = client.cross_asset_borrow(&user, &None, &5000_0000000);
+
+    assert_eq!(position.debt_principal, 5000_0000000);
+}
+
+#[test]
+fn test_borrow_updates_total_borrow() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &10000_0000000);
+    client.cross_asset_borrow(&user, &None, &3000_0000000);
+
+    let total = client.get_total_borrow_for(&None);
+    assert_eq!(total, 3000_0000000);
+}
+
+#[test]
+#[should_panic]
+fn test_borrow_zero_amount_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &10000_0000000);
+    client.cross_asset_borrow(&user, &None, &0);
+}
+
+#[test]
+#[should_panic]
+fn test_borrow_exceeds_health_factor_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &10000_0000000);
+
+    // Weighted collateral = 10000 * 0.80 = 8000
+    // Borrowing 8001 would give health = 8000/8001 * 10000 = 9998 < 10000
+    client.cross_asset_borrow(&user, &None, &8001_0000000);
+}
+
+
 /// # Security
 /// Borrow caps act as a debt ceiling — they protect the protocol from excessive
 /// exposure to a single asset. Exceeding the cap could leave the protocol
