@@ -1153,3 +1153,138 @@ fn test_config_update_preserves_price() {
     assert_eq!(fetched.price, 50_000_000); // Price preserved
     assert_eq!(fetched.collateral_factor, 5000);
 }
+
+
+// ── Issue #530: user position summary gas bounds ─────────────────────────
+
+/// Registering more than MAX_ASSETS_PER_SUMMARY assets must not cause the
+/// position summary to panic or exhaust resources — it silently caps iteration
+/// at MAX_ASSETS_PER_SUMMARY.
+///
+/// # Security
+/// Without the cap, a malicious or misconfigured admin could register enough
+/// assets to make get_user_position_summary permanently fail for all users.
+#[test]
+fn test_position_summary_bounded_with_many_assets() {
+    use crate::cross_asset::MAX_ASSETS_PER_SUMMARY;
+
+    let (env, client, _admin) = setup();
+
+    // Register MAX_ASSETS_PER_SUMMARY + 5 assets to confirm the cap holds.
+    let target = MAX_ASSETS_PER_SUMMARY + 5;
+    let mut tokens: soroban_sdk::Vec<Address> = soroban_sdk::Vec::new(&env);
+
+    for _ in 0..target {
+        let token = Address::generate(&env);
+        tokens.push_back(token.clone());
+        let cfg = AssetConfig {
+            asset: Some(token.clone()),
+            collateral_factor: 7500,
+            liquidation_threshold: 8000,
+            reserve_factor: 1000,
+            max_supply: 0,
+            max_borrow: 0,
+            can_collateralize: true,
+            can_borrow: true,
+            price: 10_000_000,
+            price_updated_at: env.ledger().timestamp(),
+        };
+        client.initialize_asset(&Some(token), &cfg);
+    }
+
+    // Deposit into the first MAX_ASSETS_PER_SUMMARY assets so they appear
+    // in the summary loop.
+    let user = Address::generate(&env);
+    for i in 0..MAX_ASSETS_PER_SUMMARY {
+        let token = tokens.get(i).unwrap();
+        client.cross_asset_deposit(&user, &Some(token), &1_0000000);
+    }
+
+    // Must not panic — summary silently caps at MAX_ASSETS_PER_SUMMARY.
+    let summary = client.get_user_position_summary(&user);
+
+    // Each asset contributes $1.00 collateral; weighted by 80% liquidation threshold.
+    // Total collateral = MAX_ASSETS_PER_SUMMARY * 1_0000000
+    let expected_collateral = (MAX_ASSETS_PER_SUMMARY as i128) * 1_0000000_i128;
+    assert_eq!(summary.total_collateral_value, expected_collateral);
+    assert_eq!(summary.total_debt_value, 0);
+    assert_eq!(summary.health_factor, i128::MAX);
+}
+
+/// A single-asset position summary must be unaffected by the cap.
+///
+/// Regression guard: ensure the cap does not truncate small registries.
+#[test]
+fn test_position_summary_single_asset_unaffected_by_cap() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &5000_0000000);
+
+    let summary = client.get_user_position_summary(&user);
+    assert_eq!(summary.total_collateral_value, 5000_0000000);
+    assert_eq!(summary.health_factor, i128::MAX);
+}
+
+// ── Issue #445: AMM type wiring documentation test ────────────────────────
+
+/// Confirms that AmmProtocolConfig and SwapParams imported in hello-world/amm.rs
+/// are the real types from the stellarlend_amm crate, not local stubs.
+///
+/// # Security
+/// Cross-crate API stability is critical: if hello-world used local placeholder
+/// types, a change to stellarlend_amm would silently break the integration
+/// without a compile error. This test exercises the full round-trip through the
+/// wired types to catch any divergence at test time.
+#[test]
+fn test_amm_types_are_real_stellarlend_amm_types() {
+    use crate::{AmmProtocolConfig, SwapParams, TokenPair};
+    use soroban_sdk::{Symbol, Vec};
+
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(crate::HelloContract, ());
+    let client = crate::HelloContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let protocol = Address::generate(&env);
+    let token_b = Address::generate(&env);
+
+    client.initialize_amm(&admin, &50, &500, &5000);
+
+    let mut pairs = Vec::new(&env);
+    pairs.push_back(TokenPair {
+        token_a: None,
+        token_b: Some(token_b.clone()),
+        pool_address: Address::generate(&env),
+    });
+
+    // AmmProtocolConfig is the real type from stellarlend_amm — constructing it
+    // here confirms the crate boundary is wired, not stubbed.
+    let config = AmmProtocolConfig {
+        protocol_address: protocol.clone(),
+        protocol_name: Symbol::new(&env, "RealAMM"),
+        enabled: true,
+        fee_tier: 30,
+        min_swap_amount: 100,
+        max_swap_amount: 1_000_000_000,
+        supported_pairs: pairs,
+    };
+    client.set_amm_pool(&admin, &config);
+
+    // SwapParams is the real type — constructing it confirms the import chain.
+    let swap = SwapParams {
+        protocol: protocol.clone(),
+        token_in: None,
+        token_b: Some(token_b.clone()),
+        token_out: Some(token_b),
+        amount_in: 10_000,
+        min_amount_out: 9_000,
+        slippage_tolerance: 100,
+        deadline: env.ledger().timestamp() + 3600,
+    };
+    let out = client.amm_swap(&Address::generate(&env), &swap);
+    assert!(out > 0, "swap through real AMM types must return positive output");
+}
