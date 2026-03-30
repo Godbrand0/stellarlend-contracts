@@ -936,9 +936,10 @@ pub fn get_user_asset_position(env: &Env, user: &Address, asset: Option<Address>
 
 /// Calculate a unified position summary across all registered assets.
 ///
-/// Iterates over all configured assets, aggregates collateral and debt values
-/// weighted by their respective factors, and computes the health factor.
-/// Prices older than 1 hour are rejected for any asset with a non-zero position.
+/// Iterates over up to [`MAX_ASSETS_PER_SUMMARY`] configured assets, aggregates
+/// collateral and debt values weighted by their respective factors, and computes
+/// the health factor. Prices older than 1 hour are rejected for any asset with
+/// a non-zero position.
 ///
 /// # Arguments
 /// * `env` — The contract environment
@@ -954,6 +955,11 @@ pub fn get_user_asset_position(env: &Env, user: &Address, asset: Option<Address>
 /// # Security
 /// * Read-only — does not mutate state.
 /// * Rejects stale prices to prevent stale-price manipulation attacks.
+/// * Iteration is capped at [`MAX_ASSETS_PER_SUMMARY`] (64) to bound CPU and
+///   memory usage per transaction. If more assets are registered only the first
+///   64 are considered; the summary may be partial in that case. This cap
+///   prevents a DoS vector where a large asset registry exhausts the Soroban
+///   per-transaction resource budget for every user who calls this function.
 pub fn get_user_position_summary(
     env: &Env,
     user: &Address,
