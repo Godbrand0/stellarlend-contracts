@@ -5,6 +5,7 @@
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Val, Vec};
 
 mod borrow;
+mod constants;
 mod cross_asset;
 mod deposit;
 mod flash_loan;
@@ -87,6 +88,8 @@ mod token_receiver_test;
 #[cfg(test)]
 mod views_test;
 
+#[cfg(test)]
+mod constants_test;
 #[cfg(test)]
 mod data_store_test;
 #[cfg(test)]
