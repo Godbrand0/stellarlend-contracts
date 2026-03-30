@@ -1567,7 +1567,99 @@ pub fn execute_multisig_proposal(
     executor: Address,
     proposal_id: u64,
 ) -> Result<(), GovernanceError> {
-    crate::multisig::ms_execute(env, executor, proposal_id)
+    executor.require_auth();
+
+    let multisig_config: MultisigConfig = env
+        .storage()
+        .instance()
+        .get(&GovernanceDataKey::MultisigConfig)
+        .ok_or(GovernanceError::NotInitialized)?;
+
+    if !multisig_config.admins.contains(&executor) {
+        return Err(GovernanceError::Unauthorized);
+    }
+
+    let mut proposal: Proposal = env
+        .storage()
+        .persistent()
+        .get(&GovernanceDataKey::Proposal(proposal_id))
+        .ok_or(GovernanceError::ProposalNotFound)?;
+
+    let now = env.ledger().timestamp();
+
+    if proposal.status == ProposalStatus::Executed {
+        return Err(GovernanceError::ProposalAlreadyExecuted);
+    }
+    match proposal.status {
+        ProposalStatus::Executed | ProposalStatus::Cancelled | ProposalStatus::Defeated | ProposalStatus::Expired => {
+            return Err(GovernanceError::InvalidProposalStatus);
+        }
+        _ => {}
+    }
+
+    let config: GovernanceConfig = env
+        .storage()
+        .instance()
+        .get(&GovernanceDataKey::Config)
+        .ok_or(GovernanceError::NotInitialized)?;
+
+    let execution_time = proposal.start_time
+        .checked_add(config.execution_delay)
+        .ok_or(GovernanceError::MathOverflow)?;
+
+    if now < execution_time {
+        return Err(GovernanceError::ProposalNotReady);
+    }
+
+    let expiry = execution_time
+        .checked_add(config.timelock_duration)
+        .ok_or(GovernanceError::MathOverflow)?;
+
+    if now > expiry {
+        // Expire the proposal
+        proposal.status = ProposalStatus::Expired;
+        env.storage()
+            .persistent()
+            .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+        return Err(GovernanceError::ProposalExpired);
+    }
+
+    let approvals_key = GovernanceDataKey::ProposalApprovals(proposal_id);
+    let approvals: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&approvals_key)
+        .unwrap_or_else(|| Vec::new(env));
+
+    if approvals.len() < multisig_config.threshold as usize {
+        return Err(GovernanceError::InsufficientApprovals);
+    }
+
+    // CEI: Mark executed before dispatch
+    let pre_exec_status = proposal.status.clone();
+    proposal.status = ProposalStatus::Executed;
+    env.storage()
+        .persistent()
+        .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+
+    let exec_result = execute_proposal_type(env, &proposal.proposal_type);
+    if exec_result.is_err() {
+        // Rollback status
+        proposal.status = pre_exec_status;
+        env.storage()
+            .persistent()
+            .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
+        return exec_result;
+    }
+
+    ProposalExecutedEvent {
+        proposal_id,
+        executor,
+        timestamp: now,
+    }
+    .publish(env);
+
+    Ok(())
 }
 
 pub fn propose_set_min_collateral_ratio(

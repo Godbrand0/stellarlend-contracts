@@ -153,7 +153,7 @@ fn test_multisig_threshold_1_of_1_auto_executes() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60; // 10 days
+        li.timestamp += 5 * 24 * 60 * 60; // 10 days
     });
 
     with_contract!(env, &cid, {
@@ -197,7 +197,7 @@ fn test_multisig_threshold_2_of_3_requires_second_approval() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -344,7 +344,7 @@ fn test_threshold_change_does_not_affect_existing_proposals() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -387,7 +387,7 @@ fn test_new_proposal_uses_new_threshold() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -439,7 +439,7 @@ fn test_admin_removal_blocks_previous_approver() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -574,7 +574,7 @@ fn test_execution_requires_admin_status() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -610,7 +610,7 @@ fn test_any_admin_can_execute_with_sufficient_approvals() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -754,7 +754,7 @@ fn test_cannot_execute_already_executed_proposal() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -832,7 +832,7 @@ fn test_full_multisig_governance_flow_2_of_3() {
 
     // Step 4: Advance time past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -876,7 +876,7 @@ fn test_full_multisig_governance_flow_3_of_5() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -1017,7 +1017,7 @@ fn test_many_admins_high_threshold() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {

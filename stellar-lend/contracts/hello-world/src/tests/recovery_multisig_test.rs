@@ -432,7 +432,7 @@ fn test_execute_multisig_proposal_success() {
     });
 
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -510,7 +510,7 @@ fn test_full_multisig_flow_3_of_5() {
     });
 
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
