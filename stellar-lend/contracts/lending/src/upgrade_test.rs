@@ -146,6 +146,48 @@ fn test_upgrade_rollback_restores_previous() {
 }
 
 #[test]
+fn test_upgrade_rollback_requires_executed_stage() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 1);
+
+    let proposal_id = client.upgrade_propose(&admin, &hash(&env, 6), &1);
+    assert_eq!(
+        client.upgrade_status(&proposal_id).stage,
+        UpgradeStage::Approved
+    );
+
+    assert_contract_error(
+        client.try_upgrade_rollback(&admin, &proposal_id),
+        UpgradeError::InvalidStatus,
+    );
+}
+
+#[test]
+fn test_upgrade_execute_missing_proposal_errors() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 1);
+
+    assert_contract_error(
+        client.try_upgrade_execute(&admin, &77),
+        UpgradeError::ProposalNotFound,
+    );
+}
+
+#[test]
+fn test_upgrade_rollback_missing_proposal_errors() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 1);
+
+    assert_contract_error(
+        client.try_upgrade_rollback(&admin, &88),
+        UpgradeError::ProposalNotFound,
+    );
+}
+
+#[test]
 fn test_upgrade_status_missing_proposal_errors() {
     let env = Env::default();
     env.mock_all_auths();
@@ -244,4 +286,52 @@ fn test_upgrade_invalid_attempts() {
         client.try_upgrade_propose(&admin, &hash(&env, 3), &0),
         UpgradeError::InvalidVersion,
     );
+}
+
+#[test]
+fn test_upgrade_rejects_same_or_lower_version_after_execution() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 1);
+
+    let first = client.upgrade_propose(&admin, &hash(&env, 2), &2);
+    client.upgrade_execute(&admin, &first);
+    assert_eq!(client.current_version(), 2);
+
+    assert_contract_error(
+        client.try_upgrade_propose(&admin, &hash(&env, 3), &2),
+        UpgradeError::InvalidVersion,
+    );
+    assert_contract_error(
+        client.try_upgrade_propose(&admin, &hash(&env, 4), &1),
+        UpgradeError::InvalidVersion,
+    );
+}
+
+#[test]
+fn test_upgrade_execute_requires_current_approver_membership() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 2);
+    let old_approver = Address::generate(&env);
+    let replacement = Address::generate(&env);
+
+    client.upgrade_add_approver(&admin, &old_approver);
+    let proposal_id = client.upgrade_propose(&admin, &hash(&env, 9), &3);
+    client.upgrade_approve(&old_approver, &proposal_id);
+    assert_eq!(
+        client.upgrade_status(&proposal_id).stage,
+        UpgradeStage::Approved
+    );
+
+    client.upgrade_add_approver(&admin, &replacement);
+    client.upgrade_remove_approver(&admin, &old_approver);
+
+    assert_contract_error(
+        client.try_upgrade_execute(&old_approver, &proposal_id),
+        UpgradeError::NotAuthorized,
+    );
+
+    client.upgrade_execute(&replacement, &proposal_id);
+    assert_eq!(client.current_version(), 3);
 }
