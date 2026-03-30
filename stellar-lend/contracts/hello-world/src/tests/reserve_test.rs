@@ -31,15 +31,20 @@ use crate::reserve::{
 };
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
-/// Helper function to create a test environment with an admin
+/// Helper function to create a test environment with an admin.
+///
+/// `mock_all_auths()` is called so that `require_auth()` inside module
+/// functions (set_reserve_factor, set_treasury_address, withdraw_reserve_funds)
+/// passes without a real signed transaction.
 fn setup_test_env() -> (Env, Address, Address, Address, Address) {
     let env = Env::default();
+    env.mock_all_auths(); // satisfy require_auth() calls in admin-only functions
     let contract_id = env.register_contract(None, crate::HelloContract);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
     let treasury = Address::generate(&env);
 
-    // Set admin in storage (wrapped in as_contract)
+    // Directly seed the admin key so require_admin() passes
     env.as_contract(&contract_id, || {
         env.storage()
             .persistent()
@@ -263,8 +268,8 @@ fn test_set_reserve_factor_by_admin() {
 
     // Admin sets new reserve factor (25%)
     let new_factor = 2500i128;
-    let _result = test_set_reserve_factor(&env, &contract_id, admin, asset.clone(), new_factor);
-    assert!(result.is_ok());
+    let result = test_set_reserve_factor(&env, &contract_id, admin, asset.clone(), new_factor);
+    assert!(result.is_ok(), "Admin should be able to set reserve factor: {:?}", result);
 
     // Verify factor is updated
     let factor = test_get_reserve_factor(&env, &contract_id, asset);
@@ -272,22 +277,16 @@ fn test_set_reserve_factor_by_admin() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction(0))")]
 fn test_set_reserve_factor_by_non_admin() {
     let (env, contract_id, _admin, user, _treasury) = setup_test_env();
     let asset = Some(Address::generate(&env));
 
-    // Initialize first
-    test_initialize_reserve_config(
-        &env,
-        &contract_id,
-        asset.clone(),
-        DEFAULT_RESERVE_FACTOR_BPS,
-    )
-    .unwrap();
+    test_initialize_reserve_config(&env, &contract_id, asset.clone(), DEFAULT_RESERVE_FACTOR_BPS)
+        .unwrap();
 
-    // Non-admin tries to set reserve factor - should fail
-    let _ = test_set_reserve_factor(&env, &contract_id, user, asset, 2000);
+    // Non-admin caller: require_auth passes (mocked) but require_admin rejects
+    let result = test_set_reserve_factor(&env, &contract_id, user, asset, 2000);
+    assert_eq!(result, Err(ReserveError::Unauthorized));
 }
 
 #[test]
@@ -325,8 +324,8 @@ fn test_set_reserve_factor_to_zero() {
     .unwrap();
 
     // Set reserve factor to zero (disable reserves)
-    let _result = test_set_reserve_factor(&env, &contract_id, admin, asset.clone(), 0);
-    assert!(result.is_ok());
+    let result = test_set_reserve_factor(&env, &contract_id, admin, asset.clone(), 0);
+    assert!(result.is_ok(), "Admin should be able to set factor to zero: {:?}", result);
 
     let factor = test_get_reserve_factor(&env, &contract_id, asset);
     assert_eq!(factor, 0);
@@ -521,21 +520,21 @@ fn test_set_treasury_address_by_admin() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction(0))")]
 fn test_set_treasury_address_by_non_admin() {
     let (env, contract_id, _admin, user, _treasury) = setup_test_env();
 
-    // Non-admin tries to set treasury address - should fail
-    let _ = test_set_treasury_address(&env, &contract_id, user, treasury);
+    // Non-admin caller: require_auth passes (mocked) but require_admin rejects
+    let result = test_set_treasury_address(&env, &contract_id, user, treasury);
+    assert_eq!(result, Err(ReserveError::Unauthorized));
 }
 
 #[test]
 fn test_set_treasury_address_to_contract() {
     let (env, contract_id, admin, _user, _treasury) = setup_test_env();
 
-    // Try to set treasury to contract address - should fail
-    let contract_addr = env.current_contract_address();
-    let result = test_set_treasury_address(&env, &contract_id, admin, contract_addr);
+    // Passing the contract's own address as treasury must be rejected.
+    // `contract_id` IS the deployed contract address.
+    let result = test_set_treasury_address(&env, &contract_id, admin, contract_id.clone());
     assert_eq!(result, Err(ReserveError::InvalidTreasury));
 }
 
@@ -671,18 +670,17 @@ fn test_withdraw_reserve_treasury_not_set() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction(0))")]
 fn test_withdraw_reserve_by_non_admin() {
     let (env, contract_id, admin, _user, treasury) = setup_test_env();
     let asset = Some(Address::generate(&env));
 
-    // Setup
     test_initialize_reserve_config(&env, &contract_id, asset.clone(), 1000).unwrap();
     test_set_treasury_address(&env, &contract_id, admin, treasury).unwrap();
     test_accrue_reserve(&env, &contract_id, asset.clone(), 10000).unwrap();
 
-    // Non-admin tries to withdraw - should fail
-    let _ = test_withdraw_reserve_funds(&env, &contract_id, user, asset, 500);
+    // Non-admin caller: require_auth passes (mocked) but require_admin rejects
+    let result = test_withdraw_reserve_funds(&env, &contract_id, user, asset, 500);
+    assert_eq!(result, Err(ReserveError::Unauthorized));
 }
 
 #[test]
@@ -1837,8 +1835,8 @@ fn test_security_trust_boundaries() {
     test_initialize_reserve_config(&env, &contract_id, asset.clone(), 1000).unwrap();
 
     // Test 2: Treasury boundary - cannot set contract as treasury
-    let contract_addr = env.current_contract_address();
-    let result = test_set_treasury_address(&env, &contract_id, admin.clone(), contract_addr);
+    // contract_id IS the contract address; passing it must be rejected.
+    let result = test_set_treasury_address(&env, &contract_id, admin.clone(), contract_id.clone());
     assert_eq!(result, Err(ReserveError::InvalidTreasury));
 
     // Set valid treasury
@@ -1931,4 +1929,233 @@ fn test_reentrancy_protection_pattern() {
     let balance_after = test_get_reserve_balance(&env, &contract_id, asset);
     assert_eq!(balance_after, balance_before - withdraw_amount);
     assert_eq!(balance_after, 500);
+}
+
+// ============================================================================
+// Pause Switch Tests
+// ============================================================================
+
+/// Helper: activate the reserve-withdraw pause switch inside the contract context.
+fn set_reserve_pause(env: &Env, contract_id: &Address, paused: bool) {
+    use soroban_sdk::Map;
+    env.as_contract(contract_id, || {
+        let key = crate::deposit::DepositDataKey::PauseSwitches;
+        let mut map = env
+            .storage()
+            .persistent()
+            .get::<crate::deposit::DepositDataKey, Map<soroban_sdk::Symbol, bool>>(&key)
+            .unwrap_or_else(|| Map::new(env));
+        map.set(soroban_sdk::Symbol::new(env, "pause_reserve"), paused);
+        env.storage().persistent().set(&key, &map);
+    });
+}
+
+#[test]
+fn test_withdraw_reserve_blocked_when_paused() {
+    let (env, contract_id, admin, _user, treasury) = setup_test_env();
+    let asset = Some(Address::generate(&env));
+
+    // Setup: accrue reserves and set treasury
+    test_initialize_reserve_config(&env, &contract_id, asset.clone(), 1000).unwrap();
+    test_set_treasury_address(&env, &contract_id, admin.clone(), treasury).unwrap();
+    test_accrue_reserve(&env, &contract_id, asset.clone(), 10_000).unwrap(); // +1000 to reserve
+
+    // Activate pause
+    set_reserve_pause(&env, &contract_id, true);
+
+    let result = test_withdraw_reserve_funds(&env, &contract_id, admin, asset, 500);
+    assert_eq!(
+        result,
+        Err(crate::reserve::ReserveError::ReserveWithdrawPaused),
+        "Withdrawal must be blocked while pause_reserve is active"
+    );
+}
+
+#[test]
+fn test_withdraw_reserve_succeeds_after_unpause() {
+    let (env, contract_id, admin, _user, treasury) = setup_test_env();
+    let asset = Some(Address::generate(&env));
+
+    test_initialize_reserve_config(&env, &contract_id, asset.clone(), 1000).unwrap();
+    test_set_treasury_address(&env, &contract_id, admin.clone(), treasury).unwrap();
+    test_accrue_reserve(&env, &contract_id, asset.clone(), 10_000).unwrap();
+
+    // Pause then un-pause
+    set_reserve_pause(&env, &contract_id, true);
+    set_reserve_pause(&env, &contract_id, false);
+
+    let result = test_withdraw_reserve_funds(&env, &contract_id, admin, asset.clone(), 500);
+    assert!(result.is_ok(), "Withdrawal should succeed after un-pause");
+    assert_eq!(test_get_reserve_balance(&env, &contract_id, asset), 500);
+}
+
+// ============================================================================
+// New Error Code Coverage
+// ============================================================================
+
+#[test]
+fn test_reserve_withdraw_paused_error_code() {
+    assert_eq!(crate::reserve::ReserveError::ReserveWithdrawPaused as u32, 9);
+}
+
+// ============================================================================
+// Contract-Surface Tests (lib.rs entrypoints)
+// ============================================================================
+
+/// Helper: create a fully-initialized contract environment with an admin.
+fn setup_contract_env() -> (
+    Env,
+    Address,
+    crate::HelloContractClient<'static>,
+    Address, // admin
+) {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, crate::HelloContract);
+    let client = crate::HelloContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.initialize(&admin); // generated client returns () and panics on Err
+    (env, contract_id, client, admin)
+}
+
+#[test]
+fn test_contract_set_reserve_factor() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let asset = Some(Address::generate(&env));
+
+    // Default factor should be 1000 (10%)
+    let (_, default_factor, _) = client.get_reserve_stats(&asset);
+    assert_eq!(default_factor, crate::reserve::DEFAULT_RESERVE_FACTOR_BPS);
+
+    // Admin sets to 2000 (20%) — generated method returns () and panics on Err
+    client.set_reserve_factor(&admin, &asset, &2000);
+    let (_, updated_factor, _) = client.get_reserve_stats(&asset);
+    assert_eq!(updated_factor, 2000);
+}
+
+#[test]
+fn test_contract_set_reserve_factor_invalid_bounds() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let asset = Some(Address::generate(&env));
+
+    // > 5000 bps must fail
+    assert!(client.try_set_reserve_factor(&admin, &asset, &5001).is_err());
+    // Negative must fail
+    assert!(client.try_set_reserve_factor(&admin, &asset, &-1).is_err());
+    // 0 and 5000 are at the boundary and must be accepted
+    client.set_reserve_factor(&admin, &asset, &0);
+    client.set_reserve_factor(&admin, &asset, &5000);
+}
+
+#[test]
+fn test_contract_set_treasury_address() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let treasury = Address::generate(&env);
+
+    client.set_treasury_address(&admin, &treasury);
+
+    let (_, _, stored_treasury) = client.get_reserve_stats(&None);
+    assert_eq!(stored_treasury, Some(treasury));
+}
+
+#[test]
+fn test_contract_set_treasury_address_rejects_self() {
+    let (_env, contract_id, client, admin) = setup_contract_env();
+    // The contract's own address must be rejected
+    let result = client.try_set_treasury_address(&admin, &contract_id);
+    assert!(result.is_err(), "Contract address must be rejected as treasury");
+    // Verify nothing was stored
+    let (_, _, stored) = client.get_reserve_stats(&None);
+    assert_eq!(stored, None);
+}
+
+#[test]
+fn test_contract_withdraw_reserve_funds_empty_reserve() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let asset = Some(Address::generate(&env));
+    let treasury = Address::generate(&env);
+
+    client.set_treasury_address(&admin, &treasury);
+
+    // No reserves accrued yet — withdrawal of any amount must fail
+    let result = client.try_withdraw_reserve_funds(&admin, &asset, &1);
+    assert!(result.is_err(), "Cannot withdraw from empty reserve");
+}
+
+#[test]
+fn test_contract_get_reserve_stats() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let asset = Some(Address::generate(&env));
+    let treasury = Address::generate(&env);
+
+    client.set_treasury_address(&admin, &treasury);
+    client.set_reserve_factor(&admin, &asset, &2500);
+
+    let (balance, factor, treasury_addr) = client.get_reserve_stats(&asset);
+    assert_eq!(balance, 0);
+    assert_eq!(factor, 2500);
+    assert_eq!(treasury_addr, Some(treasury));
+}
+
+#[test]
+fn test_contract_get_reserve_balance_canonical_key() {
+    let (env, _contract_id, client, _admin) = setup_contract_env();
+    let asset = Some(Address::generate(&env));
+
+    // Before any accrual, balance must be zero
+    assert_eq!(client.get_reserve_balance(&asset), 0);
+    // Native asset (None) must also return zero
+    assert_eq!(client.get_reserve_balance(&None), 0);
+}
+
+#[test]
+fn test_contract_claim_reserves_zero_balance() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let to = Address::generate(&env);
+    let asset = Some(Address::generate(&env));
+
+    // Attempting to claim from empty reserves must fail gracefully
+    let result = client.try_claim_reserves(&admin, &asset, &to, &100);
+    assert!(result.is_err(), "Should fail when reserve balance is zero");
+}
+
+#[test]
+fn test_contract_withdraw_reserve_funds_zero_amount() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let asset = Some(Address::generate(&env));
+    let treasury = Address::generate(&env);
+
+    client.set_treasury_address(&admin, &treasury);
+
+    let result = client.try_withdraw_reserve_funds(&admin, &asset, &0);
+    assert!(result.is_err(), "Zero amount must be rejected");
+}
+
+#[test]
+fn test_contract_withdraw_reserve_funds_negative_amount() {
+    let (env, _contract_id, client, admin) = setup_contract_env();
+    let asset = Some(Address::generate(&env));
+    let treasury = Address::generate(&env);
+
+    client.set_treasury_address(&admin, &treasury);
+
+    let result = client.try_withdraw_reserve_funds(&admin, &asset, &-1);
+    assert!(result.is_err(), "Negative amount must be rejected");
+}
+
+#[test]
+fn test_contract_set_reserve_factor_native_asset() {
+    let (_env, _contract_id, client, admin) = setup_contract_env();
+
+    // Native asset (None)
+    client.set_reserve_factor(&admin, &None, &1500);
+    let (_, factor, _) = client.get_reserve_stats(&None);
+    assert_eq!(factor, 1500);
+}
+
+#[test]
+fn test_error_reserve_withdraw_paused_variant() {
+    use crate::reserve::ReserveError;
+    // Stable error-code contract: ReserveWithdrawPaused must remain 9
+    assert_eq!(ReserveError::ReserveWithdrawPaused as u32, 9);
 }

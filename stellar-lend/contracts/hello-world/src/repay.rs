@@ -205,20 +205,6 @@ pub fn repay_debt(
         None => get_native_asset_address(env)?,
     };
 
-    let reserve_factor = if let Some(asset_addr) = asset.as_ref() {
-        let params_key = DepositDataKey::AssetParams(asset_addr.clone());
-        if let Some(params) = env
-            .storage()
-            .persistent()
-            .get::<DepositDataKey, crate::deposit::AssetParams>(&params_key)
-        {
-            params.borrow_fee_bps.max(1000) // Use asset-specific fee or default 10%
-        } else {
-            1000 // Default 10%
-        }
-    } else {
-        1000 // Default 10%
-    };
 
     // Get user position
     let position_key = DepositDataKey::Position(user.clone());
@@ -292,28 +278,12 @@ pub fn repay_debt(
     // Save final updated position state
     env.storage().persistent().set(&position_key, &position);
 
-    // Apply portion of paid interest to protocol reserves
+    // Accrue protocol reserve share from the interest paid.
+    // Delegates to the reserve module which owns the canonical ReserveDataKey::ReserveBalance
+    // storage and enforces the configured reserve factor per asset.
     if interest_paid > 0 {
-        let reserve_amount = interest_paid
-            .checked_mul(reserve_factor)
-            .ok_or(RepayError::Overflow)?
-            .checked_div(10000)
-            .unwrap_or(0); // Floor rounding bounds protocol take to >= 0
-            
-        if reserve_amount > 0 {
-            let reserve_key = DepositDataKey::ProtocolReserve(asset.clone());
-            let current_reserve = env
-                .storage()
-                .persistent()
-                .get::<DepositDataKey, i128>(&reserve_key)
-                .unwrap_or(0);
-            env.storage().persistent().set(
-                &reserve_key,
-                &(current_reserve
-                    .checked_add(reserve_amount)
-                    .ok_or(RepayError::Overflow)?),
-            );
-        }
+        crate::reserve::accrue_reserve(env, asset.clone(), interest_paid)
+            .map_err(|_| RepayError::Overflow)?;
     }
 
     update_user_analytics_repay(env, &user, repay_amount, timestamp)?;

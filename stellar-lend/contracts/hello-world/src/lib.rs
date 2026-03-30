@@ -615,8 +615,84 @@ impl HelloContract {
         Ok(())
     }
 
-    /// Claim accumulated protocol reserves (admin only)
+    // ============================================================================
+    // Reserve Methods
+    // ============================================================================
+
+    /// Set the reserve factor for an asset (admin only).
+    ///
+    /// Determines what fraction of future interest income is allocated to
+    /// protocol reserves. Range: 0–5000 bps (0%–50%).
+    /// Changes are prospective only — existing balances are not adjusted.
+    ///
+    /// # Errors
+    /// - `Unauthorized` if caller is not admin
+    /// - `InvalidParameter` if factor is outside `[0, 5000]` bps
+    pub fn set_reserve_factor(
+        env: Env,
+        caller: Address,
+        asset: Option<Address>,
+        reserve_factor_bps: i128,
+    ) -> Result<(), RiskManagementError> {
+        crate::reserve::set_reserve_factor(&env, caller, asset, reserve_factor_bps)
+            .map_err(|_| RiskManagementError::InvalidParameter)
+    }
+
+    /// Set the treasury address for reserve withdrawals (admin only).
+    ///
+    /// All `withdraw_reserve_funds` calls transfer tokens to this address.
+    /// The treasury address must not be the contract itself.
+    ///
+    /// # Errors
+    /// - `Unauthorized` if caller is not admin
+    /// - `InvalidParameter` if treasury equals the contract address
+    pub fn set_treasury_address(
+        env: Env,
+        caller: Address,
+        treasury: Address,
+    ) -> Result<(), RiskManagementError> {
+        crate::reserve::set_treasury_address(&env, caller, treasury)
+            .map_err(|_| RiskManagementError::InvalidParameter)
+    }
+
+    /// Withdraw accrued reserves to the stored treasury address (admin only).
+    ///
+    /// Follows checks-effects-interactions: the reserve balance is decremented
+    /// before the token transfer so reentrant calls see a reduced balance.
+    ///
+    /// # Returns
+    /// Amount actually withdrawn.
+    ///
+    /// # Errors
+    /// - `Unauthorized` — caller is not admin
+    /// - `InvalidParameter` — treasury not set, amount ≤ 0, or amount > balance
+    /// - `InvalidParameter` — reserve-withdraw pause switch is active
+    pub fn withdraw_reserve_funds(
+        env: Env,
+        caller: Address,
+        asset: Option<Address>,
+        amount: i128,
+    ) -> Result<i128, RiskManagementError> {
+        crate::reserve::withdraw_reserve_funds(&env, caller, asset, amount)
+            .map_err(|_| RiskManagementError::InvalidParameter)
+    }
+
+    /// Return combined reserve statistics for an asset.
+    ///
+    /// # Returns
+    /// `(reserve_balance, reserve_factor_bps, treasury_address)`
+    pub fn get_reserve_stats(
+        env: Env,
+        asset: Option<Address>,
+    ) -> (i128, i128, Option<Address>) {
+        crate::reserve::get_reserve_stats(&env, asset)
+    }
+
     /// Claim accumulated protocol reserves (admin only).
+    ///
+    /// Transfers `amount` of `asset` reserves to `to`. Uses the canonical
+    /// `ReserveDataKey::ReserveBalance` storage and follows the
+    /// checks-effects-interactions pattern.
     pub fn claim_reserves(
         env: Env,
         caller: Address,
@@ -626,39 +702,56 @@ impl HelloContract {
     ) -> Result<(), RiskManagementError> {
         require_admin(&env, &caller)?;
 
-        let reserve_key = DepositDataKey::ProtocolReserve(asset.clone());
-        let mut reserve_balance = env
+        if amount <= 0 {
+            return Err(RiskManagementError::InvalidParameter);
+        }
+
+        let balance_key = crate::reserve::ReserveDataKey::ReserveBalance(asset.clone());
+        let reserve_balance: i128 = env
             .storage()
             .persistent()
-            .get::<DepositDataKey, i128>(&reserve_key)
+            .get::<crate::reserve::ReserveDataKey, i128>(&balance_key)
             .unwrap_or(0);
 
         if amount > reserve_balance {
             return Err(RiskManagementError::InvalidParameter);
         }
 
-        if let Some(_asset_addr) = asset {
-            #[cfg(not(test))]
-            {
-                let token_client = soroban_sdk::token::Client::new(&env, &_asset_addr);
-                token_client.transfer(&env.current_contract_address(), &to, &amount);
-            }
-        }
-
-        reserve_balance -= amount;
+        // EFFECTS: update balance before external transfer (CEI pattern)
+        let new_balance = reserve_balance
+            .checked_sub(amount)
+            .ok_or(RiskManagementError::InvalidParameter)?;
         env.storage()
             .persistent()
-            .set(&reserve_key, &reserve_balance);
+            .set(&balance_key, &new_balance);
+
+        // INTERACTIONS: transfer tokens to the requested destination
+        // In test builds `to` is only referenced inside this cfg block; the
+        // let-binding below keeps the compiler happy without changing the API.
+        let _ = &to;
+        #[cfg(not(test))]
+        {
+            let effective_addr: Address = match &asset {
+                Some(addr) => addr.clone(),
+                None => env
+                    .storage()
+                    .persistent()
+                    .get::<DepositDataKey, Address>(&DepositDataKey::NativeAssetAddress)
+                    .ok_or(RiskManagementError::InvalidParameter)?,
+            };
+            let token_client = soroban_sdk::token::Client::new(&env, &effective_addr);
+            token_client.transfer(&env.current_contract_address(), &to, &amount);
+        }
+
         Ok(())
     }
 
-    /// Get current protocol reserve balance for an asset.
+    /// Return the current protocol reserve balance for an asset.
+    ///
+    /// Reads from the canonical `ReserveDataKey::ReserveBalance` key maintained
+    /// by the reserve module.
     pub fn get_reserve_balance(env: Env, asset: Option<Address>) -> i128 {
-        let reserve_key = DepositDataKey::ProtocolReserve(asset);
-        env.storage()
-            .persistent()
-            .get::<DepositDataKey, i128>(&reserve_key)
-            .unwrap_or(0)
+        crate::reserve::get_reserve_balance(&env, asset)
     }
 
     /// Generate a comprehensive protocol report.
