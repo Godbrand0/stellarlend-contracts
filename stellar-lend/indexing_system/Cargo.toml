@@ -9,11 +9,14 @@ tokio = { version = "1.35", features = ["full"] }
 async-trait = "0.1"
 
 # Web3 and blockchain
-ethers = { version = "2.0", features = ["ws", "rustls"] }
+ethers = { version = "2.0", default-features = false, features = ["ws", "rustls"] }
 alloy-primitives = "0.7"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "macros", "migrate", "chrono", "uuid"] }
+# Using specific features to avoid sqlx-mysql and its vulnerable RSA dependency
+sqlx = { version = "0.8.2", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "chrono", "uuid", "macros"] }
+# Also add sqlx-macros directly with limited features to help consolidation
+sqlx-macros = { version = "0.8.2", default-features = false, features = ["postgres"] }
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 
 # Serialization
