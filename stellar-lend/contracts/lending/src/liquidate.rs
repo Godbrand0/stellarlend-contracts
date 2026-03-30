@@ -133,8 +133,6 @@ pub struct PostLiquidationHealthEvent {
 ///   does not match the borrower's recorded position.
 /// * `BorrowError::InsufficientCollateral` — Position is healthy (HF ≥ 1.0);
 ///   liquidation not permitted.
-/// * `BorrowError::Overflow` — Arithmetic overflow on close-factor or incentive
-///   calculation.
 ///
 /// # Security
 /// - `liquidator.require_auth()` is called before any state change.
