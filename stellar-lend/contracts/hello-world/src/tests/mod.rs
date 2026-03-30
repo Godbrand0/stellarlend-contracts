@@ -18,7 +18,7 @@ pub mod recovery_multisig_test;
 
 // Disabled — legacy API mismatches (pre-existing, unrelated to withdraw changes)
 // pub mod access_control_regression_test;
-// pub mod admin_test;
+pub mod admin_test;
 // pub mod amm_impact_test;       // AmmProtocolConfig, SwapParams, TokenPair not re-exported from crate root
 // pub mod amm_test;
 // pub mod asset_config_test;     // wrong AssetConfig field names
