@@ -153,7 +153,7 @@ fn test_multisig_threshold_1_of_1_auto_executes() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 5 * 24 * 60 * 60; // 10 days
+        li.timestamp += 5 * 24 * 60 * 60; // 5 days
     });
 
     with_contract!(env, &cid, {
