@@ -1631,7 +1631,7 @@ pub fn execute_multisig_proposal(
         .get(&approvals_key)
         .unwrap_or_else(|| Vec::new(env));
 
-    if approvals.len() < multisig_config.threshold as usize {
+    if approvals.len() < multisig_config.threshold {
         return Err(GovernanceError::InsufficientApprovals);
     }
 
