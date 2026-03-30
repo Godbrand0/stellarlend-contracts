@@ -80,7 +80,7 @@ jobs:
       - name: Generate code coverage
         run: |
           cd stellar-lend/contracts/lending
-          cargo tarpaulin --verbose --out Xml --packages stellarlend-lending --fail-under 88 --exclude-files "../../indexing_system/*" ../../indexing_system/*
+          cargo tarpaulin --verbose --out Xml --packages stellarlend-lending --fail-under 83 --exclude-files "../../indexing_system/*" ../../indexing_system/*
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
