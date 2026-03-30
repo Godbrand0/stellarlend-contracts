@@ -9,7 +9,7 @@
 //! - Collateral and debt values depend on the oracle; ensure the oracle is correct and trusted.
 //! - Health factor uses the admin-set liquidation threshold consistently.
 
-use soroban_sdk::{contracttype, Address, Env, IntoVal, Symbol, I256};
+use soroban_sdk::{contracttype, Address, Env, I256, IntoVal, Symbol};
 
 use crate::borrow::{
     get_close_factor_bps, get_liquidation_incentive_bps, get_liquidation_threshold_bps,
@@ -65,7 +65,11 @@ fn get_asset_price(env: &Env, asset: &Address) -> Option<i128> {
         &Symbol::new(env, "price"),
         (asset.clone(),).into_val(env),
     );
-    if price > 0 { Some(price) } else { None }
+    if price > 0 {
+        Some(price)
+    } else {
+        None
+    }
 }
 
 /// Computes collateral value in common unit (amount * price / PRICE_SCALE).
@@ -138,7 +142,9 @@ pub(crate) fn compute_health_factor(
     let hf_scale_256 = I256::from_i128(env, HEALTH_FACTOR_SCALE);
     let debt_256 = I256::from_i128(env, debt_value);
 
-    let weighted_collateral = collat_256.mul(&bps_256).div(&I256::from_i128(env, BPS_SCALE));
+    let weighted_collateral = collat_256
+        .mul(&bps_256)
+        .div(&I256::from_i128(env, BPS_SCALE));
 
     let hf_256 = weighted_collateral.mul(&hf_scale_256).div(&debt_256);
     hf_256.to_i128().unwrap_or(0)

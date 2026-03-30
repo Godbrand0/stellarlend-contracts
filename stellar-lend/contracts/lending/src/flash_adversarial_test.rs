@@ -107,8 +107,12 @@ impl ReentrantReceiver {
         _fee: i128,
         _params: Bytes,
     ) -> bool {
-        LendingContractClient::new(&env, &initiator)
-            .flash_loan(&env.current_contract_address(), &asset, &100, &Bytes::new(&env));
+        LendingContractClient::new(&env, &initiator).flash_loan(
+            &env.current_contract_address(),
+            &asset,
+            &100,
+            &Bytes::new(&env),
+        );
         true
     }
 }

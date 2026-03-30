@@ -13,12 +13,6 @@ mod pause;
 mod token_receiver;
 mod withdraw;
 
-use cross_asset::{
-    borrow_asset as cross_borrow_asset, deposit_collateral_asset as cross_deposit_collateral,
-    get_cross_position_summary as cross_position_summary, initialize_admin as cross_init_admin,
-    repay_asset as cross_repay_asset, set_asset_params as cross_set_asset_params,
-    withdraw_asset as cross_withdraw_asset, AssetParams, CrossAssetError, PositionSummary,
-};
 use borrow::{
     borrow as borrow_impl, deposit as borrow_deposit, get_admin as get_protocol_admin,
     get_close_factor_bps as get_close_factor_impl,
@@ -30,7 +24,12 @@ use borrow::{
     set_liquidation_threshold_bps as set_liq_threshold_impl, set_oracle as set_oracle_impl,
     BorrowCollateral, BorrowError, DebtPosition,
 };
-use oracle::{OracleConfig, OracleError};
+use cross_asset::{
+    borrow_asset as cross_borrow_asset, deposit_collateral_asset as cross_deposit_collateral,
+    get_cross_position_summary as cross_position_summary, initialize_admin as cross_init_admin,
+    repay_asset as cross_repay_asset, set_asset_params as cross_set_asset_params,
+    withdraw_asset as cross_withdraw_asset, AssetParams, CrossAssetError, PositionSummary,
+};
 use deposit::{
     deposit as deposit_impl, get_user_collateral as get_deposit_collateral_impl,
     initialize_deposit_settings as init_deposit_settings_impl, DepositCollateral, DepositError,
@@ -39,6 +38,7 @@ use flash_loan::{
     flash_loan as flash_loan_impl, set_flash_loan_fee_bps as set_flash_loan_fee_impl,
     FlashLoanError,
 };
+use oracle::{OracleConfig, OracleError};
 use pause::{
     blocks_high_risk_ops, complete_recovery as complete_recovery_logic,
     get_emergency_state as get_emergency_state_logic, get_guardian as get_guardian_logic,
@@ -105,11 +105,11 @@ mod borrow_test_booster;
 #[cfg(test)]
 mod liquidation_boundary_test;
 #[cfg(test)]
+mod multi_user_contention_test;
+#[cfg(test)]
 mod oracle_test;
 #[cfg(test)]
 mod stress_test;
-#[cfg(test)]
-mod multi_user_contention_test;
 
 #[contract]
 pub struct LendingContract;
@@ -307,9 +307,9 @@ impl LendingContract {
         get_borrow_collateral(&env, &user)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // View functions (read-only; for frontends and liquidations)
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     /// Returns the user's collateral balance (raw amount).
     pub fn get_collateral_balance(env: Env, user: Address) -> i128 {
@@ -349,8 +349,8 @@ impl LendingContract {
     /// Configure oracle staleness parameters (admin only).
     ///
     /// # Errors
-    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
-    /// - `OracleError::InvalidPrice` — `max_staleness_seconds` is zero.
+    /// - `OracleError::Unauthorized` â€” caller is not the protocol admin.
+    /// - `OracleError::InvalidPrice` â€” `max_staleness_seconds` is zero.
     pub fn configure_oracle(
         env: Env,
         caller: Address,
@@ -362,8 +362,8 @@ impl LendingContract {
     /// Register the primary oracle address for `asset` (admin only).
     ///
     /// # Errors
-    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
-    /// - `OracleError::InvalidOracle` — oracle address is the contract itself.
+    /// - `OracleError::Unauthorized` â€” caller is not the protocol admin.
+    /// - `OracleError::InvalidOracle` â€” oracle address is the contract itself.
     pub fn set_primary_oracle(
         env: Env,
         caller: Address,
@@ -376,8 +376,8 @@ impl LendingContract {
     /// Register the fallback oracle address for `asset` (admin only).
     ///
     /// # Errors
-    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
-    /// - `OracleError::InvalidOracle` — oracle address is the contract itself.
+    /// - `OracleError::Unauthorized` â€” caller is not the protocol admin.
+    /// - `OracleError::InvalidOracle` â€” oracle address is the contract itself.
     pub fn set_fallback_oracle(
         env: Env,
         caller: Address,
@@ -393,9 +393,9 @@ impl LendingContract {
     /// fallback oracle for this asset.
     ///
     /// # Errors
-    /// - `OracleError::OraclePaused` — oracle updates are paused.
-    /// - `OracleError::Unauthorized` — caller is not authorized.
-    /// - `OracleError::InvalidPrice` — price is zero or negative.
+    /// - `OracleError::OraclePaused` â€” oracle updates are paused.
+    /// - `OracleError::Unauthorized` â€” caller is not authorized.
+    /// - `OracleError::InvalidPrice` â€” price is zero or negative.
     pub fn update_price_feed(
         env: Env,
         caller: Address,
@@ -405,21 +405,17 @@ impl LendingContract {
         oracle::update_price_feed(&env, caller, asset, price)
     }
 
-    /// Get the current price for `asset` (primary → fallback → error).
+    /// Get the current price for `asset` (primary â†’ fallback â†’ error).
     ///
     /// # Errors
-    /// - `OracleError::StalePrice` — best available price is stale.
-    /// - `OracleError::NoPriceFeed` — no price has been submitted for this asset.
+    /// - `OracleError::StalePrice` â€” best available price is stale.
+    /// - `OracleError::NoPriceFeed` â€” no price has been submitted for this asset.
     pub fn get_price(env: Env, asset: Address) -> Result<i128, OracleError> {
         oracle::get_price(&env, &asset)
     }
 
     /// Pause or unpause oracle price updates (admin only).
-    pub fn set_oracle_paused(
-        env: Env,
-        caller: Address,
-        paused: bool,
-    ) -> Result<(), OracleError> {
+    pub fn set_oracle_paused(env: Env, caller: Address, paused: bool) -> Result<(), OracleError> {
         oracle::set_oracle_paused(&env, caller, paused)
     }
 
@@ -438,7 +434,7 @@ impl LendingContract {
         get_close_factor_impl(&env)
     }
 
-    /// Sets the close factor in basis points (1–10000). Admin only.
+    /// Sets the close factor in basis points (1â€“10000). Admin only.
     pub fn set_close_factor_bps(env: Env, admin: Address, bps: i128) -> Result<(), BorrowError> {
         set_close_factor_impl(&env, &admin, bps)
     }
@@ -448,7 +444,7 @@ impl LendingContract {
         get_liquidation_incentive_bps_impl(&env)
     }
 
-    /// Sets the liquidation incentive in basis points (0–10000). Admin only.
+    /// Sets the liquidation incentive in basis points (0â€“10000). Admin only.
     pub fn set_liquidation_incentive_bps(
         env: Env,
         admin: Address,
@@ -594,9 +590,9 @@ impl LendingContract {
         receive_impl(env, token_asset, from, amount, payload)
     }
 
-    // ───────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Upgrade Management (Governance)
-    // ───────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     pub fn upgrade_init(
         env: Env,
@@ -648,9 +644,9 @@ impl LendingContract {
         upgrade::UpgradeManager::current_version(env)
     }
 
-    // ───────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Data Store Management
-    // ───────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     #[cfg(not(tarpaulin_include))]
     pub fn data_store_init(env: Env, admin: Address) {
@@ -709,9 +705,9 @@ impl LendingContract {
         data_store::DataStore::key_exists(env, key)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // Cross-Asset Operations
-    // ═══════════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     /// Initialize admin for cross-asset operations
     pub fn initialize_admin(env: Env, admin: Address) {
@@ -768,7 +764,10 @@ impl LendingContract {
     }
 
     /// Get cross-asset position summary for a user
-    pub fn get_cross_position_summary(env: Env, user: Address) -> Result<PositionSummary, CrossAssetError> {
+    pub fn get_cross_position_summary(
+        env: Env,
+        user: Address,
+    ) -> Result<PositionSummary, CrossAssetError> {
         cross_position_summary(&env, user)
     }
 }
