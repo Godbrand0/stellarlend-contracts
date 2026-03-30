@@ -42,7 +42,7 @@ pub enum LiquidationError {
     /// Invalid debt asset
     InvalidDebtAsset = 10,
     /// Price not available for asset
-    PriceNotAvailable = 10,
+    PriceNotAvailable = 11,
 }
 
 /// Helper to get asset decimals from the token contract or default to 7 for XLM.
@@ -259,7 +259,7 @@ pub fn liquidate(
     env.storage().persistent().set(&position_key, &position);
     env.storage().persistent().set(&collateral_key, &position.collateral);
 
-    update_protocol_analytics(env, actual_debt_liquidated, collateral_seized)
+    update_liquidation_analytics(env, actual_debt_liquidated, collateral_seized)
         .map_err(|_| LiquidationError::Overflow)?;
 
     // 9. EXTERNAL INTERACTIONS (TRANSFERS)
@@ -283,8 +283,8 @@ pub fn liquidate(
     emit_liquidation(env, LiquidationEvent {
         liquidator: liquidator.clone(),
         borrower: borrower.clone(),
-        debt_asset,
-        collateral_asset,
+        debt_asset: debt_asset.clone(),
+        collateral_asset: collateral_asset.clone(),
         debt_liquidated: actual_debt_liquidated,
         collateral_seized,
         incentive_amount,
@@ -293,14 +293,14 @@ pub fn liquidate(
         timestamp: position.last_accrual_time,
     });
     
-    emit_position_updated_event(env, &borrower, &position);
+    emit_position_updated_event(env, &borrower, &position, Symbol::new(env, "liquidate"), position.last_accrual_time);
     add_activity_log(env, &borrower, Symbol::new(env, "liquidate"), actual_debt_liquidated, debt_asset.clone(), position.last_accrual_time).ok();
 
     Ok((actual_debt_liquidated, collateral_seized, incentive_amount))
 }
 
 /// Update protocol analytics after liquidation
-fn update_protocol_analytics(
+fn update_liquidation_analytics(
     env: &Env,
     debt_liquidated: i128,
     collateral_seized: i128,

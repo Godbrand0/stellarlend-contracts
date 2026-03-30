@@ -254,7 +254,7 @@ pub fn repay_debt(
         position.borrow_interest
     };
 
-    let principal_paid = actual_repay_amount
+    let principal_paid = repay_amount
         .checked_sub(interest_paid)
         .ok_or(RepayError::Overflow)?;
 
@@ -338,13 +338,13 @@ pub fn repay_debt(
         timestamp,
     };
     log_repay(env, event);
-    emit_position_updated_event(env, &user, &position);
-    emit_analytics_updated_event(env, &user, "repay", final_repay_amount, timestamp);
+    emit_position_updated_event(env, &user, &position, Symbol::new(env, "repay"), timestamp);
+    emit_analytics_updated_event(env, &user, "repay", repay_amount, timestamp);
     emit_user_activity_tracked_event(
         env,
         &user,
         Symbol::new(env, "repay"),
-        final_repay_amount,
+        repay_amount,
         timestamp,
     );
 
