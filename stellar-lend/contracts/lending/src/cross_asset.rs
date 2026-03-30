@@ -17,10 +17,8 @@
 //! with borrowing capacity calculated across all deposited collateral.
 //!
 //! ### Unified Health Factor
-//! The protocol calculates a single health factor across all assets:
-//! ```
-//! Health Factor = (Weighted Collateral Value / Total Debt Value) * 10000
-//! ```
+//! The protocol calculates a single health factor across all assets.
+//! It is computed as: (Weighted Collateral Value / Total Debt Value) * 10000
 //! Where Weighted Collateral Value = Sum of (Collateral Amount × Price × LTV) for all assets
 //!
 //! ### Asset Configuration
