@@ -55,6 +55,35 @@ pub enum RepayError {
     Reentrancy = 7,
 }
 
+#[derive(Clone, Copy)]
+struct RepaySpecSnapshot {
+    principal_before: i128,
+    interest_before: i128,
+}
+
+#[inline(always)]
+fn fv_repay_preconditions(amount: i128, position: &Position) -> bool {
+    amount > 0 && (position.debt > 0 || position.borrow_interest > 0)
+}
+
+#[inline(always)]
+fn fv_repay_postconditions(
+    snapshot: &RepaySpecSnapshot,
+    position: &Position,
+    repay_amount: i128,
+    interest_paid: i128,
+    principal_paid: i128,
+    remaining_debt: i128,
+) -> bool {
+    let total_paid = interest_paid.checked_add(principal_paid);
+    let recomputed_remaining = position.debt.checked_add(position.borrow_interest);
+
+    total_paid == Some(repay_amount)
+        && position.debt <= snapshot.principal_before
+        && position.borrow_interest <= snapshot.interest_before
+        && recomputed_remaining == Some(remaining_debt)
+}
+
 /// Calculate interest accrued since last accrual time
 ///
 /// Uses dynamic interest rate based on current protocol utilization.
@@ -170,6 +199,8 @@ pub fn repay_debt(
     asset: Option<Address>,
     amount: i128,
 ) -> Result<(i128, i128, i128), RepayError> {
+    // Formal-verification precondition note:
+    // repay amount must be strictly positive.
     if amount <= 0 {
         return Err(RepayError::InvalidAmount);
     }
@@ -235,6 +266,12 @@ pub fn repay_debt(
     // Accrue interest before repayment
     accrue_interest(env, &mut position)?;
 
+    let fv_snapshot = RepaySpecSnapshot {
+        principal_before: position.debt,
+        interest_before: position.borrow_interest,
+    };
+    debug_assert!(fv_repay_preconditions(amount, &position));
+
     let total_debt = position
         .debt
         .checked_add(position.borrow_interest)
@@ -254,7 +291,7 @@ pub fn repay_debt(
         position.borrow_interest
     };
 
-    let principal_paid = actual_repay_amount
+    let principal_paid = repay_amount
         .checked_sub(interest_paid)
         .ok_or(RepayError::Overflow)?;
 
@@ -339,12 +376,12 @@ pub fn repay_debt(
     };
     log_repay(env, event);
     emit_position_updated_event(env, &user, &position);
-    emit_analytics_updated_event(env, &user, "repay", final_repay_amount, timestamp);
+    emit_analytics_updated_event(env, &user, "repay", repay_amount, timestamp);
     emit_user_activity_tracked_event(
         env,
         &user,
         Symbol::new(env, "repay"),
-        final_repay_amount,
+        repay_amount,
         timestamp,
     );
 
@@ -352,6 +389,17 @@ pub fn repay_debt(
         .debt
         .checked_add(position.borrow_interest)
         .unwrap_or(0);
+
+    // Formal-verification postcondition note:
+    // repayment is partitioned into interest-first then principal, and debt is monotonic.
+    debug_assert!(fv_repay_postconditions(
+        &fv_snapshot,
+        &position,
+        repay_amount,
+        interest_paid,
+        principal_paid,
+        remaining_debt
+    ));
         
     Ok((remaining_debt, interest_paid, principal_paid))
 }
@@ -445,4 +493,43 @@ fn update_protocol_analytics_repay(env: &Env, amount: i128) -> Result<(), RepayE
 
 fn log_repay(env: &Env, event: RepayEvent) {
     emit_repay(env, event);
+}
+
+#[cfg(test)]
+mod verification_hooks_tests {
+    use super::*;
+
+    #[test]
+    fn repay_hooks_accept_valid_transition() {
+        let snapshot = RepaySpecSnapshot {
+            principal_before: 200,
+            interest_before: 20,
+        };
+        let position = Position {
+            collateral: 1_000,
+            debt: 180,
+            borrow_interest: 10,
+            last_accrual_time: 0,
+        };
+
+        assert!(fv_repay_preconditions(30, &position));
+        assert!(fv_repay_postconditions(&snapshot, &position, 30, 10, 20, 190));
+    }
+
+    #[test]
+    fn repay_hooks_reject_invalid_transition() {
+        let snapshot = RepaySpecSnapshot {
+            principal_before: 200,
+            interest_before: 20,
+        };
+        let position = Position {
+            collateral: 1_000,
+            debt: 210,
+            borrow_interest: 30,
+            last_accrual_time: 0,
+        };
+
+        assert!(!fv_repay_preconditions(0, &position));
+        assert!(!fv_repay_postconditions(&snapshot, &position, 30, 10, 20, 240));
+    }
 }

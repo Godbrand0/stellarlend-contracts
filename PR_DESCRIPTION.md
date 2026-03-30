@@ -56,3 +56,29 @@ All global arithmetic totals (borrows vs collateral deposits) assertions maintai
 - This change is documentation-only; no Rust modules were materially changed
 - Team review is recommended before merge, especially around the documented AMM auth caveat
 - Re-run `cargo test` after freeing disk space on `C:`
+
+## Formal Verification Prep (Borrow/Repay/Liquidate)
+
+- Added verification-friendly pre/postcondition comments and modular hook helpers in:
+  - `stellar-lend/contracts/hello-world/src/borrow.rs`
+  - `stellar-lend/contracts/hello-world/src/repay.rs`
+  - `stellar-lend/contracts/hello-world/src/liquidate.rs`
+- Added focused hook predicate tests in each updated module.
+- Added contract security/trust-boundary notes:
+  - `stellar-lend/contracts/hello-world/docs/formal_verification_prep.md`
+
+### Summarized Test Output
+
+- Command run: `cargo test` in `stellar-lend/contracts/hello-world`
+- Result: could not execute in this environment because `cargo` is not available on PATH (`CommandNotFoundException`).
+- Static diagnostics for edited files report no syntax/type problems in the editor.
+
+### Short Security Notes
+
+- Reentrancy and authorization checks are explicitly documented on each external-call path.
+- Liquidation now applies an explicit decimal scaling bound before power-based scaling.
+- Borrow/repay/liquidate accounting transitions use checked arithmetic and explicit postcondition hooks.
+
+### Future Verification Ticket
+
+- FV-HELLO-001: prove borrow/repay/liquidate safety invariants and CEI ordering.

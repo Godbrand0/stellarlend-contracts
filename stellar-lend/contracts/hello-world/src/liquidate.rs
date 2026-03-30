@@ -1,3 +1,13 @@
+//! # Liquidation Module
+//!
+//! Verification-prep notes for formal methods:
+//! - Precondition checks reject zero/negative debt input, paused operation states,
+//!   and healthy borrower positions.
+//! - Effects update borrower debt/collateral before token transfers (CEI ordering).
+//! - External interaction points are explicit: oracle price reads, token decimals,
+//!   and SRC-20 transfers for debt and collateral settlement.
+//! - Arithmetic uses checked operators or I256 intermediate math on scaled values.
+
 #![allow(unused)]
 use crate::events::{emit_liquidation, LiquidationEvent};
 use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec, I256, token};
@@ -42,7 +52,39 @@ pub enum LiquidationError {
     /// Invalid debt asset
     InvalidDebtAsset = 10,
     /// Price not available for asset
-    PriceNotAvailable = 10,
+    PriceNotAvailable = 11,
+}
+
+const MAX_DECIMALS_FOR_SCALING: u32 = 38;
+
+#[derive(Clone, Copy)]
+struct LiquidationSpecSnapshot {
+    total_debt_before: i128,
+    collateral_before: i128,
+}
+
+#[inline(always)]
+fn fv_liquidate_preconditions(debt_amount: i128) -> bool {
+    debt_amount > 0
+}
+
+#[inline(always)]
+fn fv_liquidate_postconditions(
+    snapshot: &LiquidationSpecSnapshot,
+    position: &Position,
+    actual_debt_liquidated: i128,
+    collateral_seized: i128,
+) -> bool {
+    let debt_after = position.debt.checked_add(position.borrow_interest);
+
+    actual_debt_liquidated > 0
+        && actual_debt_liquidated <= snapshot.total_debt_before
+        && collateral_seized >= 0
+        && collateral_seized <= snapshot.collateral_before
+        && position.collateral <= snapshot.collateral_before
+        && debt_after
+            .map(|v| v <= snapshot.total_debt_before)
+            .unwrap_or(false)
 }
 
 /// Helper to get asset decimals from the token contract or default to 7 for XLM.
@@ -154,9 +196,14 @@ pub fn liquidate(
     if debt_amount <= 0 {
         return Err(LiquidationError::InvalidAmount);
     }
+    debug_assert!(fv_liquidate_preconditions(debt_amount));
     
     // Explicit authorization check for liquidator
     liquidator.require_auth();
+
+    // Reentrancy guard for all liquidation external-call paths.
+    let _guard =
+        crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| LiquidationError::Reentrancy)?;
 
     // 2. Authorization and Pause Checks
     if is_emergency_paused(env) {
@@ -183,6 +230,10 @@ pub fn liquidate(
     let debt_decimals = get_asset_decimals(env, &debt_asset);
     let collateral_decimals = get_asset_decimals(env, &collateral_asset);
 
+    if debt_decimals > MAX_DECIMALS_FOR_SCALING || collateral_decimals > MAX_DECIMALS_FOR_SCALING {
+        return Err(LiquidationError::Overflow);
+    }
+
     // 6. ENFORCE HEALTH AND CLOSE FACTOR
     // Accrue debt up to current timestamp for accurate health assessment
     let current_total_debt = calculate_accrued_debt(env, &position)?;
@@ -198,6 +249,11 @@ pub fn liquidate(
     if actual_debt_liquidated <= 0 {
         return Err(LiquidationError::InvalidAmount);
     }
+
+    let fv_snapshot = LiquidationSpecSnapshot {
+        total_debt_before: current_total_debt,
+        collateral_before: borrower_collateral,
+    };
 
     // 7. CALCULATE SEIZURE WITH PRECISION MATH
     // math: amount * price_debt * (10000 + incentive) * 10^col_decimals / (price_col * 10000 * 10^debt_decimals)
@@ -296,6 +352,15 @@ pub fn liquidate(
     emit_position_updated_event(env, &borrower, &position);
     add_activity_log(env, &borrower, Symbol::new(env, "liquidate"), actual_debt_liquidated, debt_asset.clone(), position.last_accrual_time).ok();
 
+    // Formal-verification postcondition note:
+    // liquidation cannot increase borrower debt/collateral and must respect caps.
+    debug_assert!(fv_liquidate_postconditions(
+        &fv_snapshot,
+        &position,
+        actual_debt_liquidated,
+        collateral_seized
+    ));
+
     Ok((actual_debt_liquidated, collateral_seized, incentive_amount))
 }
 
@@ -321,4 +386,43 @@ fn update_protocol_analytics(
 
     env.storage().persistent().set(&analytics_key, &analytics);
     Ok(())
+}
+
+#[cfg(test)]
+mod verification_hooks_tests {
+    use super::*;
+
+    #[test]
+    fn liquidate_hooks_accept_valid_transition() {
+        let snapshot = LiquidationSpecSnapshot {
+            total_debt_before: 1_000,
+            collateral_before: 800,
+        };
+        let position = Position {
+            collateral: 600,
+            debt: 700,
+            borrow_interest: 100,
+            last_accrual_time: 0,
+        };
+
+        assert!(fv_liquidate_preconditions(100));
+        assert!(fv_liquidate_postconditions(&snapshot, &position, 200, 200));
+    }
+
+    #[test]
+    fn liquidate_hooks_reject_invalid_transition() {
+        let snapshot = LiquidationSpecSnapshot {
+            total_debt_before: 1_000,
+            collateral_before: 800,
+        };
+        let position = Position {
+            collateral: 900,
+            debt: 900,
+            borrow_interest: 200,
+            last_accrual_time: 0,
+        };
+
+        assert!(!fv_liquidate_preconditions(0));
+        assert!(!fv_liquidate_postconditions(&snapshot, &position, 1_100, 900));
+    }
 }
