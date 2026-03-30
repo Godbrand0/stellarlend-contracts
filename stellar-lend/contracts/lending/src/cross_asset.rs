@@ -265,7 +265,7 @@ pub fn deposit_collateral_asset(
 
     // Transfer tokens from user to contract
     let token_client = token::Client::new(env, &asset);
-    token_client.transfer(&user, &env.current_contract_address(), &amount);
+    token_client.transfer(&user, env.current_contract_address(), &amount);
 
     CrossDepositEvent {
         user,
@@ -426,7 +426,7 @@ pub fn repay_asset(
 
     // Transfer tokens from user to contract
     let token_client = token::Client::new(env, &asset);
-    token_client.transfer(&user, &env.current_contract_address(), &repay_amount);
+    token_client.transfer(&user, env.current_contract_address(), &repay_amount);
 
     CrossRepayEvent {
         user,

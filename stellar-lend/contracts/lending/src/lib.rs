@@ -104,17 +104,12 @@ mod withdraw_test;
 #[cfg(test)]
 mod borrow_test_booster;
 #[cfg(test)]
-mod liquidation_boundary_test;
-#[cfg(test)]
+mod liquidation_boundary_test;#[cfg(test)]
 mod multi_user_contention_test;
 #[cfg(test)]
 mod oracle_test;
 #[cfg(test)]
-mod oracle_test;
-#[cfg(test)]
-mod stress_test;
-
-#[contract]
+mod stress_test;#[contract]
 pub struct LendingContract;
 
 #[contractimpl]
