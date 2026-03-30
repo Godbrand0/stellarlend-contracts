@@ -1,4 +1,5 @@
 use soroban_sdk::{contracttype, Address, Bytes, String, Symbol, Vec, Val};
+use crate::prelude::*;
 
 // ========================================================================
 // Proposal Types

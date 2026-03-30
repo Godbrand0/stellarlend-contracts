@@ -96,7 +96,7 @@ impl MockFlashLoanReceiver {
             // No, `repay_flash_loan` usually transfers FROM the user TO the contract.
 
             // Let's assume we need to call repay_flash_loan
-            token_client.approve(&provider, &total_debt, &200);
+            token_client.approve(&env.current_contract_address(), &provider, &total_debt, &200);
             client.repay_flash_loan(&env.current_contract_address(), &asset, &total_debt);
         }
 
@@ -150,16 +150,23 @@ fn setup_protocol<'a>(
 
     // Enable asset in protocol
     client.update_asset_config(
-        &token_addr,
-        &crate::deposit::AssetParams {
-            deposit_enabled: true,
-            collateral_factor: 7500, // 75%
-            max_deposit: i128::MAX,
-            borrow_fee_bps: 50,
-        },
+        &Some(token_addr.clone()),
+        &Some(7500),
+        &Some(8000),
+        &Some(i128::MAX),
+        &Some(i128::MAX),
+        &Some(true),
+        &Some(true),
     );
 
     (client, protocol_id, admin, user, token_client)
+}
+
+fn get_user_position(env: &Env, contract_id: &Address, user: &Address) -> Option<crate::deposit::Position> {
+    env.as_contract(contract_id, || {
+        let key = crate::deposit::DepositDataKey::Position(user.clone());
+        env.storage().persistent().get::<_, crate::deposit::Position>(&key)
+    })
 }
 
 #[test]
@@ -265,7 +272,7 @@ fn test_deposit_borrow_interactions() {
     env.budget().print();
 
     // Verify internal state
-    let position = client.get_user_position(&user);
+    let _position = get_user_position(&env, &protocol_id, &user).unwrap();
     // Assuming get_user_position returns something we can check
     // We can check CollateralBalance directly if getter exists
     // client.get_collateral_balance(&user, &Some(token_addr.clone()));
@@ -305,7 +312,7 @@ fn test_cross_contract_error_propagation() {
     // Test that errors from Token contract propagate correctly
     let env = Env::default();
     env.mock_all_auths();
-    let (client, protocol_id, _, user, token_client) = setup_protocol(&env);
+    let (client, protocol_id, _admin, user, token_client) = setup_protocol(&env);
 
     // User tries to deposit more than they have
     let huge_amount = 1_000_000_000_000i128;

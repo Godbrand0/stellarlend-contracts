@@ -1,4 +1,5 @@
 use soroban_sdk::{contracttype, Address, Vec, Env, Map};
+use crate::prelude::*;
 
 #[derive(Clone)]
 #[contracttype]

@@ -1,8 +1,12 @@
+#![no_std]
 #![allow(deprecated)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
 use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec, contracttype, contracterror};
+
+pub mod prelude;
+pub use prelude::*;
 
 pub mod admin;
 pub mod amm;
@@ -573,7 +577,7 @@ impl HelloContract {
         env: Env,
         caller: Address,
         asset: Option<Address>,
-        _to: Address,
+        to: Address,
         amount: i128,
     ) -> Result<(), RiskManagementError> {
         require_admin(&env, &caller)?;
@@ -1015,7 +1019,7 @@ impl HelloContract {
         description: soroban_sdk::String,
         voting_threshold: Option<i128>,
     ) -> Result<u64, errors::GovernanceError> {
-        let soroban_desc = soroban_sdk::String::from_str(&env, &description.to_string());
+        let soroban_desc = description;
         governance::create_proposal(
             &env,
             proposer,

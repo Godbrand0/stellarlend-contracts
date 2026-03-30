@@ -2,11 +2,12 @@
 use crate::events::{emit_liquidation, LiquidationEvent};
 use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec, I256, token};
 use soroban_sdk::token::Client as TokenClient;
+use crate::prelude::*;
 
 use crate::deposit::{
     add_activity_log, emit_analytics_updated_event, emit_position_updated_event,
-    emit_user_activity_tracked_event, update_protocol_analytics, AssetParams, DepositDataKey,
-    Position, ProtocolAnalytics, UserAnalytics,
+    emit_user_activity_tracked_event, AssetParams, DepositDataKey, Position,
+    ProtocolAnalytics, UserAnalytics,
 };
 use crate::oracle::get_price;
 use crate::risk_management::{
@@ -42,7 +43,7 @@ pub enum LiquidationError {
     /// Invalid debt asset
     InvalidDebtAsset = 10,
     /// Price not available for asset
-    PriceNotAvailable = 10,
+    PriceNotAvailable = 11,
 }
 
 /// Helper to get asset decimals from the token contract or default to 7 for XLM.
@@ -283,7 +284,7 @@ pub fn liquidate(
     emit_liquidation(env, LiquidationEvent {
         liquidator: liquidator.clone(),
         borrower: borrower.clone(),
-        debt_asset,
+        debt_asset: debt_asset.clone(),
         collateral_asset,
         debt_liquidated: actual_debt_liquidated,
         collateral_seized,
@@ -293,7 +294,7 @@ pub fn liquidate(
         timestamp: position.last_accrual_time,
     });
     
-    emit_position_updated_event(env, &borrower, &position);
+    emit_position_updated_event(env, &borrower, &position, Symbol::new(env, "liquidate"), position.last_accrual_time);
     add_activity_log(env, &borrower, Symbol::new(env, "liquidate"), actual_debt_liquidated, debt_asset.clone(), position.last_accrual_time).ok();
 
     Ok((actual_debt_liquidated, collateral_seized, incentive_amount))

@@ -9,6 +9,7 @@
 //! - **Events**: Emits events for critical admin actions (admin changes, role grants/revocations).
 
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Symbol, Val, Vec};
+use crate::prelude::*;
 
 /// Errors that can occur during admin operations
 #[contracterror]

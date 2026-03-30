@@ -37,6 +37,7 @@
 //! - `ActivityLog` — bounded append (max 1000 entries, FIFO eviction).
 
 use soroban_sdk::{contracterror, Address, Env, Map, Symbol};
+use crate::prelude::*;
 
 use crate::deposit::{
     add_activity_log, emit_analytics_updated_event, emit_position_updated_event,
@@ -393,7 +394,7 @@ pub fn withdraw_collateral(
             timestamp,
         },
     );
-    emit_position_updated_event(env, &user, &position);
+    emit_position_updated_event(env, &user, &position, Symbol::new(env, "withdraw"), timestamp);
     emit_analytics_updated_event(env, &user, "withdraw", amount, timestamp);
     emit_user_activity_tracked_event(env, &user, Symbol::new(env, "withdraw"), amount, timestamp);
 

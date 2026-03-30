@@ -25,12 +25,18 @@
 //!   rejected even after un-pausing.
 
 use super::*;
-use crate::amm::{AmmSettings, AmmProtocolConfig, TokenPair, SwapParams, LiquidityParams};
+use crate::amm::{AmmProtocolConfig, LiquidityParams, SwapParams};
+use stellarlend_amm::{AmmSettings, TokenPair, AmmContract, AmmContractClient, AmmCallbackData};
 use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address, Env, Symbol, Vec};
 
 // ─────────────────────────────────────────────
 // Shared test helpers
 // ─────────────────────────────────────────────
+
+#[soroban_sdk::contract]
+pub struct MockAmm;
+#[soroban_sdk::contractimpl]
+impl MockAmm {}
 
 /// Creates an [`AmmContract`] client registered against a fresh environment.
 fn setup_contract(env: &Env) -> AmmContractClient {

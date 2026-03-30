@@ -5,6 +5,7 @@
 
 use crate::risk_management::require_admin;
 use soroban_sdk::{contracterror, contracttype, Address, Env, Symbol, Val, Vec};
+use crate::prelude::*;
 
 /// Errors that can occur during configuration operations
 #[contracterror]

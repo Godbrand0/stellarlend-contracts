@@ -16,7 +16,17 @@ fn setup() -> (Env, Address, Address) {
     let contract_id = env.register(HelloContract, ());
     let admin = Address::generate(&env);
     env.as_contract(&contract_id, || {
-        crate::governance::initialize(&env, admin.clone()).unwrap();
+        crate::governance::initialize(
+            &env,
+            admin.clone(),
+            Address::generate(&env),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ).unwrap();
     });
     (env, contract_id, admin)
 }

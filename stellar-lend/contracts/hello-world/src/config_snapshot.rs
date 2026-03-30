@@ -22,6 +22,7 @@
 use crate::risk_management::RiskDataKey;
 use crate::risk_params::{RiskParams, RiskParamsDataKey};
 use soroban_sdk::{contracttype, Env};
+use crate::prelude::*;
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]

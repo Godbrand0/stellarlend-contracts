@@ -23,6 +23,7 @@ use crate::events::{
     PauseStateChangedEvent, RiskParamsUpdatedEvent,
 };
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Map, Symbol, Val, Vec};
+use crate::prelude::*;
 
 /// Errors that can occur during risk management operations
 #[contracterror]

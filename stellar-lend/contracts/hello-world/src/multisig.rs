@@ -22,6 +22,7 @@
 
 #![allow(unused)]
 use soroban_sdk::{Address, Env, Symbol, Vec};
+use crate::prelude::*;
 
 use crate::governance::{
     approve_proposal, create_proposal, emit_approval_event, emit_proposal_executed_event,
