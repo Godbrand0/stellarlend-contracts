@@ -10,6 +10,8 @@
 //! The guard does not persist across transactions and does not replace authorization,
 //! pause-switch, or collateral checks. It is a defense-in-depth layer for fund-moving entry
 //! points that perform external contract calls.
+#![cfg(not(tarpaulin_include))]
+#![allow(unexpected_cfgs)]
 
 use soroban_sdk::{contracttype, Env, Symbol};
 
@@ -70,6 +72,12 @@ impl Drop for ReentrancyGuard<'_> {
             .storage()
             .temporary()
             .remove(&ReentrancyDataKey::LockV1);
+    }
+}
+
+impl core::fmt::Debug for ReentrancyGuard<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ReentrancyGuard").finish()
     }
 }
 

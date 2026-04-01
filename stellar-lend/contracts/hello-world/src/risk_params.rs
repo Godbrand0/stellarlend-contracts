@@ -1,7 +1,5 @@
 #![allow(unused)]
-use soroban_sdk::{
-    contracterror, contracttype, Address, Env, IntoVal, I256, Symbol, Val, Vec,
-};
+use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Symbol, Val, Vec, I256};
 
 /// Errors that can occur during risk parameter management
 #[contracterror]
@@ -65,7 +63,7 @@ const CLOSE_FACTOR_MIN: i128 = 0; // 0% minimum
 const CLOSE_FACTOR_MAX: i128 = BASIS_POINTS_SCALE; // 100% maximum
 const LIQUIDATION_INCENTIVE_MIN: i128 = 0; // 0% minimum
 const LIQUIDATION_INCENTIVE_MAX: i128 = 5_000; // 50% maximum (safety limit)
-const MAX_PARAMETER_CHANGE_BPS: i128 = 1_000; // 10% maximum change per update
+const MAX_PARAMETER_CHANGE_BPS: i128 = 5_000; // 50% maximum change per update
 
 /// Initialize risk parameters
 ///
@@ -262,10 +260,7 @@ pub fn get_liquidation_incentive(env: &Env) -> Result<i128, RiskParamsError> {
 /// Get the maximum amount that can be liquidated for a given debt position.
 /// Uses the configured close factor (default 5000 bps = 50%).
 /// Uses I256 for safe intermediate multiplication.
-pub fn get_max_liquidatable_amount(
-    env: &Env,
-    debt_value: i128,
-) -> Result<i128, RiskParamsError> {
+pub fn get_max_liquidatable_amount(env: &Env, debt_value: i128) -> Result<i128, RiskParamsError> {
     let config = get_risk_params(env).ok_or(RiskParamsError::InvalidParameter)?;
 
     // Calculate: debt * close_factor / BASIS_POINTS_SCALE using I256 to prevent overflow

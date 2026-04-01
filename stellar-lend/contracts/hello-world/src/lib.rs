@@ -1,8 +1,12 @@
 #![allow(deprecated)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol, Vec};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol, Vec,
+};
+use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec};
 
 pub mod admin;
 pub mod amm;
@@ -29,33 +33,74 @@ pub mod risk_management;
 pub mod risk_params;
 pub mod storage;
 pub mod types;
+pub mod vesting;
 pub mod withdraw;
 
+#[cfg(test)]
+mod test_reentrancy;
+#[cfg(test)]
+mod test_vesting;
 #[cfg(test)]
 mod tests;
 // Legacy test suite currently mismatches contract API and is excluded from CI compile.
 // #[cfg(test)]
 // mod tests;
 
-use crate::deposit::{DepositDataKey, ProtocolAnalytics};
+use crate::oracle::OracleConfig;
+use crate::risk_management::{RiskConfig, RiskManagementError};
+
+/// Helper function to require admin authorization
+fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError> {
+    caller.require_auth();
+    let admin_key = DepositDataKey::Admin;
+    let admin = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, Address>(&admin_key)
+        .ok_or(RiskManagementError::Unauthorized)?;
+
+    if caller != &admin {
+        return Err(RiskManagementError::Unauthorized);
+    }
+    Ok(())
+}
+
+use borrow::borrow_asset;
+use deposit::deposit_collateral;
+use repay::repay_debt;
+
+use risk_management::{
+    check_emergency_pause, initialize_risk_management, is_emergency_paused, is_operation_paused,
+    set_pause_switch, set_pause_switches,
+};
+
 use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
+use risk_params::{
+    can_be_liquidated, get_liquidation_incentive_amount, get_max_liquidatable_amount,
+    initialize_risk_params, require_min_collateral_ratio, RiskParamsError,
+};
+use withdraw::withdraw_collateral;
 
 use crate::analytics::{
     generate_protocol_report, generate_user_report, get_recent_activity, get_user_activity_feed,
     AnalyticsError, ProtocolReport, UserReport,
 };
+
 use crate::config::{config_backup, config_get, config_restore, config_set, ConfigError};
+use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
 use crate::cross_asset::{
     get_asset_config_by_address, get_asset_list, get_total_borrow_for, get_total_supply_for,
     get_user_asset_position, get_user_position_summary, initialize_asset, update_asset_config,
     update_asset_price, AssetConfig, AssetKey, AssetPosition, CrossAssetError, UserPositionSummary,
 };
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use crate::flash_loan::{
     configure_flash_loan, execute_flash_loan, repay_flash_loan, set_flash_loan_fee, FlashLoanConfig,
 };
 
 #[allow(unused_imports)]
-use crate::bridge::{
+use bridge::{
     bridge_deposit, bridge_withdraw, get_bridge_config, list_bridges, register_bridge,
     set_bridge_fee, BridgeConfig, BridgeError,
 };
@@ -69,7 +114,7 @@ use crate::liquidate::liquidate;
 use crate::oracle::OracleConfig;
 use crate::risk_management::{
     check_emergency_pause, initialize_risk_management, is_emergency_paused, is_operation_paused,
-    require_admin, set_pause_switch, set_pause_switches, RiskConfig, RiskManagementError,
+    set_pause_switch, set_pause_switches, RiskConfig, RiskManagementError,
 };
 use crate::risk_params::{
     can_be_liquidated, get_liquidation_incentive_amount, get_max_liquidatable_amount,
@@ -80,6 +125,24 @@ use crate::types::{
     GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalType, RecoveryRequest,
     VoteInfo, VoteType,
 };
+
+/// Helper function to require admin authorization
+fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError> {
+    caller.require_auth();
+    let admin_key = DepositDataKey::Admin;
+    let admin = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, Address>(&admin_key)
+        .ok_or(RiskManagementError::Unauthorized)?;
+
+    if caller != &admin {
+        return Err(RiskManagementError::Unauthorized);
+    }
+    Ok(())
+}
+
+pub mod reentrancy;
 
 /// The StellarLend core contract.
 #[contract]
@@ -336,38 +399,20 @@ impl HelloContract {
         risk_management::get_risk_config(&env)
     }
 
-    pub fn set_pause_switch(
-        env: Env,
-        admin: Address,
-        operation: Symbol,
-        paused: bool,
-    ) -> Result<(), RiskManagementError> {
-        risk_management::set_pause_switch(&env, admin, operation, paused)
-    }
-
-    pub fn is_operation_paused(env: Env, operation: Symbol) -> bool {
-        risk_management::is_operation_paused(&env, operation)
-    }
-
-    pub fn is_emergency_paused(env: Env) -> bool {
-        risk_management::is_emergency_paused(&env)
-    }
-
-    pub fn set_emergency_pause(
-        env: Env,
-        admin: Address,
-        paused: bool,
-    ) -> Result<(), RiskManagementError> {
-        risk_management::set_emergency_pause(&env, admin, paused)
-    }
-
-
     /// Get minimum collateral ratio.
     /// Get a read-only configuration snapshot of the protocol
     ///
     /// # Returns
-    /// Returns Some(ConfigSnapshot) if initialized, None otherwise.
-    /// No authorization required - safe for any caller.
+    /// Returns `Some(ConfigSnapshot)` if the risk parameters are initialized, `None` otherwise.
+    ///
+    /// # Security
+    /// - **Authorization:** None required. Safe to be called by any unauthenticated address.
+    /// - **State Mutation:** Guaranteed to be strictly read-only. Never mutates storage.
+    /// - **Reentrancy:** Safe. Performs no cross-contract calls and only reads local storage.
+    ///
+    /// # Trust Boundaries
+    /// - The snapshot reflects parameters that can only be altered by the protocol `admin` or `guardian` roles.
+    /// - Does not process or authorize any token transfers.
     pub fn get_config_snapshot(env: Env) -> Option<ConfigSnapshot> {
         get_config_snapshot(&env)
     }
@@ -396,11 +441,6 @@ impl HelloContract {
     pub fn get_liquidation_incentive(env: Env) -> Result<i128, RiskManagementError> {
         risk_params::get_liquidation_incentive(&env)
             .map_err(|_| RiskManagementError::InvalidParameter)
-    }
-
-    /// Get current utilization (in basis points).
-    pub fn get_utilization(env: Env) -> i128 {
-        interest_rate::calculate_utilization(&env).unwrap_or(0)
     }
 
     /// Get current borrow rate (in basis points).
@@ -459,20 +499,6 @@ impl HelloContract {
         .map_err(|_| RiskManagementError::InvalidParameter)
     }
 
-    /// Set an emergency rate adjustment (admin only).
-    ///
-    /// The adjustment is added to the calculated borrow rate.
-    /// Bounded to ±10 000 bps (±100%).
-    pub fn set_emergency_rate_adjustment(
-        env: Env,
-        admin: Address,
-        adjustment_bps: i128,
-    ) -> Result<(), RiskManagementError> {
-        require_admin(&env, &admin)?;
-        interest_rate::set_emergency_rate_adjustment(&env, admin, adjustment_bps)
-            .map_err(|_| RiskManagementError::InvalidParameter)
-    }
-
     /// Get the current interest rate configuration.
     pub fn get_interest_rate_config(env: Env) -> Option<InterestRateConfig> {
         interest_rate::get_interest_rate_config(&env)
@@ -526,7 +552,7 @@ impl HelloContract {
         env: Env,
         caller: Address,
         asset: Option<Address>,
-        _to: Address,
+        to: Address,
         amount: i128,
     ) -> Result<(), RiskManagementError> {
         require_admin(&env, &caller)?;
@@ -697,8 +723,8 @@ impl HelloContract {
     pub fn amm_swap(
         env: Env,
         user: Address,
-        params: crate::amm::SwapParams,
-    ) -> Result<i128, crate::amm::AmmError> {
+        params: amm::SwapParams,
+    ) -> Result<i128, amm::AmmError> {
         amm::amm_swap(env, user, params)
     }
 
@@ -1192,7 +1218,18 @@ impl HelloContract {
 }
 
 #[cfg(test)]
+mod tests;
+
+// Legacy standalone tests currently mismatch contract API.
+// #[cfg(test)]
+// mod test_reentrancy;
 mod flash_loan_test;
+#[cfg(test)]
+// mod test;
+// #[cfg(test)]
+// mod test_reentrancy;
+#[cfg(test)]
+mod test_reentrancy;
 
 #[cfg(test)]
 mod amm_pause_integration_test;

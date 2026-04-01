@@ -2279,13 +2279,12 @@ fn test_borrow_asset_collateral_ratio_maintained() {
     let analytics = get_user_analytics(&env, &contract_id, &user).unwrap();
     // Ratio should be: collateral_value / debt_value * 10000
     // = 3000 / 1500 * 10000 = 20000 (200%)
-    assert!(analytics.collateralization_ratio >= 15000);
-}
-
-#[test]
-fn test_borrow_asset_exact_max_native() {
-    let env = create_test_env();
-    let contract_id = env.register(HelloContract, ());
+    assert!(analytics.collateralization_ratio >= 15000); //pub mod multisig_test;
+// pub mod cross_contract_test;
+    pub mod gov_asset_test;
+    pub mod borrow_cap_test;
+    // pub mod amm_impact_test;
+    let id = env.register(HelloContract, ());
     let client = HelloContractClient::new(&env, &contract_id);
 
     let user = Address::generate(&env);

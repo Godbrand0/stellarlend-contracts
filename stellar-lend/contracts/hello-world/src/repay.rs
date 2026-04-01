@@ -258,7 +258,7 @@ pub fn repay_debt(
         .checked_sub(interest_paid)
         .ok_or(RepayError::Overflow)?;
 
-    // Handle asset transfer - user pays the contract 
+    // Handle asset transfer - user pays the contract
     // Uses standardized SRC-20 transfer format requiring pre-authorization
     #[cfg(not(test))]
     {
@@ -281,11 +281,8 @@ pub fn repay_debt(
         .borrow_interest
         .checked_sub(interest_paid)
         .unwrap_or(0);
-    
-    position.debt = position
-        .debt
-        .checked_sub(principal_paid)
-        .unwrap_or(0);
+
+    position.debt = position.debt.checked_sub(principal_paid).unwrap_or(0);
 
     position.last_accrual_time = timestamp;
 
@@ -299,7 +296,7 @@ pub fn repay_debt(
             .ok_or(RepayError::Overflow)?
             .checked_div(10000)
             .unwrap_or(0); // Floor rounding bounds protocol take to >= 0
-            
+
         if reserve_amount > 0 {
             let reserve_key = DepositDataKey::ProtocolReserve(asset.clone());
             let current_reserve = env
@@ -318,7 +315,7 @@ pub fn repay_debt(
 
     update_user_analytics_repay(env, &user, repay_amount, timestamp)?;
     update_protocol_analytics_repay(env, repay_amount)?;
-    
+
     // Add to activity log tracking for metrics
     add_activity_log(
         env,
@@ -339,7 +336,7 @@ pub fn repay_debt(
     };
     log_repay(env, event);
     emit_position_updated_event(env, &user, &position, Symbol::new(env, "repay"), timestamp);
-    emit_analytics_updated_event(env, &user, "repay", repay_amount, timestamp);
+    emit_analytics_updated_event(env, &user, "repay", final_repay_amount, timestamp);
     emit_user_activity_tracked_event(
         env,
         &user,
@@ -352,7 +349,7 @@ pub fn repay_debt(
         .debt
         .checked_add(position.borrow_interest)
         .unwrap_or(0);
-        
+
     Ok((remaining_debt, interest_paid, principal_paid))
 }
 
@@ -377,7 +374,7 @@ fn update_user_analytics_repay(
         .storage()
         .persistent()
         .get::<DepositDataKey, UserAnalytics>(&analytics_key)
-        .unwrap_or_else(|| UserAnalytics {
+        .unwrap_or(UserAnalytics {
             total_deposits: 0,
             total_borrows: 0,
             total_withdrawals: 0,

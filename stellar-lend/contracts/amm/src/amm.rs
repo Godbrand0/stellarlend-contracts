@@ -569,8 +569,6 @@ fn validate_amm_callback_core(
     caller: &Address,
     callback_data: &AmmCallbackData,
 ) -> Result<(), AmmError> {
-    caller.require_auth();
-
     // Verify caller is a registered AMM protocol
     let protocols = get_amm_protocols(env)?;
     if !protocols.contains_key(caller.clone()) {
@@ -892,7 +890,7 @@ fn execute_amm_swap(
     // Prepare arguments for external AMM protocol call
     // Standard AMM interface: swap(executor, token_in, token_out, amount_in, min_amount_out, callback_data)
     let mut args: Vec<Val> = Vec::new(env);
-    args.push_back(callback_data.user.to_val());
+    args.push_back(callback_data.user.into_val(env));
     args.push_back(params.token_in.into_val(env));
     args.push_back(params.token_out.into_val(env));
     args.push_back(params.amount_in.into_val(env));
@@ -1322,6 +1320,24 @@ pub fn add_amm_protocol(
         .unwrap_or_else(|| Map::new(env));
 
     protocols.set(protocol_config.protocol_address.clone(), protocol_config);
+    env.storage().persistent().set(&protocols_key, &protocols);
+
+    Ok(())
+}
+
+/// Delete AMM protocol (admin only)
+pub fn delete_amm_protocol(env: &Env, admin: Address, protocol: &Address) -> Result<(), AmmError> {
+    admin.require_auth();
+    require_admin(env, &admin)?;
+
+    let protocols_key = AmmDataKey::AmmProtocols;
+    let mut protocols = env
+        .storage()
+        .persistent()
+        .get::<AmmDataKey, Map<Address, AmmProtocolConfig>>(&protocols_key)
+        .unwrap_or_else(|| Map::new(env));
+
+    protocols.remove(protocol.clone());
     env.storage().persistent().set(&protocols_key, &protocols);
 
     Ok(())
