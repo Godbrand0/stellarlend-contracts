@@ -52,6 +52,7 @@
 use soroban_sdk::{
     contracterror, contractevent, contracttype, symbol_short, Address, Env, Map, Symbol, Vec,
 };
+use crate::prelude::*;
 
 // ============================================================================
 // Types

@@ -12,6 +12,7 @@
 //! - **Event Auditing**: Detailed event emission for all role and admin lifecycle changes.
 
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Symbol, Val, Vec};
+use crate::prelude::*;
 
 /// Errors that can occur during admin operations
 #[contracterror]

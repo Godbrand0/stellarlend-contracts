@@ -1,4 +1,4 @@
-#![cfg(not(tarpaulin_include))]
+// #![cfg(not(tarpaulin_include))]
 #![allow(unexpected_cfgs)]
 //! Reentrancy protection for same-transaction nested calls.
 //!

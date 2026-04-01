@@ -46,6 +46,7 @@ mod tests;
 // #[cfg(test)]
 // mod tests;
 
+use crate::oracle::OracleConfig;
 use crate::risk_management::{RiskConfig, RiskManagementError};
 
 /// Helper function to require admin authorization
@@ -87,11 +88,13 @@ use crate::analytics::{
 };
 
 use crate::config::{config_backup, config_get, config_restore, config_set, ConfigError};
+use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
 use crate::cross_asset::{
     get_asset_config_by_address, get_asset_list, get_total_borrow_for, get_total_supply_for,
     get_user_asset_position, get_user_position_summary, initialize_asset, update_asset_config,
     update_asset_price, AssetConfig, AssetKey, AssetPosition, CrossAssetError, UserPositionSummary,
 };
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use crate::flash_loan::{
     configure_flash_loan, execute_flash_loan, repay_flash_loan, set_flash_loan_fee, FlashLoanConfig,
 };

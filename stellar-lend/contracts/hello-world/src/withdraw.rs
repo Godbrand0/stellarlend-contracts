@@ -37,6 +37,7 @@
 //! - `ActivityLog` — bounded append (max 1000 entries, FIFO eviction).
 
 use soroban_sdk::{contracterror, Address, Env, Map, Symbol};
+use crate::prelude::*;
 
 use crate::deposit::{
     add_activity_log, emit_analytics_updated_event, emit_position_updated_event,

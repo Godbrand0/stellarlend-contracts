@@ -21,6 +21,7 @@
 #![allow(unused)]
 
 use soroban_sdk::{Address, Env, Vec};
+use crate::prelude::*;
 
 use crate::errors::GovernanceError;
 use crate::governance::{

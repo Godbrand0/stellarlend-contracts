@@ -24,6 +24,7 @@
 
 #![allow(unused)]
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Map, Symbol, Val, Vec};
+use crate::prelude::*;
 
 use crate::events::{
     emit_analytics_updated, emit_borrower_health_v1, emit_deposit, emit_position_updated,

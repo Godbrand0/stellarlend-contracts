@@ -33,6 +33,11 @@ use crate::amm::{AmmProtocolConfig, MockAmm, SwapParams, TokenPair, AmmContract,
 // Shared test helpers
 // ─────────────────────────────────────────────
 
+#[soroban_sdk::contract]
+pub struct MockAmm;
+#[soroban_sdk::contractimpl]
+impl MockAmm {}
+
 /// Creates an [`AmmContract`] client registered against a fresh environment.
 fn setup_contract(env: &Env) -> AmmContractClient {
     AmmContractClient::new(env, &env.register(AmmContract {}, ()))

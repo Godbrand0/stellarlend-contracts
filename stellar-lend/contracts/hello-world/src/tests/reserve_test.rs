@@ -512,7 +512,7 @@ fn test_set_treasury_address_by_non_admin() {
 
 #[test]
 fn test_set_treasury_address_to_contract() {
-    let (env, contract_id, admin, _user, _treasury) = setup_test_env();
+    let (env, contract_id, admin, _user, treasury) = setup_test_env();
 
     // Try to set treasury to contract address - should fail
     let contract_addr = contract_id.clone();

@@ -57,6 +57,7 @@
 #![allow(unused_variables)]
 
 use soroban_sdk::{token::TokenClient, Address, Env, String, Symbol, Val, Vec};
+use crate::prelude::*;
 
 use crate::errors::GovernanceError;
 use crate::storage::{GovernanceDataKey, GuardianConfig};
@@ -765,12 +766,13 @@ pub(crate) fn execute_proposal_action(
 ) -> Result<(), GovernanceError> {
     match proposal_type {
         ProposalType::MinCollateralRatio(val) => {
-            crate::risk_params::set_risk_params(env, Some(*val), None, None, None)
+            crate::risk_params::set_risk_params(env, executor, Some(*val), None, None, None)
                 .map_err(|_| GovernanceError::ExecutionFailed)?;
         }
         ProposalType::RiskParams(min_cr, liq_threshold, close_factor, liq_incentive) => {
             crate::risk_params::set_risk_params(
                 env,
+                executor,
                 *min_cr,
                 *liq_threshold,
                 *close_factor,

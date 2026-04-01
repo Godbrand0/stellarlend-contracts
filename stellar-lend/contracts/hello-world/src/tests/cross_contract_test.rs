@@ -167,6 +167,13 @@ fn setup_protocol<'a>(
     (client, protocol_id, admin, user, token_client)
 }
 
+fn get_user_position(env: &Env, contract_id: &Address, user: &Address) -> Option<crate::deposit::Position> {
+    env.as_contract(contract_id, || {
+        let key = crate::deposit::DepositDataKey::Position(user.clone());
+        env.storage().persistent().get::<_, crate::deposit::Position>(&key)
+    })
+}
+
 #[test]
 fn test_flash_loan_happy_path() {
     let env = Env::default();
@@ -311,7 +318,7 @@ fn test_cross_contract_error_propagation() {
     // Test that errors from Token contract propagate correctly
     let env = Env::default();
     env.mock_all_auths();
-    let (client, protocol_id, _, user, token_client) = setup_protocol(&env);
+    let (client, protocol_id, _admin, user, token_client) = setup_protocol(&env);
 
     // User tries to deposit more than they have
     let huge_amount = 1_000_000_000_000i128;
