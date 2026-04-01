@@ -48,10 +48,19 @@ pub fn ms_set_admins(
         }
     }
 
-    let existing = get_multisig_config(env);
-    if let Some(config) = existing {
-        // Post-bootstrap: must be an existing admin
-        if !config.admins.contains(&caller) {
+    let existing = if let Some(config) = get_multisig_config(env) {
+        Some(config.admins)
+    } else {
+        None
+    };
+    if existing.is_none() {
+        // Bootstrap — accept any caller, just persist the list
+        env.storage()
+            .persistent()
+            .set(&GovernanceDataKey::MultisigAdmins, &admins);
+    } else if let Some(existing_admins) = existing {
+        // Post-bootstrap — must be an existing admin
+        if !existing_admins.contains(&caller) {
             return Err(GovernanceError::Unauthorized);
         }
     }
@@ -84,13 +93,22 @@ pub fn set_ms_threshold(env: &Env, caller: Address, threshold: u32) -> Result<()
     Ok(())
 }
 
-// ============================================================================
-// Proposal Creation
-// ============================================================================
-
-/// Creates a proposal to update the minimum collateral ratio (multisig admins only).
+/// Creates a proposal to update the minimum collateral ratio.
 ///
-/// Proposer auto-approves. Threshold and timelock are enforced at execution.
+/// The proposer must be a registered admin. Once created,
+/// the proposal is automatically approved by the proposer.
+/// Only one active proposal can exist at a time.
+///
+/// `new_ratio` is expressed in basis points
+/// (e.g. 15000 = 150%) and must be greater than 100%.
+///
+/// # Returns
+/// The ID of the newly created proposal.
+///
+/// # Errors
+/// - [`GovernanceError::Unauthorized`] if the caller is not an admin.
+/// - [`GovernanceError::InvalidProposal`] if the ratio is economically invalid
+///   or proposal creation fails.
 pub fn ms_propose_set_min_cr(
     env: &Env,
     proposer: Address,
@@ -109,8 +127,14 @@ pub fn ms_propose_set_min_cr(
         return Err(GovernanceError::InvalidProposal);
     }
 
-    let description = String::from_str(env, "Multisig: Set Minimum Collateral Ratio");
-    let proposal_type = ProposalType::MinCollateralRatio(new_ratio);
+    // Delegates auth check + proposal creation to governance.rs
+    let proposal_id = crate::governance::propose_set_min_collateral_ratio(
+        env,
+        proposer.clone(),
+        new_ratio
+            .try_into()
+            .map_err(|_| GovernanceError::MathOverflow)?,
+    )?;
 
     // Call create_proposal directly
     let proposal_id = crate::governance::create_proposal(
@@ -231,4 +255,30 @@ pub fn get_ms_proposal(env: &Env, proposal_id: u64) -> Option<Proposal> {
 /// Returns approvals for a specific proposal.
 pub fn get_ms_approvals(env: &Env, proposal_id: u64) -> Option<Vec<Address>> {
     get_proposal_approvals(env, proposal_id)
+}
+
+/// Set the multisig approval threshold (admin only).
+pub fn set_ms_threshold(env: &Env, caller: Address, threshold: u32) -> Result<(), GovernanceError> {
+    caller.require_auth();
+
+    if threshold == 0 {
+        return Err(GovernanceError::InvalidThreshold);
+    }
+
+    let config = get_multisig_config(env).ok_or(GovernanceError::NotInitialized)?;
+    if !config.admins.contains(&caller) {
+        return Err(GovernanceError::Unauthorized);
+    }
+
+    if threshold > config.admins.len() as u32 {
+        return Err(GovernanceError::InvalidThreshold);
+    }
+
+    let mut new_config = config;
+    new_config.threshold = threshold;
+
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::MultisigConfig, &new_config);
+    Ok(())
 }

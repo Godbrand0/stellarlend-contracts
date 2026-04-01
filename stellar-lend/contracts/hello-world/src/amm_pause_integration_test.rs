@@ -25,9 +25,7 @@
 //!   rejected even after un-pausing.
 
 use super::*;
-use crate::amm::{
-    AmmCallbackData, AmmSettings, LiquidityParams,
-};
+use crate::amm::{AmmProtocolConfig, AmmSettings, LiquidityParams, SwapParams, TokenPair};
 use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address, Env, Symbol, Vec};
 use crate::amm::{AmmProtocolConfig, MockAmm, SwapParams, TokenPair, AmmContract, AmmContractClient};
 

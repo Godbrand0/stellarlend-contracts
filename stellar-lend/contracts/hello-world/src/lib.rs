@@ -1,15 +1,15 @@
 #![allow(deprecated)]
 #![allow(unused_imports)]
 #![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol, Vec,
 };
+use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec};
 
 pub mod admin;
 pub mod amm;
-pub use stellarlend_amm::DebugConfig;
-pub use stellarlend_amm::AmmProtocolConfig;
 pub mod analytics;
 pub mod borrow;
 pub mod bridge;
@@ -26,14 +26,20 @@ pub mod liquidate;
 pub mod multisig;
 pub mod oracle;
 pub mod recovery;
+pub mod reentrancy;
 pub mod repay;
 pub mod reserve;
 pub mod risk_management;
 pub mod risk_params;
 pub mod storage;
 pub mod types;
+pub mod vesting;
 pub mod withdraw;
 
+#[cfg(test)]
+mod test_reentrancy;
+#[cfg(test)]
+mod test_vesting;
 #[cfg(test)]
 mod tests;
 // Legacy test suite currently mismatches contract API and is excluded from CI compile.
@@ -41,40 +47,100 @@ mod tests;
 // mod tests;
 
 use crate::oracle::OracleConfig;
-use crate::risk_management::{
+use crate::risk_management::{RiskConfig, RiskManagementError};
+
+/// Helper function to require admin authorization
+fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError> {
+    caller.require_auth();
+    let admin_key = DepositDataKey::Admin;
+    let admin = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, Address>(&admin_key)
+        .ok_or(RiskManagementError::Unauthorized)?;
+
+    if caller != &admin {
+        return Err(RiskManagementError::Unauthorized);
+    }
+    Ok(())
+}
+
+use borrow::borrow_asset;
+use deposit::deposit_collateral;
+use repay::repay_debt;
+
+use risk_management::{
     check_emergency_pause, initialize_risk_management, is_emergency_paused, is_operation_paused,
-    require_admin, set_pause_switch, set_pause_switches, RiskConfig, RiskManagementError,
+    set_pause_switch, set_pause_switches,
 };
-use crate::risk_params::{
+
+use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
+use risk_params::{
     can_be_liquidated, get_liquidation_incentive_amount, get_max_liquidatable_amount,
     initialize_risk_params, require_min_collateral_ratio, RiskParamsError,
 };
-use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
-use crate::deposit::{DepositDataKey, ProtocolAnalytics};
+use withdraw::withdraw_collateral;
+
 use crate::analytics::{
     generate_protocol_report, generate_user_report, get_recent_activity, get_user_activity_feed,
     AnalyticsError, ProtocolReport, UserReport,
 };
-use crate::bridge::{BridgeConfig, BridgeError};
+
 use crate::config::{config_backup, config_get, config_restore, config_set, ConfigError};
+use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
 use crate::cross_asset::{
     get_asset_config_by_address, get_asset_list, get_total_borrow_for, get_total_supply_for,
     get_user_asset_position, get_user_position_summary, initialize_asset, update_asset_config,
     update_asset_price, AssetConfig, AssetKey, AssetPosition, CrossAssetError, UserPositionSummary,
 };
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use crate::flash_loan::{
     configure_flash_loan, execute_flash_loan, repay_flash_loan, set_flash_loan_fee, FlashLoanConfig,
 };
+
+#[allow(unused_imports)]
+use bridge::{
+    bridge_deposit, bridge_withdraw, get_bridge_config, list_bridges, register_bridge,
+    set_bridge_fee, BridgeConfig, BridgeError,
+};
+
+#[allow(unused_imports)]
 use crate::interest_rate::{
     initialize_interest_rate_config, update_interest_rate_config, InterestRateConfig,
     InterestRateError,
 };
 use crate::liquidate::liquidate;
+use crate::oracle::OracleConfig;
+use crate::risk_management::{
+    check_emergency_pause, initialize_risk_management, is_emergency_paused, is_operation_paused,
+    set_pause_switch, set_pause_switches, RiskConfig, RiskManagementError,
+};
+use crate::risk_params::{
+    can_be_liquidated, get_liquidation_incentive_amount, get_max_liquidatable_amount,
+    initialize_risk_params, require_min_collateral_ratio, RiskParamsError,
+};
 use crate::storage::GuardianConfig;
 use crate::types::{
-    GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalStatus, ProposalType,
-    RecoveryRequest, VoteInfo, VoteType,
+    GovernanceConfig, MultisigConfig, Proposal, ProposalOutcome, ProposalType, RecoveryRequest,
+    VoteInfo, VoteType,
 };
+
+/// Helper function to require admin authorization
+fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError> {
+    caller.require_auth();
+    let admin_key = DepositDataKey::Admin;
+    let admin = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, Address>(&admin_key)
+        .ok_or(RiskManagementError::Unauthorized)?;
+
+    if caller != &admin {
+        return Err(RiskManagementError::Unauthorized);
+    }
+    Ok(())
+}
 
 pub mod reentrancy;
 
@@ -103,8 +169,8 @@ impl HelloContract {
             return Err(RiskManagementError::AlreadyInitialized);
         }
 
-        crate::admin::set_admin(&env, admin.clone()).unwrap();
-        
+        crate::admin::set_admin(&env, admin.clone(), None)
+            .map_err(|_| RiskManagementError::Unauthorized)?;
         initialize_risk_management(&env, admin.clone())?;
         initialize_risk_params(&env).map_err(|_| RiskManagementError::InvalidParameter)?;
         initialize_interest_rate_config(&env, admin.clone()).map_err(|e| {
@@ -114,7 +180,6 @@ impl HelloContract {
                 RiskManagementError::Unauthorized
             }
         })?;
-
         Ok(())
     }
 
@@ -323,6 +388,7 @@ impl HelloContract {
         crate::repay::repay_debt(&env, user, asset, amount)
     }
 
+    /// Liquidate an undercollateralized position.
     pub fn liquidate(
         env: Env,
         liquidator: Address,
@@ -331,7 +397,7 @@ impl HelloContract {
         collateral_asset: Option<Address>,
         amount: i128,
     ) -> Result<i128, crate::liquidate::LiquidationError> {
-        let (repaid, _seized, _fee) = crate::liquidate::liquidate(
+        let (repaid, _seized, _fee) = liquidate(
             &env,
             liquidator,
             borrower,
@@ -347,76 +413,20 @@ impl HelloContract {
         risk_management::get_risk_config(&env)
     }
 
-    pub fn set_pause_switch(
-        env: Env,
-        admin: Address,
-        operation: Symbol,
-        paused: bool,
-    ) -> Result<(), RiskManagementError> {
-        risk_management::set_pause_switch(&env, admin, operation, paused)
-    }
-
-    pub fn is_operation_paused(env: Env, operation: Symbol) -> bool {
-        risk_management::is_operation_paused(&env, operation)
-    }
-
-    pub fn is_emergency_paused(env: Env) -> bool {
-        risk_management::is_emergency_paused(&env)
-    }
-
-    pub fn set_emergency_pause(
-        env: Env,
-        admin: Address,
-        paused: bool,
-    ) -> Result<(), RiskManagementError> {
-        risk_management::set_emergency_pause(&env, admin, paused)
-    }
-
-    /// Configure flash-loan parameters (admin only).
-    pub fn configure_flash_loan(
-        env: Env,
-        caller: Address,
-        config: FlashLoanConfig,
-    ) -> Result<(), crate::flash_loan::FlashLoanError> {
-        flash_loan::configure_flash_loan(&env, caller, config)
-    }
-
-    /// Set flash-loan fee in basis points (admin only).
-    pub fn set_flash_loan_fee(
-        env: Env,
-        caller: Address,
-        fee_bps: i128,
-    ) -> Result<(), crate::flash_loan::FlashLoanError> {
-        flash_loan::set_flash_loan_fee(&env, caller, fee_bps)
-    }
-
-    /// Execute flash loan.
-    pub fn execute_flash_loan(
-        env: Env,
-        user: Address,
-        asset: Address,
-        amount: i128,
-        callback: Address,
-    ) -> Result<i128, crate::flash_loan::FlashLoanError> {
-        flash_loan::execute_flash_loan(&env, user, asset, amount, callback)
-    }
-
-    /// Repay flash loan.
-    pub fn repay_flash_loan(
-        env: Env,
-        user: Address,
-        asset: Address,
-        amount: i128,
-    ) -> Result<(), crate::flash_loan::FlashLoanError> {
-        flash_loan::repay_flash_loan(&env, user, asset, amount)
-    }
-
     /// Get minimum collateral ratio.
     /// Get a read-only configuration snapshot of the protocol
     ///
     /// # Returns
-    /// Returns Some(ConfigSnapshot) if initialized, None otherwise.
-    /// No authorization required - safe for any caller.
+    /// Returns `Some(ConfigSnapshot)` if the risk parameters are initialized, `None` otherwise.
+    ///
+    /// # Security
+    /// - **Authorization:** None required. Safe to be called by any unauthenticated address.
+    /// - **State Mutation:** Guaranteed to be strictly read-only. Never mutates storage.
+    /// - **Reentrancy:** Safe. Performs no cross-contract calls and only reads local storage.
+    ///
+    /// # Trust Boundaries
+    /// - The snapshot reflects parameters that can only be altered by the protocol `admin` or `guardian` roles.
+    /// - Does not process or authorize any token transfers.
     pub fn get_config_snapshot(env: Env) -> Option<ConfigSnapshot> {
         get_config_snapshot(&env)
     }
@@ -447,11 +457,6 @@ impl HelloContract {
             .map_err(|_| RiskManagementError::InvalidParameter)
     }
 
-    /// Get current utilization (in basis points).
-    pub fn get_utilization(env: Env) -> i128 {
-        interest_rate::calculate_utilization(&env).unwrap_or(0)
-    }
-
     /// Get current borrow rate (in basis points).
     pub fn get_borrow_rate(env: Env) -> i128 {
         interest_rate::calculate_borrow_rate(&env).unwrap_or(0)
@@ -462,14 +467,22 @@ impl HelloContract {
         interest_rate::calculate_supply_rate(&env).unwrap_or(0)
     }
 
-
-    /// Set emergency interest-rate adjustment in basis points (admin only).
-    pub fn set_emergency_rate_adjustment(
+    /// Configure flash-loan parameters (admin only).
+    pub fn configure_flash_loan(
         env: Env,
         caller: Address,
-        adjustment_bps: i128,
-    ) -> Result<(), crate::interest_rate::InterestRateError> {
-        interest_rate::set_emergency_rate_adjustment(&env, caller, adjustment_bps)
+        config: FlashLoanConfig,
+    ) -> Result<(), crate::flash_loan::FlashLoanError> {
+        flash_loan::configure_flash_loan(&env, caller, config)
+    }
+
+    /// Set flash-loan fee in basis points (admin only).
+    pub fn set_flash_loan_fee(
+        env: Env,
+        caller: Address,
+        fee_bps: i128,
+    ) -> Result<(), crate::flash_loan::FlashLoanError> {
+        flash_loan::set_flash_loan_fee(&env, caller, fee_bps)
     }
 
     /// Update interest rate model configuration (admin only).
@@ -500,23 +513,18 @@ impl HelloContract {
         .map_err(|_| RiskManagementError::InvalidParameter)
     }
 
-    /// Get current protocol utilization in basis points (0–10 000).
-    pub fn get_protocol_utilization(env: Env) -> i128 {
-        analytics::get_protocol_utilization(&env).unwrap_or(0)
-    }
-
     /// Get the current interest rate configuration.
     pub fn get_interest_rate_config(env: Env) -> Option<InterestRateConfig> {
         interest_rate::get_interest_rate_config(&env)
     }
 
-    /// Check if a position meets minimum collateral ratio.
+    /// Enforce minimum collateral ratio.
     pub fn require_min_collateral_ratio(
         env: Env,
         collateral_value: i128,
         debt_value: i128,
     ) -> Result<(), RiskManagementError> {
-        crate::risk_params::require_min_collateral_ratio(&env, collateral_value, debt_value)
+        risk_params::require_min_collateral_ratio(&env, collateral_value, debt_value)
             .map_err(|_| RiskManagementError::InsufficientCollateralRatio)
     }
 
@@ -558,7 +566,7 @@ impl HelloContract {
         env: Env,
         caller: Address,
         asset: Option<Address>,
-        _to: Address,
+        to: Address,
         amount: i128,
     ) -> Result<(), RiskManagementError> {
         crate::admin::require_admin(&env, &caller).map_err(|_| RiskManagementError::Unauthorized)?;
@@ -673,7 +681,7 @@ impl HelloContract {
     /// Set primary oracle for an asset (admin only).
     pub fn set_primary_oracle(env: Env, caller: Address, asset: Address, primary_oracle: Address) {
         oracle::set_primary_oracle(&env, caller, asset, primary_oracle)
-            .unwrap_or_else(|e| panic!("Oracle error: {e:?}"))
+            .unwrap_or_else(|e| panic!("Oracle error: {:?}", e))
     }
 
     /// Set fallback oracle for an asset (admin only).
@@ -684,6 +692,15 @@ impl HelloContract {
         fallback_oracle: Address,
     ) {
         oracle::set_fallback_oracle(&env, caller, asset, fallback_oracle).expect("Oracle error")
+    }
+
+    // ============================================================================
+    // Risk Management Methods
+    // ============================================================================
+
+    /// Initialize risk management (admin only).
+    pub fn initialize_risk_management(env: Env, admin: Address) -> Result<(), RiskManagementError> {
+        risk_management::initialize_risk_management(&env, admin)
     }
 
     // ============================================================================
@@ -720,9 +737,9 @@ impl HelloContract {
     pub fn amm_swap(
         env: Env,
         user: Address,
-        params: crate::amm::SwapParams,
-    ) -> Result<i128, crate::amm::AmmError> {
-        crate::amm::amm_swap(env, user, params)
+        params: amm::SwapParams,
+    ) -> Result<i128, amm::AmmError> {
+        amm::amm_swap(env, user, params)
     }
 
     // ============================================================================
@@ -830,8 +847,8 @@ impl HelloContract {
     // ============================================================================
 
     /// Initialize cross-asset lending module (admin only).
-    pub fn initialize_ca(env: Env, admin: Address) {
-        cross_asset::initialize(&env, admin).unwrap();
+    pub fn initialize_ca(env: Env, admin: Address) -> Result<(), CrossAssetError> {
+        cross_asset::initialize(&env, admin)
     }
 
     /// Initialize/register a new asset with configuration.
@@ -843,7 +860,7 @@ impl HelloContract {
         initialize_asset(&env, asset, config)
     }
 
-    /// Update existing asset configuration (admin only).
+    /// Update asset configuration (admin only).
     #[allow(clippy::too_many_arguments)]
     pub fn update_asset_config(
         env: Env,
@@ -854,7 +871,6 @@ impl HelloContract {
         max_borrow: Option<i128>,
         can_collateralize: Option<bool>,
         can_borrow: Option<bool>,
-        borrow_factor: Option<i128>,
     ) -> Result<(), CrossAssetError> {
         update_asset_config(
             &env,
@@ -865,7 +881,6 @@ impl HelloContract {
             max_borrow,
             can_collateralize,
             can_borrow,
-            borrow_factor,
         )
     }
 
@@ -974,10 +989,10 @@ impl HelloContract {
         timelock_duration: Option<u64>,
         default_voting_threshold: Option<i128>,
     ) -> Result<(), errors::GovernanceError> {
-        governance::initialize_governance(
+        governance::initialize(
             &env,
             admin,
-            Some(vote_token),
+            vote_token,
             voting_period,
             execution_delay,
             quorum_bps,
@@ -994,40 +1009,14 @@ impl HelloContract {
         proposal_type: ProposalType,
         description: soroban_sdk::String,
         voting_threshold: Option<i128>,
-        execution_delay: Option<u64>,
-        expires_at: Option<u64>,
     ) -> Result<u64, errors::GovernanceError> {
+        let soroban_desc = soroban_sdk::String::from_str(&env, &description.to_string());
         governance::create_proposal(
             &env,
             proposer,
             proposal_type,
-            description,
+            soroban_desc,
             voting_threshold,
-            None,
-            execution_delay,
-            expires_at,
-        )
-    }
-
-    /// Create a new proposal (alias for backward compatibility).
-    pub fn create_proposal(
-        env: Env,
-        proposer: Address,
-        proposal_type: ProposalType,
-        description: Symbol,
-        voting_threshold: Option<i128>,
-        execution_delay: Option<u64>,
-        expires_at: Option<u64>,
-    ) -> Result<u64, errors::GovernanceError> {
-        governance::create_proposal(
-            &env,
-            proposer,
-            proposal_type,
-            soroban_sdk::String::from_str(&env, &description.to_string()),
-            voting_threshold,
-            None,
-            execution_delay,
-            expires_at,
         )
     }
 
@@ -1238,13 +1227,29 @@ impl HelloContract {
 
     /// Check if an address can vote on a proposal.
     pub fn gov_can_vote(env: Env, voter: Address, proposal_id: u64) -> bool {
-        crate::governance::can_vote(&env, voter, proposal_id)
+        governance::can_vote(&env, voter, proposal_id)
     }
 }
 
 #[cfg(test)]
+mod tests;
+
+// Legacy standalone tests currently mismatch contract API.
+// #[cfg(test)]
+// mod test_reentrancy;
 mod flash_loan_test;
 #[cfg(test)]
+// mod test;
+// #[cfg(test)]
+// mod test_reentrancy;
+#[cfg(test)]
 mod test_reentrancy;
+
 #[cfg(test)]
 mod amm_pause_integration_test;
+
+// mod governance_test;
+
+// monitor_test references Monitor contract types not present in this crate
+// #[cfg(test)]
+// mod monitor_test;

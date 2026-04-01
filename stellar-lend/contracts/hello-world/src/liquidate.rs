@@ -102,9 +102,9 @@ fn calculate_accrued_debt(env: &Env, position: &Position) -> Result<i128, Liquid
         return Ok(stored_interest);
     }
     if current_time <= position.last_accrual_time {
-        return principal
+        return Ok(principal
             .checked_add(stored_interest)
-            .ok_or(LiquidationError::Overflow);
+            .ok_or(LiquidationError::Overflow)?);
     }
 
     let rate_bps =
@@ -288,7 +288,7 @@ pub fn liquidate(
         .persistent()
         .set(&collateral_key, &position.collateral);
 
-    update_protocol_analytics(env, actual_debt_liquidated, collateral_seized)
+    record_liquidation_analytics(env, actual_debt_liquidated, collateral_seized)
         .map_err(|_| LiquidationError::Overflow)?;
 
     // 9. EXTERNAL INTERACTIONS (TRANSFERS)
@@ -323,7 +323,7 @@ pub fn liquidate(
         LiquidationEvent {
             liquidator: liquidator.clone(),
             borrower: borrower.clone(),
-            debt_asset: debt_asset.clone(),
+            debt_asset,
             collateral_asset,
             debt_liquidated: actual_debt_liquidated,
             collateral_seized,
@@ -355,7 +355,7 @@ pub fn liquidate(
 }
 
 /// Update protocol analytics after liquidation
-fn update_protocol_analytics(
+fn record_liquidation_analytics(
     env: &Env,
     debt_liquidated: i128,
     collateral_seized: i128,
