@@ -20,18 +20,17 @@ fn setup(env: &Env) -> (Address, Address) {
 
     // Initialize governance for tests that require it
     env.as_contract(&contract_id, || {
-        crate::governance::initialize_governance(
-            env,
+        crate::governance::initialize(
+            &env,
             admin.clone(),
-            Some(Address::generate(env)),
+            admin.clone(),
             None,
             None,
             None,
             None,
             None,
             None,
-        )
-        .unwrap();
+        ).unwrap();
     });
 
     (contract_id, admin)

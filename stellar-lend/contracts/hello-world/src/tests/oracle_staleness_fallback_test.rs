@@ -161,7 +161,7 @@ fn test_staleness_future_timestamp_rejected() {
 #[should_panic(expected = "Oracle error")]
 fn test_stale_price_after_cache_expires() {
     let env = create_env();
-    let (contract_id, admin, client) = setup(&env);
+    let (_contract_id, admin, client) = setup(&env);
     let asset = Address::generate(&env);
     let oracle = Address::generate(&env);
 

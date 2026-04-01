@@ -1,11 +1,11 @@
 #![cfg(test)]
 
-use crate::amm::{AmmProtocolConfig, MockAmm, SwapParams, TokenPair};
-use crate::{HelloContract, HelloContractClient};
+use crate::{AmmProtocolConfig, HelloContract, HelloContractClient, SwapParams, TokenPair};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
     Address, Env, Symbol, Vec,
 };
+use stellarlend_amm::TokenPair;
 
 fn create_test_env() -> Env {
     let env = Env::default();

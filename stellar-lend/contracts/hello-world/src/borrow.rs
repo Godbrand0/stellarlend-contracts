@@ -52,13 +52,13 @@ pub enum BorrowError {
     AssetNotEnabled = 9,
 }
 
-/// Minimum collateral ratio (in basis points, e.g., 15000 = 150%)
-/// This is the minimum ratio required: collateral_value / debt_value >= 1.5
+// Minimum collateral ratio (in basis points, e.g., 15000 = 150%)
+// This is the minimum ratio required: collateral_value / debt_value >= 1.5
 // Minimum collateral ratio is now managed by the risk_params module
 // const MIN_COLLATERAL_RATIO_BPS: i128 = 15000; // 150% (Legacy)
 
-/// Annual interest rate in basis points (e.g., 500 = 5% per year)
-/// This is a simple constant rate model - in production, this would be more sophisticated
+// Annual interest rate in basis points (e.g., 500 = 5% per year)
+// This is a simple constant rate model - in production, this would be more sophisticated
 // Interest rate is now calculated dynamically based on utilization
 // See interest_rate module for details
 /// Calculate interest accrued since last accrual time

@@ -60,8 +60,6 @@
 //! cargo test cross_asset_test --lib
 //! ```
 
-#![cfg(test)]
-
 use super::*;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{Address, Env};
@@ -147,7 +145,9 @@ fn test_set_asset_params_success() {
 #[test]
 fn test_set_asset_params_multiple_assets() {
     let env = Env::default();
-    let (client, admin, _, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, _, _, asset_usdc, asset_eth) = setup_test(&env);
+
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
 
@@ -235,9 +235,9 @@ fn test_asset_deactivation() {
 #[test]
 fn test_multi_asset_deposits() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // Deposit multiple assets
     client.deposit_collateral_asset(&user1, &asset_usdc, &10000); // $10k USDC
@@ -294,9 +294,9 @@ fn test_deposit_overflow_protection() {
 #[test]
 fn test_multi_collateral_single_borrow() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // Deposit multiple collaterals
     client.deposit_collateral_asset(&user1, &asset_usdc, &10000); // $10k USDC (90% LTV)
@@ -317,9 +317,9 @@ fn test_multi_collateral_single_borrow() {
 #[test]
 fn test_multi_asset_borrowing() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // Large collateral deposit
     client.deposit_collateral_asset(&user1, &asset_usdc, &20000); // $20k USDC
@@ -368,9 +368,9 @@ fn test_borrow_exceeds_debt_ceiling() {
 #[test]
 fn test_sequential_borrows_health_factor() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     client.deposit_collateral_asset(&user1, &asset_usdc, &20000); // $20k USDC
 
@@ -397,9 +397,9 @@ fn test_sequential_borrows_health_factor() {
 #[test]
 fn test_partial_repayment_multi_asset() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // Setup position
     client.deposit_collateral_asset(&user1, &asset_usdc, &20000);
@@ -417,9 +417,9 @@ fn test_partial_repayment_multi_asset() {
 #[test]
 fn test_full_repayment_single_asset() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // Setup position
     client.deposit_collateral_asset(&user1, &asset_usdc, &20000);
@@ -436,9 +436,9 @@ fn test_full_repayment_single_asset() {
 #[test]
 fn test_repay_more_than_debt() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, _) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_usdc);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_usdc);
 
     client.deposit_collateral_asset(&user1, &asset_usdc, &10000);
     client.borrow_asset(&user1, &asset_usdc, &5000);
@@ -472,9 +472,9 @@ fn test_repay_zero_amount() {
 #[test]
 fn test_withdraw_with_remaining_collateral() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // Setup position with multiple collaterals
     client.deposit_collateral_asset(&user1, &asset_usdc, &20000); // $20k USDC
@@ -508,9 +508,9 @@ fn test_withdraw_breaks_health_factor() {
 #[test]
 fn test_withdraw_all_collateral_no_debt() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, _) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_usdc);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_usdc);
 
     client.deposit_collateral_asset(&user1, &asset_usdc, &10000);
 
@@ -543,9 +543,9 @@ fn test_withdraw_more_than_balance() {
 #[test]
 fn test_user_position_isolation() {
     let env = Env::default();
-    let (client, admin, user1, user2, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, user2, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // User1 operations
     client.deposit_collateral_asset(&user1, &asset_usdc, &10000);
@@ -569,9 +569,9 @@ fn test_user_position_isolation() {
 #[test]
 fn test_concurrent_operations_different_users() {
     let env = Env::default();
-    let (client, admin, user1, user2, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, user1, user2, asset_usdc, _) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_usdc);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_usdc);
 
     // Both users deposit to same asset
     client.deposit_collateral_asset(&user1, &asset_usdc, &10000);
@@ -667,9 +667,9 @@ fn test_unauthorized_operations() {
 #[test]
 fn test_complete_lending_cycle_multi_asset() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, asset_eth) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
     // 1. Deposit multiple collaterals
     client.deposit_collateral_asset(&user1, &asset_usdc, &15000);
@@ -743,9 +743,9 @@ fn test_asset_list_management() {
 #[test]
 fn test_reentrancy_protection() {
     let env = Env::default();
-    let (client, admin, user1, _, asset_usdc, _) = setup_test(&env);
+    let (client, _admin, user1, _, asset_usdc, _) = setup_test(&env);
 
-    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_usdc);
+    setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_usdc);
 
     // Test that operations require proper authorization
     client.deposit_collateral_asset(&user1, &asset_usdc, &10000);

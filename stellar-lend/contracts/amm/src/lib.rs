@@ -16,7 +16,7 @@ use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Map};
 
 pub mod amm;
 pub use crate::amm::{
-    add_amm_protocol, add_liquidity, auto_swap_for_collateral, execute_swap,
+    add_amm_protocol, add_liquidity, auto_swap_for_collateral, delete_amm_protocol, execute_swap,
     initialize_amm_settings, remove_liquidity, update_amm_settings, validate_amm_callback,
     AmmCallbackData, AmmError, AmmProtocolConfig, AmmSettings, LiquidityParams, SwapParams,
     TokenPair,
@@ -149,12 +149,21 @@ impl AmmContract {
     }
 
     /// Delete AMM protocol (admin only)
+    ///
+    /// Removes a registered AMM protocol.
+    ///
+    /// # Arguments
+    /// * `admin` - The admin address
+    /// * `protocol` - The protocol address to remove
+    ///
+    /// # Returns
+    /// Returns Ok(()) on success
     pub fn delete_amm_protocol(
         env: Env,
         admin: Address,
         protocol: Address,
     ) -> Result<(), AmmError> {
-        amm::delete_amm_protocol(&env, admin, protocol)
+        delete_amm_protocol(&env, admin, &protocol)
     }
 
     /// Update AMM settings (admin only)
@@ -395,6 +404,8 @@ impl AmmContract {
 mod amm_coverage_booster;
 #[cfg(all(test, feature = "liquidate_integration"))]
 mod liquidate_test;
+#[cfg(test)]
+mod integration_test;
 #[cfg(test)]
 mod math_safety_test;
 #[cfg(test)]

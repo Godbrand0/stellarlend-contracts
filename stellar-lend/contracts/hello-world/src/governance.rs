@@ -103,6 +103,11 @@ const MAX_TIMELOCK_DURATION: u64 = 30 * 24 * 60 * 60;
 /// Sets up the governance config, multisig (admin as sole signer with threshold 1),
 /// and an empty guardian set. Can only be called once.
 ///
+/// # Authorization
+///
+/// Uses Soroban's `require_auth()` to ensure the caller is the intended admin.
+/// The admin address must sign the initialization transaction.
+///
 /// # Arguments
 ///
 /// * `env` - The contract environment.
@@ -126,7 +131,8 @@ const MAX_TIMELOCK_DURATION: u64 = 30 * 24 * 60 * 60;
 /// # Security
 ///
 /// Only callable once. The caller (`admin`) must authorize the transaction.
-pub fn initialize_governance(
+#[allow(clippy::too_many_arguments)]
+pub fn initialize(
     env: &Env,
     admin: Address,
     vote_token: Option<Address>,
@@ -234,6 +240,11 @@ pub fn initialize_governance(
 /// The proposer must hold at least `proposal_threshold` vote tokens. The
 /// proposal starts in `Pending` status and transitions to `Active` when
 /// the voting window begins (immediately, since `start_time == now`).
+///
+/// # Authorization
+///
+/// Uses Soroban's `require_auth()` to verify the proposer's identity.
+/// This ensures only the intended proposer can create proposals on their behalf.
 ///
 /// # Arguments
 ///
@@ -359,6 +370,12 @@ pub fn create_proposal(
 /// The voter's token balance at the time of voting determines their voting
 /// power. Each address can vote exactly once per proposal. Voting is only
 /// allowed while the proposal is `Active` and within the voting window.
+///
+/// # Authorization
+///
+/// Uses Soroban's `require_auth()` to ensure the voter is the one
+/// casting the vote. This prevents vote spoofing and ensures each voter
+/// can only vote with their own token balance.
 ///
 /// # Arguments
 ///
@@ -1110,17 +1127,20 @@ pub fn add_guardian(env: &Env, caller: Address, guardian: Address) -> Result<(),
 ///
 /// If removing a guardian would make `threshold > guardians.len()`,
 /// the threshold is automatically lowered to `guardians.len()`.
+/// Cannot remove guardians during active recovery to prevent bricking.
 ///
 /// # Errors
 ///
 /// - `NotInitialized` — governance not initialized.
 /// - `Unauthorized` — caller is not admin.
 /// - `GuardianNotFound` — guardian is not in the set.
+/// - `RecoveryInProgress` — cannot remove guardians during active recovery.
+/// - `InvalidGuardianConfig` — removal would make recovery impossible.
 ///
 /// # Security
 ///
 /// Only admin can remove guardians. Threshold is auto-adjusted to prevent
-/// a state where recovery becomes impossible.
+/// a state where recovery becomes impossible. Cannot modify during recovery.
 pub fn remove_guardian(
     env: &Env,
     caller: Address,
@@ -1159,9 +1179,38 @@ pub fn remove_guardian(
         return Err(GovernanceError::GuardianNotFound);
     }
 
-    guardian_config.guardians = new_guardians;
+    // Check if recovery is in progress - prevent guardian removal during recovery
+    if env.storage().persistent().has(&GovernanceDataKey::RecoveryRequest) {
+        return Err(GovernanceError::RecoveryInProgress);
+    }
 
-    // Auto-adjust threshold downward if needed.
+    // Validate that removal won't brick existing recovery
+    let current_approvals: Vec<Address> = env
+        .storage()
+        .persistent()
+        .get(&GovernanceDataKey::RecoveryApprovals)
+        .unwrap_or_else(|| Vec::new(env));
+    
+    // Count how many current guardians have approved (excluding the one being removed)
+    let mut current_guardian_approvals = 0;
+    for approval in current_approvals.iter() {
+        if guardian_config.guardians.contains(approval) && approval != &guardian {
+            current_guardian_approvals += 1;
+        }
+    }
+    
+    // After removal, we need enough remaining guardians to meet threshold
+    let remaining_guardians = guardian_config.guardians.len() - 1;
+    let new_threshold = guardian_config.threshold.min(remaining_guardians as u32);
+    
+    // If we have an active recovery, ensure we can still complete it
+    if current_guardian_approvals < new_threshold {
+        return Err(GovernanceError::InvalidGuardianConfig);
+    }
+
+    guardian_config.guardians = new_guardians;
+    
+    // Auto-adjust threshold downward if needed (after validation)
     if guardian_config.threshold > guardian_config.guardians.len() {
         guardian_config.threshold = guardian_config.guardians.len();
     }
@@ -1188,10 +1237,12 @@ pub fn remove_guardian(
 /// - `Unauthorized` — caller is not admin.
 /// - `GuardianNotFound` — guardian config not set.
 /// - `InvalidGuardianConfig` — threshold is zero or exceeds guardian count.
+/// - `RecoveryInProgress` — cannot change threshold during active recovery.
 ///
 /// # Security
 ///
 /// Only admin. Threshold must be ≥ 1 and ≤ guardian count.
+/// Cannot change threshold while recovery is active to prevent bricking.
 pub fn set_guardian_threshold(
     env: &Env,
     caller: Address,
@@ -1214,6 +1265,11 @@ pub fn set_guardian_threshold(
         .instance()
         .get(&GovernanceDataKey::GuardianConfig)
         .ok_or(GovernanceError::GuardianNotFound)?;
+
+    // Check if recovery is in progress - prevent threshold changes during recovery
+    if env.storage().persistent().has(&GovernanceDataKey::RecoveryRequest) {
+        return Err(GovernanceError::RecoveryInProgress);
+    }
 
     if threshold == 0 || threshold > guardian_config.guardians.len() {
         return Err(GovernanceError::InvalidGuardianConfig);
