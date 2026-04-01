@@ -18,10 +18,10 @@
 //!
 //! ### Unified Health Factor
 //! The protocol calculates a single health factor across all assets:
-//! ```
+//! ```text
 //! Health Factor = (Weighted Collateral Value / Total Debt Value) * 10000
 //! ```
-//! Where Weighted Collateral Value = Sum of (Collateral Amount × Price × LTV) for all assets
+//! Where Weighted Collateral Value = Sum of (Collateral Amount Ã— Price Ã— LTV) for all assets
 //!
 //! ### Asset Configuration
 //! Each asset has configurable parameters:
@@ -203,16 +203,7 @@ pub fn set_asset_params(
     check_admin(env)?;
     env.storage()
         .persistent()
-        .set(&CrossAssetDataKey::AssetParams(asset.clone()), &params);
-
-    AssetParamsSetEvent {
-        asset,
-        ltv: params.ltv,
-        liquidation_threshold: params.liquidation_threshold,
-        debt_ceiling: params.debt_ceiling,
-    }
-    .publish(env);
-
+        .set(&CrossAssetDataKey::AssetParams(asset), &params);
     Ok(())
 }
 
@@ -256,23 +247,17 @@ pub fn deposit_collateral_asset(
 
     let mut position = get_user_position(env, &user);
     let current_balance = position.collateral_balances.get(asset.clone()).unwrap_or(0);
-    let new_balance = current_balance
-        .checked_add(amount)
-        .ok_or(CrossAssetError::Overflow)?;
-    position.collateral_balances.set(asset.clone(), new_balance);
+    position.collateral_balances.set(
+        asset,
+        current_balance
+            .checked_add(amount)
+            .ok_or(CrossAssetError::Overflow)?,
+    );
 
     save_user_position(env, &user, &position);
 
-    // Transfer tokens from user to contract
-    let token_client = token::Client::new(env, &asset);
-    token_client.transfer(&user, env.current_contract_address(), &amount);
-
-    CrossDepositEvent {
-        user,
-        asset,
-        amount,
-    }
-    .publish(env);
+    // In a real implementation, we would transfer tokens from user to contract here
+    // env.invoke_contract(...)
 
     Ok(())
 }
@@ -319,10 +304,11 @@ pub fn borrow_asset(
     }
 
     let total_debt = get_total_asset_debt(env, &asset);
-    let new_total_debt = total_debt
+    if total_debt
         .checked_add(amount)
-        .ok_or(CrossAssetError::Overflow)?;
-    if new_total_debt > params.debt_ceiling {
+        .ok_or(CrossAssetError::Overflow)?
+        > params.debt_ceiling
+    {
         return Err(CrossAssetError::DebtCeilingReached);
     }
 
@@ -349,18 +335,13 @@ pub fn borrow_asset(
     position.last_update = env.ledger().timestamp();
 
     save_user_position(env, &user, &position);
-    set_total_asset_debt(env, &asset, new_total_debt);
-
-    // Transfer tokens from contract to user
-    let token_client = token::Client::new(env, &asset);
-    token_client.transfer(&env.current_contract_address(), &user, &amount);
-
-    CrossBorrowEvent {
-        user,
-        asset,
-        amount,
-    }
-    .publish(env);
+    set_total_asset_debt(
+        env,
+        &asset,
+        total_debt
+            .checked_add(amount)
+            .ok_or(CrossAssetError::Overflow)?,
+    );
 
     Ok(())
 }
@@ -423,17 +404,6 @@ pub fn repay_asset(
             .checked_sub(repay_amount)
             .ok_or(CrossAssetError::Overflow)?,
     );
-
-    // Transfer tokens from user to contract
-    let token_client = token::Client::new(env, &asset);
-    token_client.transfer(&user, env.current_contract_address(), &repay_amount);
-
-    CrossRepayEvent {
-        user,
-        asset,
-        amount: repay_amount,
-    }
-    .publish(env);
 
     Ok(())
 }
@@ -511,19 +481,6 @@ pub fn withdraw_asset(
     Ok(())
 }
 
-/// Returns a summary of the user's cross-asset position.
-///
-/// # Arguments
-/// * `env` - The contract environment.
-/// * `user` - The address of the user.
-///
-/// # Returns
-/// A `PositionSummary` containing total collateral (USD), total debt (USD), and health factor.
-///
-/// # Errors
-/// * `AssetNotSupported`: If any asset in the position is no longer supported.
-/// * `PriceUnavailable`: If the oracle price is unavailable.
-/// * `Overflow`: If an arithmetic overflow occurs.
 pub fn get_cross_position_summary(
     env: &Env,
     user: Address,
@@ -662,23 +619,8 @@ fn get_price(_env: &Env, _price_feed: &Address) -> Result<i128, CrossAssetError>
     Ok(10000000) // $1.00 with 7 decimals
 }
 
-/// Initializes the admin for the cross-asset module.
-///
-/// # Arguments
-/// * `env` - The contract environment.
-/// * `admin` - The address of the admin.
-///
-/// # Errors
-/// * `AlreadyInitialized`: If the admin has already been set.
-///
-/// # Security
-/// * This should only be called once during contract initialization.
-pub fn initialize_admin(env: &Env, admin: Address) -> Result<(), CrossAssetError> {
-    if env.storage().persistent().has(&CrossAssetDataKey::Admin) {
-        return Err(CrossAssetError::AlreadyInitialized);
-    }
+pub fn initialize_admin(env: &Env, admin: Address) {
     env.storage()
         .persistent()
         .set(&CrossAssetDataKey::Admin, &admin);
-    Ok(())
 }
