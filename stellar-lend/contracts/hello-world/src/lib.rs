@@ -183,13 +183,17 @@ impl HelloContract {
         Ok(())
     }
 
-    /// Transfer super admin rights.
     pub fn transfer_admin(
         env: Env,
         caller: Address,
         new_admin: Address,
     ) -> Result<(), crate::admin::AdminError> {
-        crate::admin::set_admin(&env, new_admin, Some(caller))
+        crate::admin::transfer_admin(&env, &caller, new_admin)
+    }
+
+    /// Accepts a pending admin transfer.
+    pub fn accept_admin(env: Env, caller: Address) -> Result<(), crate::admin::AdminError> {
+        crate::admin::accept_admin(&env, &caller)
     }
 
     /// Grant a role to an address (admin only).
@@ -199,7 +203,7 @@ impl HelloContract {
         role: Symbol,
         account: Address,
     ) -> Result<(), crate::admin::AdminError> {
-        crate::admin::grant_role(&env, caller, role, account)
+        crate::admin::grant_role(&env, &caller, role, account)
     }
 
     /// Revoke a role from an address (admin only).
@@ -209,7 +213,17 @@ impl HelloContract {
         role: Symbol,
         account: Address,
     ) -> Result<(), crate::admin::AdminError> {
-        crate::admin::revoke_role(&env, caller, role, account)
+        crate::admin::revoke_role(&env, &caller, role, account)
+    }
+
+    /// Returns the list of all defined roles.
+    pub fn get_role_registry(env: Env) -> Vec<Symbol> {
+        crate::admin::get_role_registry(&env)
+    }
+
+    /// Check if an account has a role.
+    pub fn has_role(env: Env, role: Symbol, account: Address) -> bool {
+        crate::admin::has_role(&env, role, account)
     }
 
     /// Deposit collateral into the protocol.
@@ -270,7 +284,7 @@ impl HelloContract {
         close_factor: Option<i128>,
         liquidation_incentive: Option<i128>,
     ) -> Result<(), RiskManagementError> {
-        require_admin(&env, &caller)?;
+        crate::admin::require_admin(&env, &caller).map_err(|_| RiskManagementError::Unauthorized)?;
         check_emergency_pause(&env)?;
         risk_params::set_risk_params(
             &env,
@@ -484,7 +498,7 @@ impl HelloContract {
         rate_ceiling: Option<i128>,
         spread: Option<i128>,
     ) -> Result<(), RiskManagementError> {
-        require_admin(&env, &admin)?;
+        crate::admin::require_admin(&env, &admin).map_err(|_| RiskManagementError::Unauthorized)?;
         interest_rate::update_interest_rate_config(
             &env,
             admin,
@@ -555,7 +569,7 @@ impl HelloContract {
         to: Address,
         amount: i128,
     ) -> Result<(), RiskManagementError> {
-        require_admin(&env, &caller)?;
+        crate::admin::require_admin(&env, &caller).map_err(|_| RiskManagementError::Unauthorized)?;
 
         let reserve_key = DepositDataKey::ProtocolReserve(asset.clone());
         let mut reserve_balance = env

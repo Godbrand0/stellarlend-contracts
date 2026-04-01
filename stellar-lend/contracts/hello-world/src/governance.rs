@@ -144,11 +144,11 @@ pub fn initialize(
     default_voting_threshold: Option<i128>,
 ) -> Result<(), GovernanceError> {
     // ── idempotency guard ──
-    if env.storage().instance().has(&GovernanceDataKey::Admin) {
+    if env.storage().instance().has(&GovernanceDataKey::Config) {
         return Err(GovernanceError::AlreadyInitialized);
     }
 
-    admin.require_auth();
+    crate::admin::require_admin(env, &admin).map_err(|_| GovernanceError::Unauthorized)?;
 
     // ── build config with defaults ──
     let vp = voting_period.unwrap_or(DEFAULT_VOTING_PERIOD);
@@ -189,9 +189,10 @@ pub fn initialize(
     };
 
     // ── persist ──
-    env.storage()
-        .instance()
-        .set(&GovernanceDataKey::Admin, &admin);
+    // Admin is already set in the centralized module; we just ensure it exists here.
+    if !crate::admin::has_admin(env) {
+        crate::admin::set_admin(env, admin.clone()).map_err(|_| GovernanceError::Unauthorized)?;
+    }
     env.storage()
         .instance()
         .set(&GovernanceDataKey::Config, &config);
@@ -852,11 +853,7 @@ pub fn cancel_proposal(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env
-        .storage()
-        .instance()
-        .get(&GovernanceDataKey::Admin)
-        .ok_or(GovernanceError::NotInitialized)?;
+    let admin: Address = crate::admin::get_admin(env).ok_or(GovernanceError::NotInitialized)?;
 
     let mut proposal: Proposal = env
         .storage()
@@ -981,11 +978,7 @@ pub fn set_multisig_config(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env
-        .storage()
-        .instance()
-        .get(&GovernanceDataKey::Admin)
-        .ok_or(GovernanceError::NotInitialized)?;
+    let admin: Address = crate::admin::get_admin(env).ok_or(GovernanceError::NotInitialized)?;
 
     if caller != admin {
         return Err(GovernanceError::Unauthorized);
@@ -1081,11 +1074,7 @@ pub fn emit_approval_event(env: &Env, proposal_id: &u64, approver: &Address) {
 pub fn add_guardian(env: &Env, caller: Address, guardian: Address) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env
-        .storage()
-        .instance()
-        .get(&GovernanceDataKey::Admin)
-        .ok_or(GovernanceError::NotInitialized)?;
+    let admin: Address = crate::admin::get_admin(env).ok_or(GovernanceError::NotInitialized)?;
 
     if caller != admin {
         return Err(GovernanceError::Unauthorized);
@@ -1148,11 +1137,7 @@ pub fn remove_guardian(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env
-        .storage()
-        .instance()
-        .get(&GovernanceDataKey::Admin)
-        .ok_or(GovernanceError::NotInitialized)?;
+    let admin: Address = crate::admin::get_admin(env).ok_or(GovernanceError::NotInitialized)?;
 
     if caller != admin {
         return Err(GovernanceError::Unauthorized);
@@ -1250,11 +1235,7 @@ pub fn set_guardian_threshold(
 ) -> Result<(), GovernanceError> {
     caller.require_auth();
 
-    let admin: Address = env
-        .storage()
-        .instance()
-        .get(&GovernanceDataKey::Admin)
-        .ok_or(GovernanceError::NotInitialized)?;
+    let admin: Address = crate::admin::get_admin(env).ok_or(GovernanceError::NotInitialized)?;
 
     if caller != admin {
         return Err(GovernanceError::Unauthorized);
@@ -1526,7 +1507,7 @@ pub fn get_config(env: &Env) -> Option<GovernanceConfig> {
 
 /// Get the governance admin address, or `None` if not initialized.
 pub fn get_admin(env: &Env) -> Option<Address> {
-    env.storage().instance().get(&GovernanceDataKey::Admin)
+    crate::admin::get_admin(env)
 }
 
 /// Get the multisig configuration, or `None` if not initialized.
