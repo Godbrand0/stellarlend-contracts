@@ -482,25 +482,6 @@ impl HelloContract {
         .map_err(|_| RiskManagementError::InvalidParameter)
     }
 
-    /// Get current protocol utilization in basis points (0–10 000).
-    pub fn get_utilization(env: Env) -> i128 {
-        interest_rate::calculate_utilization(&env).unwrap_or(0)
-    }
-
-    /// Set an emergency rate adjustment (admin only).
-    ///
-    /// The adjustment is added to the calculated borrow rate.
-    /// Bounded to ±10 000 bps (±100%).
-    pub fn set_emergency_rate_adjustment(
-        env: Env,
-        admin: Address,
-        adjustment_bps: i128,
-    ) -> Result<(), RiskManagementError> {
-        require_admin(&env, &admin)?;
-        interest_rate::set_emergency_rate_adjustment(&env, admin, adjustment_bps)
-            .map_err(|_| RiskManagementError::InvalidParameter)
-    }
-
     /// Get the current interest rate configuration.
     pub fn get_interest_rate_config(env: Env) -> Option<InterestRateConfig> {
         interest_rate::get_interest_rate_config(&env)
