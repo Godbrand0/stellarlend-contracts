@@ -1,6 +1,5 @@
-#![cfg(not(tarpaulin_include))]
+// #![cfg(not(tarpaulin_include))]
 #![allow(unexpected_cfgs)]
-use soroban_sdk::{Env, Symbol};
 //! Reentrancy protection for same-transaction nested calls.
 //!
 //! Soroban executes contract invocations synchronously within a single invocation tree. A
@@ -11,8 +10,10 @@ use soroban_sdk::{Env, Symbol};
 //! The guard does not persist across transactions and does not replace authorization,
 //! pause-switch, or collateral checks. It is a defense-in-depth layer for fund-moving entry
 //! points that perform external contract calls.
+#![cfg(not(tarpaulin_include))]
+#![allow(unexpected_cfgs)]
 
-use soroban_sdk::{contracttype, Env};
+use soroban_sdk::{contracttype, Env, Symbol};
 
 /// Standardized error code used by operation-specific error enums for reentrancy rejection.
 pub const REENTRANCY_ERROR_CODE: u32 = 7;
@@ -71,6 +72,12 @@ impl Drop for ReentrancyGuard<'_> {
             .storage()
             .temporary()
             .remove(&ReentrancyDataKey::LockV1);
+    }
+}
+
+impl core::fmt::Debug for ReentrancyGuard<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ReentrancyGuard").finish()
     }
 }
 
