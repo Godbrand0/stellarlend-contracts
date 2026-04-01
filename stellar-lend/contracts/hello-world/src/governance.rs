@@ -1626,12 +1626,12 @@ mod tests {
         client.gov_initialize(
             &admin,
             &token,
-            &Some(259_200),  // 3 days voting
-            &Some(86_400),   // 1 day execution delay
-            &Some(400),      // 4% quorum
-            &Some(100),      // 100 token threshold
-            &Some(604_800),  // 7 day timelock
-            &Some(5_000),    // 50% threshold
+            &Some(259_200), // 3 days voting
+            &Some(86_400),  // 1 day execution delay
+            &Some(400),     // 4% quorum
+            &Some(100),     // 100 token threshold
+            &Some(604_800), // 7 day timelock
+            &Some(5_000),   // 50% threshold
         );
         // Leak env to get 'static lifetime for tests
         let env: &'static Env = Box::leak(Box::new(env));
@@ -1665,16 +1665,8 @@ mod tests {
     #[test]
     fn test_initialize_double_init_fails() {
         let (env, admin, token, client) = setup();
-        let result = client.try_gov_initialize(
-            &admin,
-            &token,
-            &None,
-            &None,
-            &None,
-            &None,
-            &None,
-            &None,
-        );
+        let result =
+            client.try_gov_initialize(&admin, &token, &None, &None, &None, &None, &None, &None);
         assert!(result.is_err());
     }
 
