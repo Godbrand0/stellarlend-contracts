@@ -53,16 +53,12 @@ pub mod test_helpers;
 pub mod amm_impact_test;
 pub mod borrow_cap_test;
 pub mod bridge_test;
-// Temporarily disabled to unblock oracle test validation for issue #429.
-// Pre-existing API mismatch: execute_flash_loan symbol missing in current client.
-// pub mod cross_contract_test;
 pub mod config_snapshot_test;
+pub mod cross_contract_test;
 pub mod gov_asset_test;
+pub mod multisig_governance_execution_test;
+pub mod multisig_test;
 pub mod oracle_staleness_fallback_test;
-// Temporarily disabled to unblock oracle test validation for issue #429.
-// Pre-existing signature mismatch in governance multisig helpers.
-// pub mod multisig_governance_execution_test;
-// pub mod multisig_test;
-// pub mod recovery_test;
+pub mod recovery_test;
 pub mod fuzz_test;
 // pub mod fees_test;
