@@ -30,7 +30,6 @@ use crate::governance::{
     get_multisig_threshold, get_proposal, get_proposal_approvals, set_multisig_admins,
     set_multisig_threshold,
 };
-use crate::errors::GovernanceError;
 use crate::storage::GovernanceDataKey;
 use crate::types::{Proposal, ProposalStatus, ProposalType};
 
@@ -130,8 +129,13 @@ pub fn ms_propose_set_min_cr(
     }
 
     // Delegates auth check + proposal creation to governance.rs
-    let proposal_id =
-        crate::governance::propose_set_min_collateral_ratio(env, proposer.clone(), new_ratio.try_into().map_err(|_| GovernanceError::MathOverflow)?)?;
+    let proposal_id = crate::governance::propose_set_min_collateral_ratio(
+        env,
+        proposer.clone(),
+        new_ratio
+            .try_into()
+            .map_err(|_| GovernanceError::MathOverflow)?,
+    )?;
 
     // Proposer auto-approves their own proposal
     approve_proposal(env, proposer, proposal_id)?;
