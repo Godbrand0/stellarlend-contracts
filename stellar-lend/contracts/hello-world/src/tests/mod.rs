@@ -2,6 +2,7 @@ pub mod config_snapshot_test;
 pub mod config_test;
 pub mod governance_test;
 pub mod oracle_test;
+pub mod storage_layout_test;
 pub mod withdraw_test;
 pub mod interest_rate_test;
 pub mod reserve_test;
