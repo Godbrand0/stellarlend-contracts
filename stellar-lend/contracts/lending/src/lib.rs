@@ -575,18 +575,16 @@ impl LendingContract {
         set_flash_loan_fee_impl(&env, fee_bps)
     }
 
-    /// Withdraw collateral from the protocol
+    /// Withdraw collateral from the protocol.
+    ///
+    /// Pause, emergency shutdown vs recovery, legacy withdraw flag, and collateral-ratio checks
+    /// are enforced inside [`withdraw::withdraw`] so behavior stays aligned with the pause module.
     pub fn withdraw(
         env: Env,
         user: Address,
         asset: Address,
         amount: i128,
     ) -> Result<i128, WithdrawError> {
-        if is_paused(&env, PauseType::Withdraw)
-            || (!is_recovery(&env) && blocks_high_risk_ops(&env))
-        {
-            return Err(WithdrawError::WithdrawPaused);
-        }
         withdraw_logic(&env, user, asset, amount)
     }
 
