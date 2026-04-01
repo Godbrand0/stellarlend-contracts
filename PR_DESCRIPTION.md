@@ -35,6 +35,8 @@ The note makes the deployment recommendation explicit:
   - its admin helper checks stored admin equality but does not call `require_auth()`
   - swap/liquidity execution helpers are still mock protocol integrations
 - `hello-world` is excluded from the active workspace and should be treated as legacy/reference code rather than the canonical deployment artifact
+- Oracle paths (`configure_oracle`, `set_primary_oracle`, `set_fallback_oracle`, `update_price_feed`, `get_price`) do not perform external token transfers, so they do not introduce a token-transfer reentrancy surface.
+- Oracle inputs are treated as untrusted and validated on-chain with staleness checks and deviation bounds before being accepted.
 
 ## Test Summary
 
@@ -58,31 +60,33 @@ Summarized result for multi-user contention scenarios (`cargo test multi_user_co
 - Team review is recommended before merge, especially around the documented AMM auth caveat
 - Re-run `cargo test` after freeing disk space on `C:`
 
-**test(governance): cancel vs execute ordering**
+## Test Execution Note
 
-- Added integration tests for proposal cancel/execute race conditions
-- Ensured tests follow contract lifecycle (submit → approve → queue → execute/cancel)
-- Introduced a minimal no-op GenericAction to guarantee deterministic execution
-- Verified:
-  - cancel prevents execution
-  - execution prevents cancellation
-  - approval does not override cancellation
-  - ordering remains deterministic across sequences
-- No contract logic modified
+Full `cargo test` is currently blocked by pre-existing compile errors in unrelated modules
+(e.g., repay.rs, risk_params.rs, amm tests).
 
-Sequence table:
+To validate oracle coverage, tests were executed in isolation:
 
-Step Actor Action Result
-1 A Cancel Success
-2 B Execute Revert
-1 A Execute Success
-2 B Cancel Revert
+```bash
+cargo test oracle_test
+```
 
-Security notes:
+Validation rationale:
 
-- State transitions are terminal (`Cancelled`/`Executed`) and mutually exclusive.
-- No double execution — executed proposals are idempotent.
-- Authorization enforced on cancel/execute paths (admin/proposer checks).
-- Ordering cannot produce inconsistent state due to explicit status checks.
+- Compile blockers are unrelated to oracle admin/read logic and originate from legacy/non-oracle modules.
+- Oracle tests are isolated to oracle entrypoints and remain the correct validation target for issue #429.
 
-All tests passing for the targeted governance suite; full repository test run was executed and noted (some unrelated tests fail in the current workspace state). See test output in CI for full details.
+Current status: isolated oracle test execution is also blocked at compile time by pre-existing crate errors (for example `crate::constants` unresolved in `contracts/lending/src/*` and legacy type/API mismatches in `contracts/hello-world/src/*`).
+
+Current status update:
+
+- `contracts/lending` constants module drift was fixed and isolated oracle tests now execute successfully.
+- `contracts/hello-world` still has unrelated legacy compile failures outside oracle scope.
+
+Observed isolated output (`contracts/lending`):
+
+```text
+running 32 tests
+...
+test result: ok. 32 passed; 0 failed;
+```
