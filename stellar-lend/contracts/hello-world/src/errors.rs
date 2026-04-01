@@ -1,4 +1,5 @@
 use soroban_sdk::contracterror;
+use crate::prelude::*;
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -39,4 +40,5 @@ pub enum GovernanceError {
     NotInitialized = 133,
     InvalidProposal = 134,
     InvalidThreshold = 135,
+    ProposalAlreadyExecuted = 136,
 }

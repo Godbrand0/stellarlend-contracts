@@ -45,6 +45,7 @@ fn test_contention_interleaved_deposits_borrows() {
     let num_users = 50;
     let users = generate_users(&env, num_users);
 
+    let mut expected_total_deposits = 0;
     let mut expected_total_borrows = 0;
 
     // Interleaved deposit and borrow operations
@@ -54,6 +55,7 @@ fn test_contention_interleaved_deposits_borrows() {
         // Every user deposits collateral
         let deposit_amount = 50_000 + (i as i128 * 100);
         client.deposit(&user, &collateral_asset, &deposit_amount);
+        _expected_total_deposits += deposit_amount;
 
         // Alternate users borrow
         if i % 2 == 0 {
@@ -72,9 +74,11 @@ fn test_contention_interleaved_deposits_borrows() {
 
     // Verify individual positions and global state constraints
     let mut actual_debt = 0i128;
+    let mut actual_deposits = 0i128;
     for (i, user) in users.iter().enumerate() {
         let collat = client.get_user_collateral_deposit(&user, &collateral_asset);
         assert_eq!(collat.amount, 50_000 + (i as i128 * 100));
+        actual_deposits += collat.amount;
 
         let debt = client.get_user_debt(&user);
         if i % 2 == 0 {
@@ -85,7 +89,10 @@ fn test_contention_interleaved_deposits_borrows() {
         }
     }
 
+    assert_eq!(actual_deposits, expected_total_deposits);
     assert_eq!(actual_debt, expected_total_borrows);
+    // Global invariant: total deposits >= total borrows
+    assert!(actual_deposits >= actual_debt);
 }
 
 #[test]

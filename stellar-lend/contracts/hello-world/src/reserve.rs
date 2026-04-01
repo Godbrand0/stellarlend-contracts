@@ -42,9 +42,12 @@
 //! - Treasury address cannot be the contract itself (prevents self-draining)
 //! - All state changes emit events for transparency and auditability
 
-use soroban_sdk::{contracterror, contracttype, Address, Env, Map, Symbol};
+#![allow(unused)]
+use soroban_sdk::{contracterror, contracttype, Address, Env, Symbol};
+use crate::prelude::*;
+use crate::prelude::*;
 
-use crate::deposit::DepositDataKey;
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 
 /// Maximum allowed reserve factor (50% = 5000 basis points).
 /// Ensures at least 50% of interest always flows to lenders.
@@ -100,6 +103,112 @@ pub enum ReserveDataKey {
     ReserveFactor(Option<Address>),
     /// Destination address for admin reserve withdrawals → Address
     TreasuryAddress,
+    /// Aggregate reserve balance across all assets.
+    /// Value type: i128
+    TotalReservesV1,
+    /// Cumulative protocol revenue sourced from reserve accruals.
+    /// Value type: i128
+    ProtocolRevenueV1,
+}
+
+fn add_to_protocol_tvl(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let mut analytics = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, ProtocolAnalytics>(&DepositDataKey::ProtocolAnalytics)
+        .unwrap_or(ProtocolAnalytics {
+            total_deposits: 0,
+            total_borrows: 0,
+            total_value_locked: 0,
+        });
+
+    analytics.total_value_locked = analytics
+        .total_value_locked
+        .checked_add(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&DepositDataKey::ProtocolAnalytics, &analytics);
+
+    Ok(())
+}
+
+fn sub_from_protocol_tvl(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let mut analytics = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, ProtocolAnalytics>(&DepositDataKey::ProtocolAnalytics)
+        .unwrap_or(ProtocolAnalytics {
+            total_deposits: 0,
+            total_borrows: 0,
+            total_value_locked: 0,
+        });
+
+    analytics.total_value_locked = analytics
+        .total_value_locked
+        .checked_sub(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&DepositDataKey::ProtocolAnalytics, &analytics);
+
+    Ok(())
+}
+
+fn add_to_total_reserves(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let current_total = env
+        .storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::TotalReservesV1)
+        .unwrap_or(0);
+
+    let next_total = current_total
+        .checked_add(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&ReserveDataKey::TotalReservesV1, &next_total);
+
+    Ok(())
+}
+
+fn sub_from_total_reserves(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let current_total = env
+        .storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::TotalReservesV1)
+        .unwrap_or(0);
+
+    let next_total = current_total
+        .checked_sub(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&ReserveDataKey::TotalReservesV1, &next_total);
+
+    Ok(())
+}
+
+fn add_to_protocol_revenue(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let current_revenue = env
+        .storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::ProtocolRevenueV1)
+        .unwrap_or(0);
+
+    let next_revenue = current_revenue
+        .checked_add(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&ReserveDataKey::ProtocolRevenueV1, &next_revenue);
+
+    Ok(())
 }
 
 // ─── Initialisation ──────────────────────────────────────────────────────────
@@ -124,7 +233,8 @@ pub fn initialize_reserve_config(
     asset: Option<Address>,
     reserve_factor_bps: i128,
 ) -> Result<(), ReserveError> {
-    if reserve_factor_bps < 0 || reserve_factor_bps > MAX_RESERVE_FACTOR_BPS {
+    // Validate reserve factor
+    if !(0..=MAX_RESERVE_FACTOR_BPS).contains(&reserve_factor_bps) {
         return Err(ReserveError::InvalidReserveFactor);
     }
 
@@ -171,7 +281,8 @@ pub fn set_reserve_factor(
     caller.require_auth();
     require_admin(env, &caller)?;
 
-    if reserve_factor_bps < 0 || reserve_factor_bps > MAX_RESERVE_FACTOR_BPS {
+    // Validate reserve factor
+    if !(0..=MAX_RESERVE_FACTOR_BPS).contains(&reserve_factor_bps) {
         return Err(ReserveError::InvalidReserveFactor);
     }
 
@@ -255,6 +366,9 @@ pub fn accrue_reserve(
         .ok_or(ReserveError::Overflow)?;
 
     env.storage().persistent().set(&balance_key, &new_balance);
+    add_to_total_reserves(env, reserve_amount)?;
+    add_to_protocol_revenue(env, reserve_amount)?;
+    add_to_protocol_tvl(env, reserve_amount)?;
 
     let topics = (Symbol::new(env, "reserve_accrued"),);
     env.events()
@@ -276,9 +390,31 @@ pub fn get_reserve_balance(env: &Env, asset: Option<Address>) -> i128 {
         .unwrap_or(0)
 }
 
-// ─── Treasury ─────────────────────────────────────────────────────────────────
+/// Get aggregate reserves across all assets.
+///
+/// # Returns
+/// Total reserves currently held by the protocol.
+pub fn get_total_reserves(env: &Env) -> i128 {
+    env.storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::TotalReservesV1)
+        .unwrap_or(0)
+}
 
-/// Set the treasury destination address (admin only).
+/// Get cumulative protocol revenue from reserve accrual.
+///
+/// This is cumulative protocol income and is not decreased by treasury withdrawals.
+///
+/// # Returns
+/// Total protocol revenue from reserve accruals.
+pub fn get_protocol_revenue(env: &Env) -> i128 {
+    env.storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::ProtocolRevenueV1)
+        .unwrap_or(0)
+}
+
+/// Set the treasury address (admin only)
 ///
 /// All future `withdraw_reserve_funds` calls transfer tokens to this address.
 ///
@@ -397,6 +533,8 @@ pub fn withdraw_reserve_funds(
         .ok_or(ReserveError::Overflow)?;
 
     env.storage().persistent().set(&balance_key, &new_balance);
+    sub_from_total_reserves(env, amount)?;
+    sub_from_protocol_tvl(env, amount)?;
 
     // ── INTERACTIONS ──────────────────────────────────────────────────────────
     let topics = (Symbol::new(env, "reserve_withdrawn"), caller);
@@ -422,35 +560,6 @@ pub fn withdraw_reserve_funds(
     Ok(amount)
 }
 
-// ─── Statistics ───────────────────────────────────────────────────────────────
-
-/// Return a combined view of reserve state for a single asset.
-///
-/// # Returns
-/// `(reserve_balance, reserve_factor_bps, treasury_address)`
-pub fn get_reserve_stats(env: &Env, asset: Option<Address>) -> (i128, i128, Option<Address>) {
-    (
-        get_reserve_balance(env, asset.clone()),
-        get_reserve_factor(env, asset),
-        get_treasury_address(env),
-    )
-}
-
-// ─── Internal Helpers ─────────────────────────────────────────────────────────
-
-/// Verify that `caller` is the stored protocol admin.
-///
-/// # Errors
-/// * [`ReserveError::Unauthorized`] — no admin set or caller mismatch
 fn require_admin(env: &Env, caller: &Address) -> Result<(), ReserveError> {
-    let admin = env
-        .storage()
-        .persistent()
-        .get::<DepositDataKey, Address>(&DepositDataKey::Admin)
-        .ok_or(ReserveError::Unauthorized)?;
-
-    if caller != &admin {
-        return Err(ReserveError::Unauthorized);
-    }
-    Ok(())
+    crate::admin::require_admin(env, caller).map_err(|_| ReserveError::Unauthorized)
 }
