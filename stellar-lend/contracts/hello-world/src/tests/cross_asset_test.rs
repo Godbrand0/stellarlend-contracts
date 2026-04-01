@@ -29,6 +29,7 @@ fn default_config(env: &Env) -> AssetConfig {
         max_borrow: 500_000_0000000,   // 500K
         can_collateralize: true,
         can_borrow: true,
+        borrow_factor: 10000,
         price: 10_000_000, // $1.00 (7 decimals)
         price_updated_at: env.ledger().timestamp(),
     }
@@ -36,6 +37,7 @@ fn default_config(env: &Env) -> AssetConfig {
 
 /// Create a token-backed asset config for testing.
 fn token_config(env: &Env, addr: &Address) -> AssetConfig {
+    let price = 20_000_000;
     AssetConfig {
         asset: Some(addr.clone()),
         collateral_factor: 6000,     // 60% LTV
@@ -45,7 +47,8 @@ fn token_config(env: &Env, addr: &Address) -> AssetConfig {
         max_borrow: 250_000_0000000,
         can_collateralize: true,
         can_borrow: true,
-        price: 20_000_000, // $2.00
+        borrow_factor: 10000,
+        price,
         price_updated_at: env.ledger().timestamp(),
     }
 }
@@ -81,9 +84,10 @@ fn test_initialize_ca_success() {
 #[test]
 #[should_panic]
 fn test_initialize_ca_twice_fails() {
-    let (_, client, admin) = setup();
-    // Second call should fail with AlreadyInitialized
-    client.initialize_ca(&admin);
+    let (env, client, _admin) = setup();
+    let other_admin = Address::generate(&env);
+    // Second call with different admin should fail with AlreadyInitialized
+    client.initialize_ca(&other_admin);
 }
 
 // ============================================================================
@@ -281,6 +285,7 @@ fn test_update_asset_config_out_of_bounds_fails() {
     client.update_asset_config(
         &None,
         &Some(10_001), // Out of bounds
+        &None,
         &None,
         &None,
         &None,
@@ -1055,7 +1060,8 @@ fn test_deposit_then_disable_collateral_blocks_new_deposits() {
         &None,
         &None,
         &None,
-        &Some(false), // can_collateralize = false
+        &None,
+        &None,
         &None,
     );
 

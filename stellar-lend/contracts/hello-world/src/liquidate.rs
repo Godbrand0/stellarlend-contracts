@@ -5,8 +5,8 @@ use soroban_sdk::{contracterror, token, Address, Env, IntoVal, Map, Symbol, Val,
 
 use crate::deposit::{
     add_activity_log, emit_analytics_updated_event, emit_position_updated_event,
-    emit_user_activity_tracked_event, update_protocol_analytics, AssetParams, DepositDataKey,
-    Position, ProtocolAnalytics, UserAnalytics,
+    emit_user_activity_tracked_event, AssetParams, DepositDataKey, Position, ProtocolAnalytics,
+    UserAnalytics,
 };
 use crate::oracle::get_price;
 use crate::risk_management::{

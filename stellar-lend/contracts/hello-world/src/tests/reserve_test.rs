@@ -39,12 +39,10 @@ fn setup_test_env() -> (Env, Address, Address, Address, Address) {
     let user = Address::generate(&env);
     let treasury = Address::generate(&env);
 
-    // Set admin in storage (wrapped in as_contract)
-    env.as_contract(&contract_id, || {
-        env.storage()
-            .persistent()
-            .set(&DepositDataKey::Admin, &admin);
-    });
+    // Initialize the contract properly
+    let client = crate::HelloContractClient::new(&env, &contract_id);
+    env.mock_all_auths();
+    client.initialize(&admin);
 
     (env, contract_id, admin, user, treasury)
 }
@@ -255,7 +253,7 @@ fn test_set_reserve_factor_by_admin() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction(0))")]
+#[should_panic(expected = "Unauthorized")]
 fn test_set_reserve_factor_by_non_admin() {
     let (env, contract_id, _, user, _) = setup_test_env();
     let asset = Some(Address::generate(&env));
@@ -270,7 +268,7 @@ fn test_set_reserve_factor_by_non_admin() {
     .unwrap();
 
     // Non-admin tries to set reserve factor - should fail
-    let _ = test_set_reserve_factor(&env, &contract_id, user, asset, 2000);
+    test_set_reserve_factor(&env, &contract_id, user, asset, 2000).unwrap();
 }
 
 #[test]
@@ -504,7 +502,7 @@ fn test_set_treasury_address_by_admin() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction(0))")]
+#[should_panic(expected = "Unauthorized")]
 fn test_set_treasury_address_by_non_admin() {
     let (env, contract_id, _admin, user, treasury) = setup_test_env();
 
@@ -517,7 +515,7 @@ fn test_set_treasury_address_to_contract() {
     let (env, contract_id, admin, _user, _treasury) = setup_test_env();
 
     // Try to set treasury to contract address - should fail
-    let contract_addr = env.current_contract_address();
+    let contract_addr = contract_id.clone();
     let result = test_set_treasury_address(&env, &contract_id, admin, contract_addr);
     assert_eq!(result, Err(ReserveError::InvalidTreasury));
 }
@@ -652,7 +650,7 @@ fn test_withdraw_reserve_treasury_not_set() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction(0))")]
+#[should_panic(expected = "Unauthorized")]
 fn test_withdraw_reserve_by_non_admin() {
     let (env, contract_id, admin, user, treasury) = setup_test_env();
     let asset = Some(Address::generate(&env));
@@ -663,7 +661,7 @@ fn test_withdraw_reserve_by_non_admin() {
     test_accrue_reserve(&env, &contract_id, asset.clone(), 10000).unwrap();
 
     // Non-admin tries to withdraw - should fail
-    let _ = test_withdraw_reserve_funds(&env, &contract_id, user, asset, 500);
+    test_withdraw_reserve_funds(&env, &contract_id, user, asset, 500).unwrap();
 }
 
 #[test]
@@ -732,6 +730,7 @@ fn test_withdraw_reserve_from_zero_balance() {
 /// 5. All calculations use checked arithmetic to prevent overflow
 ///
 /// Structure to track interest distribution at different points in time
+#[contracttype]
 #[derive(Debug, Clone)]
 struct InterestDistribution {
     period: u32,
@@ -1815,7 +1814,7 @@ fn test_security_trust_boundaries() {
     test_initialize_reserve_config(&env, &contract_id, asset.clone(), 1000).unwrap();
 
     // Test 2: Treasury boundary - cannot set contract as treasury
-    let contract_addr = env.current_contract_address();
+    let contract_addr = contract_id.clone();
     let result = test_set_treasury_address(&env, &contract_id, admin.clone(), contract_addr);
     assert_eq!(result, Err(ReserveError::InvalidTreasury));
 

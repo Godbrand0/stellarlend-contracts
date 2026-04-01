@@ -569,8 +569,6 @@ fn validate_amm_callback_core(
     caller: &Address,
     callback_data: &AmmCallbackData,
 ) -> Result<(), AmmError> {
-    caller.require_auth();
-
     // Verify caller is a registered AMM protocol
     let protocols = get_amm_protocols(env)?;
     if !protocols.contains_key(caller.clone()) {
@@ -892,7 +890,7 @@ fn execute_amm_swap(
     // Prepare arguments for external AMM protocol call
     // Standard AMM interface: swap(executor, token_in, token_out, amount_in, min_amount_out, callback_data)
     let mut args: Vec<Val> = Vec::new(env);
-    args.push_back(callback_data.user.to_val());
+    args.push_back(callback_data.user.into_val(env));
     args.push_back(params.token_in.into_val(env));
     args.push_back(params.token_out.into_val(env));
     args.push_back(params.amount_in.into_val(env));

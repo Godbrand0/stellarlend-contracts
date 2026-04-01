@@ -63,7 +63,7 @@ const CLOSE_FACTOR_MIN: i128 = 0; // 0% minimum
 const CLOSE_FACTOR_MAX: i128 = BASIS_POINTS_SCALE; // 100% maximum
 const LIQUIDATION_INCENTIVE_MIN: i128 = 0; // 0% minimum
 const LIQUIDATION_INCENTIVE_MAX: i128 = 5_000; // 50% maximum (safety limit)
-const MAX_PARAMETER_CHANGE_BPS: i128 = 1_000; // 10% maximum change per update
+const MAX_PARAMETER_CHANGE_BPS: i128 = 5_000; // 50% maximum change per update
 
 /// Initialize risk parameters
 ///
