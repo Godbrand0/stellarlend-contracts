@@ -16,6 +16,12 @@
 //! - A user must have collateral deposited before borrowing.
 //! - The collateral ratio must remain at or above the minimum after the borrow.
 //! - Borrow amount must not exceed the maximum borrowable given current collateral.
+//!
+//! ## Max borrow and collateral factor
+//! For collateral `C`, factor `cf` (basis points), and minimum ratio `R` (basis points):
+//! `max_debt ≈ (C * cf / 10_000) * (10_000 / R)` before subtracting existing debt and interest
+//! (see [`calculate_max_borrowable`]). The factor `cf` comes from [`crate::deposit::AssetParams`] for the
+//! **borrow asset** when `asset` is `Some`. See `COLLATERAL_FACTOR_MAX_BORROW.md` in this crate.
 
 #![allow(unused)]
 use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};

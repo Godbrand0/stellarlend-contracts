@@ -8,6 +8,7 @@ pub mod withdraw_test;
 pub mod interest_rate_test;
 pub mod reserve_test;
 pub mod cross_asset_test;
+pub mod collateral_factor_max_borrow_spec;
 pub mod test_helpers;
 pub mod emergency_shutdown_test;
 // Disabled — pre-existing failures unrelated to this issue
