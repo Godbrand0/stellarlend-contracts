@@ -149,15 +149,20 @@ fn setup_protocol<'a>(
     stellar_token_client.mint(&user, &10_000_000); // 10k USDC
 
     // Enable asset in protocol
-    client.update_asset_config(
-        &Some(token_addr.clone()),
-        &Some(7500),
-        &Some(8000),
-        &Some(i128::MAX),
-        &Some(i128::MAX),
-        &Some(true),
-        &Some(true),
-    );
+    let config = crate::cross_asset::AssetConfig {
+        asset: Some(token_addr.clone()),
+        collateral_factor: 7500,
+        liquidation_threshold: 8000,
+        reserve_factor: 1000,
+        max_supply: 0,
+        max_borrow: 0,
+        can_collateralize: true,
+        can_borrow: true,
+        borrow_factor: 8000,
+        price: 10_000_000,
+        price_updated_at: e.ledger().timestamp(),
+    };
+    client.initialize_asset(&Some(token_addr), &config);
 
     (client, protocol_id, admin, user, token_client)
 }
@@ -228,6 +233,7 @@ fn test_flash_loan_happy_path() {
 
     // Now Receiver calls repay (simulating the atomic transaction requirement)
     // The `repay_flash_loan` must be called.
+    token_client.approve(&receiver_id, &protocol_id, &total_repayment, &200);
     client.repay_flash_loan(&receiver_id, &token_addr, &total_repayment);
 
     // Verify funds returned
@@ -272,14 +278,14 @@ fn test_deposit_borrow_interactions() {
     env.budget().print();
 
     // Verify internal state
-    let _position = get_user_position(&env, &protocol_id, &user).unwrap();
+    let position = client.get_user_asset_position(&user, &Some(token_addr.clone()));
     // Assuming get_user_position returns something we can check
     // We can check CollateralBalance directly if getter exists
     // client.get_collateral_balance(&user, &Some(token_addr.clone()));
 }
 
 #[test]
-#[should_panic(expected = "InsufficientLiquidity")]
+#[should_panic(expected = "#3")]
 fn test_flash_loan_insufficient_liquidity() {
     let env = Env::default();
     env.mock_all_auths();
@@ -291,7 +297,7 @@ fn test_flash_loan_insufficient_liquidity() {
 }
 
 #[test]
-#[should_panic(expected = "Reentrancy")]
+#[should_panic(expected = "#8")]
 fn test_flash_loan_reentrancy_block() {
     let env = Env::default();
     env.mock_all_auths();

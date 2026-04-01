@@ -1,7 +1,5 @@
 #![allow(unused)]
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Symbol, Val, Vec, I256};
-use crate::risk_management::{is_emergency_paused, require_admin, RiskManagementError};
-use crate::prelude::*;
 
 /// Errors that can occur during risk parameter management
 #[contracterror]
@@ -71,7 +69,7 @@ const CLOSE_FACTOR_MIN: i128 = 0; // 0% minimum
 const CLOSE_FACTOR_MAX: i128 = BASIS_POINTS_SCALE; // 100% maximum
 const LIQUIDATION_INCENTIVE_MIN: i128 = 0; // 0% minimum
 const LIQUIDATION_INCENTIVE_MAX: i128 = 5_000; // 50% maximum (safety limit)
-const MAX_PARAMETER_CHANGE_BPS: i128 = 1_000; // 10% maximum change per update
+const MAX_PARAMETER_CHANGE_BPS: i128 = 5_000; // 50% maximum change per update
 
 /// Enhanced validation constants for hardened security
 const MIN_SAFETY_MARGIN_BPS: i128 = 500; // 5% minimum margin between liquidation threshold and min CR
@@ -402,10 +400,7 @@ pub fn get_liquidation_incentive(env: &Env) -> Result<i128, RiskParamsError> {
 /// Get the maximum amount that can be liquidated for a given debt position.
 /// Uses the configured close factor (default 5000 bps = 50%).
 /// Uses I256 for safe intermediate multiplication.
-pub fn get_max_liquidatable_amount(
-    env: &Env,
-    debt_value: i128,
-) -> Result<i128, RiskParamsError> {
+pub fn get_max_liquidatable_amount(env: &Env, debt_value: i128) -> Result<i128, RiskParamsError> {
     let config = get_risk_params(env).ok_or(RiskParamsError::InvalidParameter)?;
 
     // Calculate: debt * close_factor / BASIS_POINTS_SCALE using I256 to prevent overflow

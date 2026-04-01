@@ -118,7 +118,7 @@ pub fn initialize_reserve_config(
     reserve_factor_bps: i128,
 ) -> Result<(), ReserveError> {
     // Validate reserve factor
-    if reserve_factor_bps < 0 || reserve_factor_bps > MAX_RESERVE_FACTOR_BPS {
+    if !(0..=MAX_RESERVE_FACTOR_BPS).contains(&reserve_factor_bps) {
         return Err(ReserveError::InvalidReserveFactor);
     }
 
@@ -171,7 +171,7 @@ pub fn set_reserve_factor(
     require_admin(env, &caller)?;
 
     // Validate reserve factor
-    if reserve_factor_bps < 0 || reserve_factor_bps > MAX_RESERVE_FACTOR_BPS {
+    if !(0..=MAX_RESERVE_FACTOR_BPS).contains(&reserve_factor_bps) {
         return Err(ReserveError::InvalidReserveFactor);
     }
 
@@ -430,27 +430,8 @@ pub fn withdraw_reserve_funds(
     Ok(amount)
 }
 
-/// Helper function to require admin authorization
-///
-/// # Arguments
-/// * `env` - The Soroban environment
-/// * `caller` - The caller address to check
-///
-/// # Errors
-/// * `ReserveError::Unauthorized` - If caller is not admin
 fn require_admin(env: &Env, caller: &Address) -> Result<(), ReserveError> {
-    let admin_key = DepositDataKey::Admin;
-    let admin = env
-        .storage()
-        .persistent()
-        .get::<DepositDataKey, Address>(&admin_key)
-        .ok_or(ReserveError::Unauthorized)?;
-
-    if caller != &admin {
-        return Err(ReserveError::Unauthorized);
-    }
-
-    Ok(())
+    crate::admin::require_admin(env, caller).map_err(|_| ReserveError::Unauthorized)
 }
 
 /// Get reserve statistics for an asset

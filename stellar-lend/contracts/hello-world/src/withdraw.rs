@@ -100,7 +100,9 @@ fn calculate_collateral_ratio(
         .checked_div(10_000)?;
 
     // Ratio expressed in basis points: 10_000 == 100%
-    collateral_value.checked_mul(10_000)?.checked_div(total_debt)
+    collateral_value
+        .checked_mul(10_000)?
+        .checked_div(total_debt)
 }
 
 // ---------------------------------------------------------------------------
@@ -199,8 +201,7 @@ fn validate_collateral_ratio_after_withdraw(
     // enforced at parameter-update time, this check is normally redundant.
     // We keep it explicit so that any future parameter inconsistency cannot
     // silently produce a liquidatable withdrawal.
-    let liq_threshold =
-        crate::risk_params::get_liquidation_threshold(env).unwrap_or(min_ratio);
+    let liq_threshold = crate::risk_params::get_liquidation_threshold(env).unwrap_or(min_ratio);
     if new_ratio < liq_threshold {
         return Err(WithdrawError::Undercollateralized);
     }
@@ -362,7 +363,7 @@ pub fn withdraw_collateral(
         let token_client = soroban_sdk::token::Client::new(env, asset_addr);
         token_client.transfer(
             &env.current_contract_address(), // from: this contract
-            &user,                            // to: the position owner
+            &user,                           // to: the position owner
             &amount,
         );
     }
@@ -394,7 +395,13 @@ pub fn withdraw_collateral(
             timestamp,
         },
     );
-    emit_position_updated_event(env, &user, &position, Symbol::new(env, "withdraw"), timestamp);
+    emit_position_updated_event(
+        env,
+        &user,
+        &position,
+        Symbol::new(env, "withdraw"),
+        timestamp,
+    );
     emit_analytics_updated_event(env, &user, "withdraw", amount, timestamp);
     emit_user_activity_tracked_event(env, &user, Symbol::new(env, "withdraw"), amount, timestamp);
 
@@ -441,10 +448,7 @@ fn update_user_analytics_withdraw(
 
     // Clamp collateral_value to zero on underflow — withdrawal should never
     // exceed the deposited amount, but we avoid panicking on stale analytics.
-    analytics.collateral_value = analytics
-        .collateral_value
-        .checked_sub(amount)
-        .unwrap_or(0);
+    analytics.collateral_value = analytics.collateral_value.checked_sub(amount).unwrap_or(0);
 
     // Recalculate the user-facing collateralization ratio
     if analytics.debt_value > 0 {
