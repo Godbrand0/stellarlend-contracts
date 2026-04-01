@@ -394,7 +394,6 @@ pub fn withdraw_collateral(
             timestamp,
         },
     );
-    let timestamp = env.ledger().timestamp();
     emit_position_updated_event(
         env,
         &user,

@@ -288,7 +288,7 @@ pub fn liquidate(
         .persistent()
         .set(&collateral_key, &position.collateral);
 
-    update_liquidation_analytics(env, actual_debt_liquidated, collateral_seized)
+    record_liquidation_analytics(env, actual_debt_liquidated, collateral_seized)
         .map_err(|_| LiquidationError::Overflow)?;
 
     // 9. EXTERNAL INTERACTIONS (TRANSFERS)
@@ -323,7 +323,7 @@ pub fn liquidate(
         LiquidationEvent {
             liquidator: liquidator.clone(),
             borrower: borrower.clone(),
-            debt_asset: debt_asset.clone(),
+            debt_asset,
             collateral_asset,
             debt_liquidated: actual_debt_liquidated,
             collateral_seized,
@@ -355,7 +355,7 @@ pub fn liquidate(
 }
 
 /// Update protocol analytics after liquidation
-fn update_liquidation_analytics(
+fn record_liquidation_analytics(
     env: &Env,
     debt_liquidated: i128,
     collateral_seized: i128,

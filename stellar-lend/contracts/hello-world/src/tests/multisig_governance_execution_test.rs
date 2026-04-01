@@ -16,14 +16,13 @@
 #![cfg(test)]
 
 use crate::errors::GovernanceError;
-use crate::types::ProposalStatus;
-use crate::types::{ProposalType};
 use crate::governance::{
     approve_proposal, create_proposal, execute_multisig_proposal, get_multisig_admins,
     get_multisig_config, get_multisig_threshold, get_proposal, get_proposal_approvals, initialize,
     propose_set_min_collateral_ratio, set_multisig_admins, set_multisig_config,
     set_multisig_threshold,
 };
+use crate::types::ProposalType;
 use crate::types::{Action, GovernanceConfig, MultisigConfig};
 use crate::HelloContract;
 use soroban_sdk::{

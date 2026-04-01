@@ -544,3 +544,99 @@ fn test_admin_rotation() {
         assert!(proposal_id > 0);
     });
 }
+
+#[test]
+fn test_remove_last_guardian_rejected() {
+    let (env, cid, admin) = setup();
+    let guardian = Address::generate(&env);
+
+    with_contract!(env, &cid, {
+        add_guardian(&env, admin.clone(), guardian.clone()).unwrap();
+        let result = remove_guardian(&env, admin, guardian);
+        assert_eq!(result, Err(GovernanceError::InvalidGuardianConfig));
+
+        let guardians = get_guardians(&env).unwrap();
+        assert_eq!(guardians.len(), 1);
+    });
+}
+
+#[test]
+fn test_start_recovery_rejects_same_admin_rotation() {
+    let (env, cid, admin) = setup();
+    let guardian = Address::generate(&env);
+
+    with_contract!(env, &cid, {
+        add_guardian(&env, admin.clone(), guardian.clone()).unwrap();
+        let result = start_recovery(&env, guardian, admin.clone(), admin);
+        assert_eq!(result, Err(GovernanceError::InvalidProposal));
+    });
+}
+
+#[test]
+fn test_start_recovery_rejects_existing_new_admin() {
+    let (env, cid, admin1) = setup();
+    let admin2 = Address::generate(&env);
+    let guardian = Address::generate(&env);
+
+    with_contract!(env, &cid, {
+        let mut admins = Vec::new(&env);
+        admins.push_back(admin1.clone());
+        admins.push_back(admin2.clone());
+        set_multisig_admins(&env, admin1.clone(), admins).unwrap();
+
+        add_guardian(&env, admin1.clone(), guardian.clone()).unwrap();
+        let result = start_recovery(&env, guardian, admin1, admin2);
+        assert_eq!(result, Err(GovernanceError::InvalidProposal));
+    });
+}
+
+#[test]
+fn test_approve_recovery_clears_invalidated_request_after_admin_rotation() {
+    let (env, cid, admin) = setup();
+    let guardian1 = Address::generate(&env);
+    let guardian2 = Address::generate(&env);
+    let replacement_admin = Address::generate(&env);
+    let unrelated_admin = Address::generate(&env);
+
+    with_contract!(env, &cid, {
+        add_guardian(&env, admin.clone(), guardian1.clone()).unwrap();
+        add_guardian(&env, admin.clone(), guardian2.clone()).unwrap();
+        start_recovery(&env, guardian1, admin.clone(), replacement_admin).unwrap();
+
+        let mut admins = Vec::new(&env);
+        admins.push_back(unrelated_admin);
+        set_multisig_admins(&env, admin, admins).unwrap();
+
+        let result = approve_recovery(&env, guardian2);
+        assert_eq!(result, Err(GovernanceError::InvalidProposal));
+        assert!(get_recovery_request(&env).is_none());
+        assert!(get_recovery_approvals(&env).is_none());
+    });
+}
+
+#[test]
+fn test_execute_recovery_clears_invalidated_request_after_admin_rotation() {
+    let (env, cid, admin) = setup();
+    let guardian1 = Address::generate(&env);
+    let guardian2 = Address::generate(&env);
+    let replacement_admin = Address::generate(&env);
+    let unrelated_admin = Address::generate(&env);
+    let executor = Address::generate(&env);
+
+    with_contract!(env, &cid, {
+        add_guardian(&env, admin.clone(), guardian1.clone()).unwrap();
+        add_guardian(&env, admin.clone(), guardian2.clone()).unwrap();
+        set_guardian_threshold(&env, admin.clone(), 2).unwrap();
+        start_recovery(&env, guardian1, admin.clone(), replacement_admin).unwrap();
+        approve_recovery(&env, guardian2).unwrap();
+
+        let mut admins = Vec::new(&env);
+        admins.push_back(unrelated_admin);
+        set_multisig_admins(&env, admin, admins).unwrap();
+
+        let result = execute_recovery(&env, executor);
+        assert_eq!(result, Err(GovernanceError::InvalidProposal));
+        assert!(get_recovery_request(&env).is_none());
+        assert!(get_recovery_approvals(&env).is_none());
+    });
+}

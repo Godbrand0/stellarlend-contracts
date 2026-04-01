@@ -48,6 +48,7 @@ pub fn amm_add_liquidity(
 }
 
 /// Remove liquidity from AMM pool
+#[allow(clippy::too_many_arguments)]
 pub fn amm_remove_liquidity(
     env: Env,
     user: Address,

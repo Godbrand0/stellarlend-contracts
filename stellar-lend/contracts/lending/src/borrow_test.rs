@@ -73,7 +73,26 @@ fn test_borrow_invalid_amount() {
     assert_eq!(result, Err(Ok(BorrowError::InvalidAmount)));
 
     let result = client.try_borrow(&user, &asset, &10_000, &collateral_asset, &0);
-    assert_eq!(result, Err(Ok(BorrowError::InvalidAmount)));
+    assert_eq!(result, Err(Ok(BorrowError::InsufficientCollateral)));
+}
+
+#[test]
+fn test_borrow_against_existing_collateral_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, user, asset, collateral_asset) = setup_test(&env);
+
+    // Initial deposit: 100k collateral. Can borrow up to ~66k.
+    client.deposit_collateral(&user, &collateral_asset, &100_000);
+
+    // Borrow 10k with 0 additional collateral
+    client.borrow(&user, &asset, &10_000, &collateral_asset, &0);
+
+    let debt = client.get_user_debt(&user);
+    assert_eq!(debt.borrowed_amount, 10_000);
+
+    let collateral = client.get_user_collateral(&user);
+    assert_eq!(collateral.amount, 100_000);
 }
 
 #[test]
@@ -307,6 +326,8 @@ fn test_coverage_extremes() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, user, asset, _) = setup_test(&env);
+    let current_hash = BytesN::from_array(&env, &[0; 32]);
+    client.upgrade_init(&admin, &current_hash, &1);
 
     // 1. View Error Paths (Oracle zero/negative)
     // We can't easily mock the oracle to return 0 mid-test without registering a new one
@@ -328,10 +349,9 @@ fn test_coverage_extremes() {
 
     // 3. Upgrade Branch Coverage
     let hash = BytesN::from_array(&env, &[1; 32]);
-    // Must initialize upgrade manager before proposing
-    client.upgrade_init(&admin, &hash, &1);
+    client.upgrade_init(&admin, &hash, &1); // initialize upgrade system first
     let pid = client.upgrade_propose(&admin, &hash, &100);
-    let _ = client.upgrade_status(&pid);
+    assert_eq!(client.upgrade_status(&pid).stage, UpgradeStage::Approved);
 
     // Trigger some internal view branches
     let _ = client.get_user_position(&user);
