@@ -2,8 +2,10 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol, Vec,
+};
 use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec};
-use soroban_sdk::{contract, contractimpl, Address, Env, Map, Symbol, Vec, contracttype, contracterror};
 
 pub mod admin;
 pub mod amm;
@@ -57,8 +59,6 @@ fn require_admin(env: &Env, caller: &Address) -> Result<(), RiskManagementError>
     Ok(())
 }
 
-
-
 use borrow::borrow_asset;
 use deposit::deposit_collateral;
 use repay::repay_debt;
@@ -67,13 +67,13 @@ use risk_management::{
     check_emergency_pause, initialize_risk_management, is_emergency_paused, is_operation_paused,
 };
 
+use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use risk_params::{
     can_be_liquidated, get_liquidation_incentive_amount, get_max_liquidatable_amount,
     initialize_risk_params, require_min_collateral_ratio, RiskParamsError,
 };
 use withdraw::withdraw_collateral;
-use crate::deposit::{DepositDataKey, ProtocolAnalytics};
-use crate::config_snapshot::{get_config_snapshot, ConfigSnapshot};
 
 use crate::analytics::{
     generate_protocol_report, generate_user_report, get_recent_activity, get_user_activity_feed,
@@ -97,7 +97,6 @@ use bridge::{
     bridge_deposit, bridge_withdraw, get_bridge_config, list_bridges, register_bridge,
     set_bridge_fee, BridgeConfig, BridgeError,
 };
-
 
 #[allow(unused_imports)]
 use crate::interest_rate::{
@@ -142,7 +141,6 @@ pub enum AmmError {
 }
 
 pub mod reentrancy;
-
 
 /// The StellarLend core contract.
 #[contract]
@@ -259,16 +257,6 @@ impl HelloContract {
         native_asset: Address,
     ) -> Result<(), crate::deposit::DepositError> {
         crate::deposit::set_native_asset_address(&env, caller, native_asset)
-    }
-
-    /// Withdraw collateral from the protocol.
-    pub fn withdraw_collateral(
-        env: Env,
-        user: Address,
-        asset: Option<Address>,
-        amount: i128,
-    ) -> Result<i128, crate::withdraw::WithdrawError> {
-        crate::withdraw::withdraw_collateral(&env, user, asset, amount)
     }
 
     /// Set risk parameters (admin only).
@@ -402,32 +390,6 @@ impl HelloContract {
         risk_management::get_risk_config(&env)
     }
 
-    pub fn set_pause_switch(
-        env: Env,
-        admin: Address,
-        operation: Symbol,
-        paused: bool,
-    ) -> Result<(), RiskManagementError> {
-        risk_management::set_pause_switch(&env, admin, operation, paused)
-    }
-
-    pub fn is_operation_paused(env: Env, operation: Symbol) -> bool {
-        risk_management::is_operation_paused(&env, operation)
-    }
-
-    pub fn is_emergency_paused(env: Env) -> bool {
-        risk_management::is_emergency_paused(&env)
-    }
-
-    pub fn set_emergency_pause(
-        env: Env,
-        admin: Address,
-        paused: bool,
-    ) -> Result<(), RiskManagementError> {
-        risk_management::set_emergency_pause(&env, admin, paused)
-    }
-
-
     /// Get minimum collateral ratio.
     /// Get a read-only configuration snapshot of the protocol
     ///
@@ -464,11 +426,6 @@ impl HelloContract {
             .map_err(|_| RiskManagementError::InvalidParameter)
     }
 
-    /// Get current utilization (in basis points).
-    pub fn get_utilization(env: Env) -> i128 {
-        interest_rate::calculate_utilization(&env).unwrap_or(0)
-    }
-
     /// Get current borrow rate (in basis points).
     pub fn get_borrow_rate(env: Env) -> i128 {
         interest_rate::calculate_borrow_rate(&env).unwrap_or(0)
@@ -477,11 +434,6 @@ impl HelloContract {
     /// Get current supply rate (in basis points).
     pub fn get_supply_rate(env: Env) -> i128 {
         interest_rate::calculate_supply_rate(&env).unwrap_or(0)
-    }
-
-    /// Get protocol utilization in basis points.
-    pub fn get_utilization(env: Env) -> i128 {
-        analytics::get_protocol_utilization(&env).unwrap_or(0)
     }
 
     /// Configure flash-loan parameters (admin only).
@@ -500,15 +452,6 @@ impl HelloContract {
         fee_bps: i128,
     ) -> Result<(), crate::flash_loan::FlashLoanError> {
         flash_loan::set_flash_loan_fee(&env, caller, fee_bps)
-    }
-
-    /// Set emergency interest-rate adjustment in basis points (admin only).
-    pub fn set_emergency_rate_adjustment(
-        env: Env,
-        caller: Address,
-        adjustment_bps: i128,
-    ) -> Result<(), crate::interest_rate::InterestRateError> {
-        interest_rate::set_emergency_rate_adjustment(&env, caller, adjustment_bps)
     }
 
     /// Update interest rate model configuration (admin only).
@@ -561,16 +504,6 @@ impl HelloContract {
     /// Get the current interest rate configuration.
     pub fn get_interest_rate_config(env: Env) -> Option<InterestRateConfig> {
         interest_rate::get_interest_rate_config(&env)
-    }
-
-    /// Check if a position meets minimum collateral ratio.
-    pub fn require_min_collateral_ratio(
-        env: Env,
-        collateral_value: i128,
-        debt_value: i128,
-    ) -> Result<(), RiskManagementError> {
-        crate::risk_params::require_min_collateral_ratio(&env, collateral_value, debt_value)
-            .map_err(|_| RiskManagementError::InsufficientCollateralRatio)
     }
 
     /// Enforce minimum collateral ratio.
@@ -1314,18 +1247,17 @@ impl HelloContract {
 #[cfg(test)]
 mod tests;
 
-
 // Legacy standalone tests currently mismatch contract API.
 // #[cfg(test)]
 // mod test_reentrancy;
+mod flash_loan_test;
 #[cfg(test)]
 // mod test;
 #[cfg(test)]
 mod test_reentrancy;
-mod flash_loan_test;
 
 #[cfg(test)]
-mod amm_pause_integration_test;  
+mod amm_pause_integration_test;
 
 // mod governance_test;
 

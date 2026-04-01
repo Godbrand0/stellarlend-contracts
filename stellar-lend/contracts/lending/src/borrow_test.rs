@@ -73,7 +73,26 @@ fn test_borrow_invalid_amount() {
     assert_eq!(result, Err(Ok(BorrowError::InvalidAmount)));
 
     let result = client.try_borrow(&user, &asset, &10_000, &collateral_asset, &0);
-    assert_eq!(result, Err(Ok(BorrowError::InvalidAmount)));
+    assert_eq!(result, Err(Ok(BorrowError::InsufficientCollateral)));
+}
+
+#[test]
+fn test_borrow_against_existing_collateral_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, user, asset, collateral_asset) = setup_test(&env);
+
+    // Initial deposit: 100k collateral. Can borrow up to ~66k.
+    client.deposit_collateral(&user, &collateral_asset, &100_000);
+
+    // Borrow 10k with 0 additional collateral
+    client.borrow(&user, &asset, &10_000, &collateral_asset, &0);
+
+    let debt = client.get_user_debt(&user);
+    assert_eq!(debt.borrowed_amount, 10_000);
+
+    let collateral = client.get_user_collateral(&user);
+    assert_eq!(collateral.amount, 100_000);
 }
 
 #[test]

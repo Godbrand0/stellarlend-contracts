@@ -151,6 +151,8 @@ fn test_set_asset_params_multiple_assets() {
 
     setup_multi_asset_config(&env, &client, &_admin, &asset_usdc, &asset_eth);
 
+    setup_multi_asset_config(&env, &client, &admin, &asset_usdc, &asset_eth);
+
     // Test that multiple assets can be configured with different parameters
     // In a real implementation, we'd verify the stored parameters
 }
