@@ -108,7 +108,8 @@ mod withdraw_test;
 #[cfg(test)]
 mod bad_debt_test;
 #[cfg(test)]
-mod liquidation_boundary_test;
+mod liquidation_boundary_test;#[cfg(test)]
+mod multi_user_contention_test;
 #[cfg(test)]
 mod multi_user_contention_test;
 #[cfg(test)]
@@ -743,8 +744,8 @@ impl LendingContract {
     // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
     /// Initialize admin for cross-asset operations
-    pub fn initialize_admin(env: Env, admin: Address) {
-        cross_init_admin(&env, admin);
+    pub fn initialize_admin(env: Env, admin: Address) -> Result<(), CrossAssetError> {
+        cross_init_admin(&env, admin)
     }
 
     /// Set parameters for a specific asset (admin only)
