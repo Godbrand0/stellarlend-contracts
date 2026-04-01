@@ -9,13 +9,13 @@
 //! - Collateral and debt values depend on the oracle; ensure the oracle is correct and trusted.
 //! - Health factor uses the admin-set liquidation threshold consistently.
 
-use soroban_sdk::{contracttype, Address, Env, I256, IntoVal, Symbol};
-
 use crate::borrow::{
-    get_close_factor_bps, get_liquidation_incentive_bps, get_liquidation_threshold_bps,
-    get_oracle, get_user_collateral, get_user_debt, BorrowCollateral, DebtPosition,
+    get_close_factor_bps, get_liquidation_incentive_bps, get_liquidation_threshold_bps, get_oracle,
+    get_user_collateral, get_user_debt, BorrowCollateral, DebtPosition,
 };
+use crate::constants::BPS_SCALE;
 use crate::oracle;
+use soroban_sdk::{contracttype, Address, Env, IntoVal, Symbol, I256};
 
 /// Scale for oracle price (1e8 = one unit). Value = amount * price / PRICE_SCALE.
 const PRICE_SCALE: i128 = 100_000_000;
@@ -285,7 +285,9 @@ pub fn get_liquidation_incentive_amount(env: &Env, repay_amount: i128) -> i128 {
     let incentive_bps = get_liquidation_incentive_bps(env);
     let amount_256 = I256::from_i128(env, repay_amount);
     let scale_256 = I256::from_i128(env, BPS_SCALE + incentive_bps);
-    let result = amount_256.mul(&scale_256).div(&I256::from_i128(env, BPS_SCALE));
+    let result = amount_256
+        .mul(&scale_256)
+        .div(&I256::from_i128(env, BPS_SCALE));
     result.to_i128().unwrap_or(i128::MAX)
 }
 

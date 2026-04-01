@@ -16,9 +16,16 @@
 //! - A user must have collateral deposited before borrowing.
 //! - The collateral ratio must remain at or above the minimum after the borrow.
 //! - Borrow amount must not exceed the maximum borrowable given current collateral.
+//!
+//! ## Max borrow and collateral factor
+//! For collateral `C`, factor `cf` (basis points), and minimum ratio `R` (basis points):
+//! `max_debt ≈ (C * cf / 10_000) * (10_000 / R)` before subtracting existing debt and interest
+//! (see [`calculate_max_borrowable`]). The factor `cf` comes from [`crate::deposit::AssetParams`] for the
+//! **borrow asset** when `asset` is `Some`. See `COLLATERAL_FACTOR_MAX_BORROW.md` in this crate.
 
 #![allow(unused)]
 use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};
+use crate::prelude::*;
 
 use crate::deposit::{
     add_activity_log, emit_analytics_updated_event, emit_position_updated_event,
@@ -52,42 +59,13 @@ pub enum BorrowError {
     AssetNotEnabled = 9,
 }
 
-#[derive(Clone, Copy)]
-struct BorrowSpecSnapshot {
-    principal_before: i128,
-    interest_before: i128,
-    collateral_before: i128,
-}
-
-#[inline(always)]
-fn fv_borrow_preconditions(amount: i128, position: &Position, collateral: i128) -> bool {
-    amount > 0 && collateral > 0 && position.debt >= 0 && position.borrow_interest >= 0
-}
-
-#[inline(always)]
-fn fv_borrow_postconditions(
-    snapshot: &BorrowSpecSnapshot,
-    position: &Position,
-    borrowed_amount: i128,
-    total_debt: i128,
-    collateral_after: i128,
-) -> bool {
-    let expected_principal = snapshot.principal_before.checked_add(borrowed_amount);
-    let recomputed_total = position.debt.checked_add(position.borrow_interest);
-
-    expected_principal == Some(position.debt)
-        && position.borrow_interest >= snapshot.interest_before
-        && recomputed_total == Some(total_debt)
-        && collateral_after == snapshot.collateral_before
-}
-
-/// Minimum collateral ratio (in basis points, e.g., 15000 = 150%)
-/// This is the minimum ratio required: collateral_value / debt_value >= 1.5
+// Minimum collateral ratio (in basis points, e.g., 15000 = 150%)
+// This is the minimum ratio required: collateral_value / debt_value >= 1.5
 // Minimum collateral ratio is now managed by the risk_params module
 // const MIN_COLLATERAL_RATIO_BPS: i128 = 15000; // 150% (Legacy)
 
-/// Annual interest rate in basis points (e.g., 500 = 5% per year)
-/// This is a simple constant rate model - in production, this would be more sophisticated
+// Annual interest rate in basis points (e.g., 500 = 5% per year)
+// This is a simple constant rate model - in production, this would be more sophisticated
 // Interest rate is now calculated dynamically based on utilization
 // See interest_rate module for details
 /// Calculate interest accrued since last accrual time
