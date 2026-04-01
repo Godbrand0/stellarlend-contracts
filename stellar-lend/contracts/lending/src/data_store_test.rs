@@ -20,10 +20,11 @@ use crate::data_store::{DataStore, DataStoreClient};
 // ═══════════════════════════════════════════════════════
 
 /// Spin up a fresh Env + registered contract, returning the client.
+#[allow(deprecated)]
 fn setup() -> (Env, DataStoreClient<'static>) {
     let env = Env::default();
     env.mock_all_auths();
-    let id = env.register_contract(None, DataStore);
+    let id = env.register(DataStore, ());
     let client = DataStoreClient::new(&env, &id);
     (env, client)
 }

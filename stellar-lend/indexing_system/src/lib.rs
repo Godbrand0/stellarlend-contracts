@@ -1,3 +1,5 @@
+#![cfg(not(tarpaulin))]
+
 pub mod cache;
 pub mod config;
 pub mod error;

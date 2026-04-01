@@ -15,6 +15,8 @@ fn test_deposit_success() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
 
     let balance = client.deposit(&user, &asset, &10_000);
@@ -35,6 +37,8 @@ fn test_deposit_invalid_amount_zero() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
 
     let result = client.try_deposit(&user, &asset, &0);
@@ -52,6 +56,8 @@ fn test_deposit_invalid_amount_negative() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
 
     let result = client.try_deposit(&user, &asset, &-500);
@@ -69,6 +75,8 @@ fn test_deposit_below_minimum() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &5000);
 
     let result = client.try_deposit(&user, &asset, &1000);
@@ -86,6 +94,8 @@ fn test_deposit_paused() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.set_deposit_paused(&true);
 
@@ -104,6 +114,8 @@ fn test_deposit_exceeds_cap() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&50_000, &100);
 
     let result = client.try_deposit(&user, &asset, &100_000);
@@ -121,6 +133,8 @@ fn test_deposit_multiple_times() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
 
     let balance1 = client.deposit(&user, &asset, &10_000);
@@ -144,6 +158,8 @@ fn test_deposit_pause_unpause() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
 
     client.set_deposit_paused(&true);
@@ -166,6 +182,8 @@ fn test_deposit_overflow_protection() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &i128::MAX, &1000);
     client.initialize_deposit_settings(&i128::MAX, &100);
 
     client.deposit(&user, &asset, &1_000_000);
@@ -190,6 +208,8 @@ fn test_deposit_updates_timestamp() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.deposit(&user, &asset, &10_000);
 
@@ -218,6 +238,8 @@ fn test_deposit_separate_users() {
     let user2 = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
 
     client.deposit(&user1, &asset, &10_000);
@@ -240,6 +262,8 @@ fn test_deposit_cap_boundary() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&50_000, &100);
 
     // Exact cap — should succeed

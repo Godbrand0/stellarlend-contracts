@@ -1,4 +1,5 @@
 use super::*;
+use crate::withdraw::WithdrawError;
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
     Address, Env, FromVal, Symbol,
@@ -21,6 +22,8 @@ fn setup_with_deposit(
     asset: &Address,
     deposit_amount: i128,
 ) {
+    let admin = Address::generate(_env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&100);
     client.deposit(user, asset, &deposit_amount);
@@ -108,6 +111,8 @@ fn test_withdraw_below_minimum() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&5000);
     client.deposit(&user, &asset, &50_000);
@@ -136,6 +141,8 @@ fn test_withdraw_no_deposit() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&100);
 
@@ -188,9 +195,7 @@ fn test_withdraw_ratio_violation_with_debt() {
     // Deposit 100,000 collateral
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
 
-    // Borrow 10,000 against 15,000 collateral (borrow module tracks separately)
-    let admin = Address::generate(&env);
-    client.initialize(&admin, &1_000_000_000, &1000);
+    // Contract already initialized in setup_with_deposit
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
 
     // Try to withdraw 90,000 -> remaining 10,000 vs debt 10,000 * 1.5 = 15,000 -> fail
@@ -210,8 +215,6 @@ fn test_withdraw_ratio_valid_with_debt() {
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
 
     // Borrow 10,000 against 15,000 collateral
-    let admin = Address::generate(&env);
-    client.initialize(&admin, &1_000_000_000, &1000);
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
 
     // Withdraw 80,000 -> remaining 20,000 vs debt 10,000 * 1.5 = 15,000 -> pass
@@ -231,8 +234,6 @@ fn test_withdraw_ratio_boundary_exact_150_percent() {
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
 
     // Borrow 10,000 (min collateral = 10,000 * 1.5 = 15,000)
-    let admin = Address::generate(&env);
-    client.initialize(&admin, &1_000_000_000, &1000);
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
 
     // Withdraw exactly to 15,000 remaining -> should succeed (exactly 150%)
@@ -254,8 +255,6 @@ fn test_withdraw_ratio_boundary_just_below() {
     setup_with_deposit(&env, &client, &user, &asset, 30_000);
 
     // Borrow 10,000 (min collateral = 15,000)
-    let admin = Address::generate(&env);
-    client.initialize(&admin, &1_000_000_000, &1000);
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
 
     // Withdraw 15,100 -> remaining 14,900 < 15,000 -> fail
@@ -290,8 +289,6 @@ fn test_withdraw_max_with_debt() {
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
 
     // Borrow 10,000 (min collateral = 15,000)
-    let admin = Address::generate(&env);
-    client.initialize(&admin, &1_000_000_000, &1000);
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
 
     // Max safe withdrawal = 100,000 - 15,000 = 85,000
@@ -409,6 +406,8 @@ fn test_withdraw_minimum_amount_boundary() {
     let user = Address::generate(&env);
     let asset = Address::generate(&env);
 
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&500);
     client.deposit(&user, &asset, &50_000);
@@ -455,4 +454,36 @@ fn test_withdraw_deposit_withdraw_cycle() {
     client.withdraw(&user, &asset, &40_000);
     let pos = client.get_user_collateral_deposit(&user, &asset);
     assert_eq!(pos.amount, 0);
+}
+
+#[test]
+fn test_withdraw_global_pause() {
+    let (env, client) = setup_env();
+    let user = Address::generate(&env);
+    let asset = Address::generate(&env);
+
+    setup_with_deposit(&env, &client, &user, &asset, 50_000);
+
+    // Set global pause instead of withdraw-specific pause
+    let admin = client.get_admin().unwrap();
+    client.set_pause(&admin, &crate::pause::PauseType::All, &true);
+
+    let result = client.try_withdraw(&user, &asset, &10_000);
+    assert_eq!(result, Err(Ok(WithdrawError::WithdrawPaused)));
+}
+
+#[test]
+fn test_withdraw_invalid_min_amount_setup() {
+    let (env, client) = setup_env();
+    let user = Address::generate(&env);
+    let asset = Address::generate(&env);
+
+    setup_with_deposit(&env, &client, &user, &asset, 50_000);
+
+    // Set min withdraw to 500
+    client.initialize_withdraw_settings(&500);
+
+    // Withdrawal for 499 should fail
+    let result = client.try_withdraw(&user, &asset, &499);
+    assert_eq!(result, Err(Ok(WithdrawError::InvalidAmount)));
 }

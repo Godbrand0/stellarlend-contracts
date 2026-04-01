@@ -1,3 +1,4 @@
+
 //! Example: Simple transaction submission and monitoring
 //!
 //! This example demonstrates how to submit a transaction and wait for confirmation.

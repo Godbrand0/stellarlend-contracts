@@ -20,9 +20,8 @@ use soroban_sdk::{
     Address, Env, String,
 };
 
-use crate::{
-    HealthStatus, Monitor, MonitorClient, MonitorError,
-    MonitorSignal, SecuritySeverity, SignalKind,
+use crate::monitor::{
+    HealthStatus, Monitor, MonitorClient, MonitorError, MonitorSignal, SecuritySeverity, SignalKind,
 };
 
 // ═══════════════════════════════════════════════════════
@@ -90,12 +89,7 @@ fn test_init_twice_panics() {
 fn test_report_health_before_init_panics() {
     let (env, client) = setup();
     let addr = Address::generate(&env);
-    client.monitor_report_health(
-        &addr,
-        &s(&env, "target"),
-        &HealthStatus::Up,
-        &s(&env, "ok"),
-    );
+    client.monitor_report_health(&addr, &s(&env, "target"), &HealthStatus::Up, &s(&env, "ok"));
 }
 
 #[test]
@@ -214,16 +208,11 @@ fn test_health_all_statuses_accepted() {
     let (env, client, admin) = setup_init();
 
     for (target, status) in [
-        ("t_up",       HealthStatus::Up),
+        ("t_up", HealthStatus::Up),
         ("t_degraded", HealthStatus::Degraded),
-        ("t_down",     HealthStatus::Down),
+        ("t_down", HealthStatus::Down),
     ] {
-        client.monitor_report_health(
-            &admin,
-            &s(&env, target),
-            &status,
-            &s(&env, "msg"),
-        );
+        client.monitor_report_health(&admin, &s(&env, target), &status, &s(&env, "msg"));
         assert!(client.signal_exists(&s(&env, target), &SignalKind::Health));
     }
 }
@@ -278,12 +267,7 @@ fn test_health_max_message_len_allowed() {
 #[test]
 fn test_health_empty_message_allowed() {
     let (env, client, admin) = setup_init();
-    client.monitor_report_health(
-        &admin,
-        &s(&env, "t"),
-        &HealthStatus::Down,
-        &s(&env, ""),
-    );
+    client.monitor_report_health(&admin, &s(&env, "t"), &HealthStatus::Down, &s(&env, ""));
 }
 
 // ═══════════════════════════════════════════════════════
@@ -380,12 +364,8 @@ fn test_performance_overwrites_previous() {
     let (env, client, admin) = setup_init();
     let target = s(&env, "svc");
 
-    client.monitor_report_performance(
-        &admin, &target, &s(&env, "cpu"), &5000, &100, &s(&env, "%"),
-    );
-    client.monitor_report_performance(
-        &admin, &target, &s(&env, "cpu"), &9500, &100, &s(&env, "%"),
-    );
+    client.monitor_report_performance(&admin, &target, &s(&env, "cpu"), &5000, &100, &s(&env, "%"));
+    client.monitor_report_performance(&admin, &target, &s(&env, "cpu"), &9500, &100, &s(&env, "%"));
 
     let got = client.monitor_get(&target, &SignalKind::Performance);
     if let MonitorSignal::Performance(p) = got {
@@ -416,9 +396,7 @@ fn test_performance_metric_name_too_long_panics() {
 fn test_performance_unit_too_long_panics() {
     let (env, client, admin) = setup_init();
     let long = string_of_len(&env, 17);
-    client.monitor_report_performance(
-        &admin, &s(&env, "t"), &s(&env, "m"), &0, &1, &long,
-    );
+    client.monitor_report_performance(&admin, &s(&env, "t"), &s(&env, "m"), &0, &1, &long);
 }
 
 #[test]
@@ -480,16 +458,11 @@ fn test_security_all_severities_accepted() {
     let (env, client, admin) = setup_init();
 
     for (target, severity) in [
-        ("t_info",     SecuritySeverity::Info),
-        ("t_warn",     SecuritySeverity::Warn),
+        ("t_info", SecuritySeverity::Info),
+        ("t_warn", SecuritySeverity::Warn),
         ("t_critical", SecuritySeverity::Critical),
     ] {
-        client.monitor_report_security(
-            &admin,
-            &s(&env, target),
-            &severity,
-            &s(&env, "msg"),
-        );
+        client.monitor_report_security(&admin, &s(&env, target), &severity, &s(&env, "msg"));
         assert!(client.signal_exists(&s(&env, target), &SignalKind::Security));
     }
 }
@@ -499,12 +472,8 @@ fn test_security_overwrites_previous() {
     let (env, client, admin) = setup_init();
     let target = s(&env, "contract");
 
-    client.monitor_report_security(
-        &admin, &target, &SecuritySeverity::Info, &s(&env, "v1"),
-    );
-    client.monitor_report_security(
-        &admin, &target, &SecuritySeverity::Critical, &s(&env, "v2"),
-    );
+    client.monitor_report_security(&admin, &target, &SecuritySeverity::Info, &s(&env, "v1"));
+    client.monitor_report_security(&admin, &target, &SecuritySeverity::Critical, &s(&env, "v2"));
 
     let got = client.monitor_get(&target, &SignalKind::Security);
     if let MonitorSignal::Security(sec) = got {
@@ -528,9 +497,7 @@ fn test_security_target_too_long_panics() {
 fn test_security_message_too_long_panics() {
     let (env, client, admin) = setup_init();
     let long_msg = string_of_len(&env, 257);
-    client.monitor_report_security(
-        &admin, &s(&env, "t"), &SecuritySeverity::Info, &long_msg,
-    );
+    client.monitor_report_security(&admin, &s(&env, "t"), &SecuritySeverity::Info, &long_msg);
 }
 
 #[test]
@@ -579,9 +546,7 @@ fn test_get_security_missing_panics() {
 fn test_get_is_public() {
     // monitor_get needs no auth — any address can call it
     let (env, client, admin) = setup_init();
-    client.monitor_report_health(
-        &admin, &s(&env, "pub"), &HealthStatus::Up, &s(&env, "ok"),
-    );
+    client.monitor_report_health(&admin, &s(&env, "pub"), &HealthStatus::Up, &s(&env, "ok"));
     // Reading via client (no auth required)
     let got = client.monitor_get(&s(&env, "pub"), &SignalKind::Health);
     assert!(matches!(got, MonitorSignal::Health(_)));
@@ -592,14 +557,13 @@ fn test_get_returns_correct_kind() {
     let (env, client, admin) = setup_init();
     let target = s(&env, "multi");
 
-    client.monitor_report_health(
-        &admin, &target, &HealthStatus::Up, &s(&env, "fine"),
-    );
-    client.monitor_report_performance(
-        &admin, &target, &s(&env, "cpu"), &5000, &100, &s(&env, "%"),
-    );
+    client.monitor_report_health(&admin, &target, &HealthStatus::Up, &s(&env, "fine"));
+    client.monitor_report_performance(&admin, &target, &s(&env, "cpu"), &5000, &100, &s(&env, "%"));
     client.monitor_report_security(
-        &admin, &target, &SecuritySeverity::Info, &s(&env, "all clear"),
+        &admin,
+        &target,
+        &SecuritySeverity::Info,
+        &s(&env, "all clear"),
     );
 
     assert!(matches!(
@@ -621,9 +585,7 @@ fn test_get_stores_timestamp() {
     let (env, client, admin) = setup_init();
     env.ledger().set_timestamp(9999);
 
-    client.monitor_report_health(
-        &admin, &s(&env, "t"), &HealthStatus::Up, &s(&env, "ok"),
-    );
+    client.monitor_report_health(&admin, &s(&env, "t"), &HealthStatus::Up, &s(&env, "ok"));
 
     let got = client.monitor_get(&s(&env, "t"), &SignalKind::Health);
     if let MonitorSignal::Health(h) = got {
@@ -637,11 +599,12 @@ fn test_get_stores_timestamp() {
 fn test_get_different_targets_independent() {
     let (env, client, admin) = setup_init();
 
+    client.monitor_report_health(&admin, &s(&env, "a"), &HealthStatus::Up, &s(&env, "a_msg"));
     client.monitor_report_health(
-        &admin, &s(&env, "a"), &HealthStatus::Up, &s(&env, "a_msg"),
-    );
-    client.monitor_report_health(
-        &admin, &s(&env, "b"), &HealthStatus::Down, &s(&env, "b_msg"),
+        &admin,
+        &s(&env, "b"),
+        &HealthStatus::Down,
+        &s(&env, "b_msg"),
     );
 
     let got_a = client.monitor_get(&s(&env, "a"), &SignalKind::Health);
@@ -692,10 +655,16 @@ fn test_multiple_reporters_independent() {
     client.grant_reporter(&admin, &rep_b);
 
     client.monitor_report_health(
-        &rep_a, &s(&env, "service_a"), &HealthStatus::Up, &s(&env, "ok"),
+        &rep_a,
+        &s(&env, "service_a"),
+        &HealthStatus::Up,
+        &s(&env, "ok"),
     );
     client.monitor_report_health(
-        &rep_b, &s(&env, "service_b"), &HealthStatus::Down, &s(&env, "down"),
+        &rep_b,
+        &s(&env, "service_b"),
+        &HealthStatus::Down,
+        &s(&env, "down"),
     );
 
     assert!(client.signal_exists(&s(&env, "service_a"), &SignalKind::Health));
@@ -711,14 +680,20 @@ fn test_all_three_signals_same_target() {
     let (env, client, admin) = setup_init();
     let target = s(&env, "core_contract");
 
-    client.monitor_report_health(
-        &admin, &target, &HealthStatus::Degraded, &s(&env, "slow"),
-    );
+    client.monitor_report_health(&admin, &target, &HealthStatus::Degraded, &s(&env, "slow"));
     client.monitor_report_performance(
-        &admin, &target, &s(&env, "latency_ms"), &45000, &1000, &s(&env, "ms"),
+        &admin,
+        &target,
+        &s(&env, "latency_ms"),
+        &45000,
+        &1000,
+        &s(&env, "ms"),
     );
     client.monitor_report_security(
-        &admin, &target, &SecuritySeverity::Warn, &s(&env, "rate limit hit"),
+        &admin,
+        &target,
+        &SecuritySeverity::Warn,
+        &s(&env, "rate limit hit"),
     );
 
     assert!(client.signal_exists(&target, &SignalKind::Health));
@@ -732,15 +707,11 @@ fn test_timestamp_advances_between_reports() {
     let target = s(&env, "ts_test");
 
     env.ledger().set_timestamp(1000);
-    client.monitor_report_health(
-        &admin, &target, &HealthStatus::Up, &s(&env, "v1"),
-    );
+    client.monitor_report_health(&admin, &target, &HealthStatus::Up, &s(&env, "v1"));
     let got1 = client.monitor_get(&target, &SignalKind::Health);
 
     env.ledger().set_timestamp(2000);
-    client.monitor_report_health(
-        &admin, &target, &HealthStatus::Down, &s(&env, "v2"),
-    );
+    client.monitor_report_health(&admin, &target, &HealthStatus::Down, &s(&env, "v2"));
     let got2 = client.monitor_get(&target, &SignalKind::Health);
 
     if let (MonitorSignal::Health(h1), MonitorSignal::Health(h2)) = (got1, got2) {
@@ -767,31 +738,43 @@ fn test_full_monitoring_lifecycle() {
     // Component comes online
     env.ledger().set_timestamp(100);
     client.monitor_report_health(
-        &reporter, &s(&env, "lending_pool"),
-        &HealthStatus::Up, &s(&env, "initialised"),
+        &reporter,
+        &s(&env, "lending_pool"),
+        &HealthStatus::Up,
+        &s(&env, "initialised"),
     );
 
     // Performance baseline
     client.monitor_report_performance(
-        &reporter, &s(&env, "lending_pool"),
-        &s(&env, "util_pct"), &4523, &100, &s(&env, "%"),
+        &reporter,
+        &s(&env, "lending_pool"),
+        &s(&env, "util_pct"),
+        &4523,
+        &100,
+        &s(&env, "%"),
     );
 
     // Security scan clean
     client.monitor_report_security(
-        &reporter, &s(&env, "lending_pool"),
-        &SecuritySeverity::Info, &s(&env, "no anomalies"),
+        &reporter,
+        &s(&env, "lending_pool"),
+        &SecuritySeverity::Info,
+        &s(&env, "no anomalies"),
     );
 
     // Simulate degradation
     env.ledger().set_timestamp(200);
     client.monitor_report_health(
-        &reporter, &s(&env, "lending_pool"),
-        &HealthStatus::Degraded, &s(&env, "high utilisation"),
+        &reporter,
+        &s(&env, "lending_pool"),
+        &HealthStatus::Degraded,
+        &s(&env, "high utilisation"),
     );
     client.monitor_report_security(
-        &reporter, &s(&env, "lending_pool"),
-        &SecuritySeverity::Warn, &s(&env, "price deviation 3%"),
+        &reporter,
+        &s(&env, "lending_pool"),
+        &SecuritySeverity::Warn,
+        &s(&env, "price deviation 3%"),
     );
 
     // Read final state

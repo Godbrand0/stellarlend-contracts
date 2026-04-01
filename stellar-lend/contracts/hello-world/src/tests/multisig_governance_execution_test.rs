@@ -15,12 +15,14 @@
 
 #![cfg(test)]
 
+use crate::errors::GovernanceError;
 use crate::governance::{
     approve_proposal, create_proposal, execute_multisig_proposal, get_multisig_admins,
-    get_multisig_config, get_multisig_threshold, get_proposal, get_proposal_approvals,
-    initialize, propose_set_min_collateral_ratio, set_multisig_admins, set_multisig_config,
-    set_multisig_threshold, GovernanceError, ProposalStatus, ProposalType,
+    get_multisig_config, get_multisig_threshold, get_proposal, get_proposal_approvals, initialize,
+    propose_set_min_collateral_ratio, set_multisig_admins, set_multisig_config,
+    set_multisig_threshold,
 };
+use crate::types::ProposalType;
 use crate::types::{Action, GovernanceConfig, MultisigConfig};
 use crate::HelloContract;
 use soroban_sdk::{
@@ -40,8 +42,18 @@ fn setup_env() -> (Env, Address, Address) {
     let admin = Address::generate(&env);
 
     env.as_contract(&contract_id, || {
-        initialize(&env, admin.clone(), Address::generate(&env), None, None, None, None, None, None)
-            .unwrap();
+        initialize(
+            &env,
+            admin.clone(),
+            Address::generate(&env),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
     });
 
     (env, contract_id, admin)
@@ -109,7 +121,7 @@ fn test_multisig_proposal_creation_requires_admin() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
     });
 
@@ -128,20 +140,20 @@ fn test_multisig_threshold_1_of_1_auto_executes() {
         // Single admin, threshold of 1
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 1).unwrap();
 
         // Proposer auto-approves, threshold is 1, so ready for execution
-        let proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
+        let _proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
 
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 1);
         assert!(approvals.contains(admin.clone()));
     });
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60; // 10 days
+        li.timestamp += 5 * 24 * 60 * 60; // 5 days
     });
 
     with_contract!(env, &cid, {
@@ -165,7 +177,7 @@ fn test_multisig_threshold_2_of_3_requires_second_approval() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Admin 1 proposes (auto-approves)
@@ -185,7 +197,7 @@ fn test_multisig_threshold_2_of_3_requires_second_approval() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -209,7 +221,7 @@ fn test_multisig_insufficient_approvals_fail() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 3).unwrap();
 
         // Admin 1 proposes (auto-approves)
@@ -230,7 +242,7 @@ fn test_multisig_insufficient_approvals_fail() {
         approve_proposal(&env, admin3.clone(), proposal_id).unwrap();
 
         // Check we have 3 approvals but still blocked by timelock
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 3);
     });
 }
@@ -245,7 +257,7 @@ fn test_non_admin_cannot_approve() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         let proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
@@ -265,7 +277,7 @@ fn test_cannot_approve_same_proposal_twice() {
         admins.push_back(admin.clone());
         let admin2 = Address::generate(&env);
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         let proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
@@ -288,14 +300,14 @@ fn test_proposer_auto_approves() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Admin 1 proposes
-        let proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
+        let _proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
 
         // Proposer should already have approved
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 1);
         assert!(approvals.contains(admin.clone()));
     });
@@ -317,7 +329,7 @@ fn test_threshold_change_does_not_affect_existing_proposals() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Create proposal
@@ -332,7 +344,7 @@ fn test_threshold_change_does_not_affect_existing_proposals() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -356,7 +368,7 @@ fn test_new_proposal_uses_new_threshold() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Create first proposal with threshold 2
@@ -375,7 +387,7 @@ fn test_new_proposal_uses_new_threshold() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -404,7 +416,7 @@ fn test_admin_removal_blocks_previous_approver() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins.clone()).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins.clone(), 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Create proposal
@@ -419,7 +431,7 @@ fn test_admin_removal_blocks_previous_approver() {
         new_admins.push_back(admin.clone());
         new_admins.push_back(admin3.clone());
         new_admins.push_back(admin4.clone());
-        set_multisig_admins(&env, admin.clone(), new_admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), new_admins, 2).unwrap();
 
         // Threshold still 2, but admin2 was removed
         // Approval from removed admin should still count (they were admin at approval time)
@@ -427,7 +439,7 @@ fn test_admin_removal_blocks_previous_approver() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -451,14 +463,14 @@ fn test_removed_admin_cannot_approve_new_proposals() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins.clone()).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins.clone(), 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Change admin set - remove admin2
         let mut new_admins = Vec::new(&env);
         new_admins.push_back(admin.clone());
         new_admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), new_admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), new_admins, 2).unwrap();
 
         // Create new proposal
         let proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
@@ -485,7 +497,7 @@ fn test_multiple_proposals_independent_approval_tracking() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Create two proposals
@@ -518,7 +530,7 @@ fn test_same_admin_can_approve_multiple_proposals() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Create multiple proposals
@@ -553,7 +565,7 @@ fn test_execution_requires_admin_status() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         let proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
@@ -562,7 +574,7 @@ fn test_execution_requires_admin_status() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -586,7 +598,7 @@ fn test_any_admin_can_execute_with_sufficient_approvals() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Admin 1 proposes (auto-approves)
@@ -598,7 +610,7 @@ fn test_any_admin_can_execute_with_sufficient_approvals() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -623,7 +635,7 @@ fn test_cannot_execute_before_timelock() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 1).unwrap();
 
         // Create proposal
@@ -644,7 +656,7 @@ fn test_cannot_execute_expired_proposal() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Create proposal and get approvals
@@ -675,7 +687,7 @@ fn test_threshold_zero_rejected() {
     with_contract!(env, &cid, {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
 
         // Threshold of 0 should be rejected
         let result = set_multisig_threshold(&env, admin.clone(), 0);
@@ -690,7 +702,7 @@ fn test_threshold_above_admin_count_rejected() {
     with_contract!(env, &cid, {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
-        set_multisig_admins(&env, admin.clone(), admins.clone()).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins.clone(), 2).unwrap();
 
         // Threshold higher than admin count should be rejected
         let result = set_multisig_threshold(&env, admin.clone(), 2);
@@ -705,7 +717,7 @@ fn test_empty_admin_set_rejected() {
     with_contract!(env, &cid, {
         // Empty admin set should be rejected
         let empty_admins = Vec::new(&env);
-        let result = set_multisig_admins(&env, admin.clone(), empty_admins);
+        let result = set_multisig_admins(&env, admin.clone(), empty_admins, 2);
         assert_eq!(result, Err(GovernanceError::InvalidMultisigConfig));
     });
 }
@@ -719,7 +731,7 @@ fn test_duplicate_admins_rejected() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin.clone()); // Duplicate
-        let result = set_multisig_admins(&env, admin.clone(), admins);
+        let result = set_multisig_admins(&env, admin.clone(), admins, 2);
         assert_eq!(result, Err(GovernanceError::InvalidMultisigConfig));
     });
 }
@@ -733,7 +745,7 @@ fn test_cannot_execute_already_executed_proposal() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         let proposal_id = propose_set_min_collateral_ratio(&env, admin.clone(), 15_000).unwrap();
@@ -742,7 +754,7 @@ fn test_cannot_execute_already_executed_proposal() {
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -751,7 +763,7 @@ fn test_cannot_execute_already_executed_proposal() {
 
         // Second execution fails
         let result = execute_multisig_proposal(&env, admin.clone(), 1);
-        assert_eq!(result, Err(GovernanceError::ProposalAlreadyExecuted));
+        assert_eq!(result, Err(GovernanceError::AlreadyExecuted));
     });
 }
 
@@ -762,7 +774,7 @@ fn test_nonexistent_proposal_rejected() {
     with_contract!(env, &cid, {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 1).unwrap();
 
         // Try to execute non-existent proposal
@@ -787,7 +799,7 @@ fn test_full_multisig_governance_flow_2_of_3() {
         admins.push_back(admin1.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin1.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin1.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin1.clone(), 2).unwrap();
 
         // Verify setup
@@ -797,18 +809,18 @@ fn test_full_multisig_governance_flow_2_of_3() {
 
         // Step 1: Propose (admin1 auto-approves)
         let proposal_id = propose_set_min_collateral_ratio(&env, admin1.clone(), 15_000).unwrap();
-        let proposal = get_proposal(&env, proposal_id).unwrap();
+        let proposal = get_proposal(&env, 1).unwrap();
         assert_eq!(proposal.proposer, admin1.clone());
         assert_eq!(proposal.status, ProposalStatus::Pending);
 
         // Verify auto-approval
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 1);
         assert!(approvals.contains(admin1.clone()));
 
         // Step 2: Approve by admin2
         approve_proposal(&env, admin2.clone(), proposal_id).unwrap();
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 2);
         assert!(approvals.contains(admin1.clone()));
         assert!(approvals.contains(admin2.clone()));
@@ -820,15 +832,15 @@ fn test_full_multisig_governance_flow_2_of_3() {
 
     // Step 4: Advance time past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
         // Step 5: Execute (should succeed)
-        execute_multisig_proposal(&env, admin1.clone(), proposal_id).unwrap();
+        execute_multisig_proposal(&env, admin1.clone(), 1).unwrap();
 
         // Verify execution
-        let proposal = get_proposal(&env, proposal_id).unwrap();
+        let proposal = get_proposal(&env, 1).unwrap();
         assert_eq!(proposal.status, ProposalStatus::Executed);
     });
 }
@@ -849,7 +861,7 @@ fn test_full_multisig_governance_flow_3_of_5() {
         admins.push_back(admin3.clone());
         admins.push_back(admin4.clone());
         admins.push_back(admin5.clone());
-        set_multisig_admins(&env, admin1.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin1.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin1.clone(), 3).unwrap();
 
         // Proposal and approvals
@@ -858,13 +870,13 @@ fn test_full_multisig_governance_flow_3_of_5() {
         approve_proposal(&env, admin3.clone(), proposal_id).unwrap();
 
         // 3 approvals (threshold met)
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 3);
     });
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -878,7 +890,7 @@ fn test_full_multisig_governance_flow_3_of_5() {
 
 #[test]
 fn test_multisig_with_different_proposal_types() {
-    let (env, cid, admin) = setup_env_with_token();
+    let (env, cid, admin, _token) = setup_env_with_token();
     let admin2 = Address::generate(&env);
     let admin3 = Address::generate(&env);
 
@@ -888,7 +900,7 @@ fn test_multisig_with_different_proposal_types() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Test with different proposal types
@@ -911,12 +923,12 @@ fn test_multisig_with_different_proposal_types() {
             .unwrap();
 
             // Should start with proposer's approval
-            let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+            let approvals = get_proposal_approvals(&env, 1).unwrap();
             assert_eq!(approvals.len(), 1, "Proposal {} should have 1 approval", i);
 
             // Add second approval
             approve_proposal(&env, admin2.clone(), proposal_id).unwrap();
-            let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+            let approvals = get_proposal_approvals(&env, 1).unwrap();
             assert_eq!(approvals.len(), 2, "Proposal {} should have 2 approvals", i);
         }
     });
@@ -938,7 +950,7 @@ fn test_multisig_config_query_functions() {
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
         admins.push_back(admin3.clone());
-        set_multisig_admins(&env, admin.clone(), admins.clone()).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins.clone(), 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Query and verify
@@ -979,7 +991,7 @@ fn test_many_admins_high_threshold() {
             admin_list.push(new_admin);
         }
 
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 7).unwrap();
 
         // Create proposal (1 approval)
@@ -990,7 +1002,7 @@ fn test_many_admins_high_threshold() {
             approve_proposal(&env, admin_list[i].clone(), proposal_id).unwrap();
         }
 
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 6);
 
         // Still insufficient
@@ -999,13 +1011,13 @@ fn test_many_admins_high_threshold() {
 
         // Add 7th approval
         approve_proposal(&env, admin_list[6].clone(), proposal_id).unwrap();
-        let approvals = get_proposal_approvals(&env, proposal_id).unwrap();
+        let approvals = get_proposal_approvals(&env, 1).unwrap();
         assert_eq!(approvals.len(), 7);
     });
 
     // Advance past timelock
     env.ledger().with_mut(|li| {
-        li.timestamp += 10 * 24 * 60 * 60;
+        li.timestamp += 5 * 24 * 60 * 60;
     });
 
     with_contract!(env, &cid, {
@@ -1023,14 +1035,14 @@ fn test_rapid_proposal_creation_and_approval() {
         let mut admins = Vec::new(&env);
         admins.push_back(admin.clone());
         admins.push_back(admin2.clone());
-        set_multisig_admins(&env, admin.clone(), admins).unwrap();
+        set_multisig_admins(&env, admin.clone(), admins, 2).unwrap();
         set_multisig_threshold(&env, admin.clone(), 2).unwrap();
 
         // Create 10 proposals rapidly
         let mut proposal_ids = Vec::new(&env);
         for i in 0..10 {
             let new_ratio = 15_000 + (i as i128 * 100);
-            let pid = propose_set_min_collateral_ratio(&env, admin.clone(), new_ratio).unwrap();
+            let pid = propose_set_min_collateral_ratio(&env, admin.clone(), new_ratio as u32).unwrap();
             proposal_ids.push_back(pid);
         }
 

@@ -1,5 +1,7 @@
 use soroban_sdk::{contracterror, contracttype, token, Address, Bytes, Env, IntoVal, Symbol};
 
+use crate::constants::{BPS_SCALE, MAX_FLASH_LOAN_FEE_BPS};
+
 /// Errors that can occur during flash loan operations
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -11,6 +13,7 @@ pub enum FlashLoanError {
     InvalidFee = 4,
     CallbackFailed = 5,
     Reentrancy = 6,
+    ProtocolPaused = 7,
 }
 
 /// Storage keys for flash loan data
@@ -21,7 +24,7 @@ pub enum FlashLoanDataKey {
     ReentrancyGuard,
 }
 
-const MAX_FEE_BPS: i128 = 1000; // 10% maximum fee
+const MAX_FEE_BPS: i128 = MAX_FLASH_LOAN_FEE_BPS; // 10% maximum fee
 
 /// Initiate a flash loan
 ///
@@ -92,7 +95,7 @@ pub fn flash_loan(
 /// Calculate the fee for a flash loan
 fn calculate_fee(env: &Env, amount: i128) -> i128 {
     let fee_bps = get_flash_loan_fee_bps(env);
-    amount.saturating_mul(fee_bps).saturating_div(10000)
+    amount.saturating_mul(fee_bps).saturating_div(BPS_SCALE)
 }
 
 /// Set the flash loan fee in basis points

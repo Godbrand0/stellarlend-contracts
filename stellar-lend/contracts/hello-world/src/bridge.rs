@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use soroban_sdk::{contracterror, contracttype, symbol_short, Address, Env, Map, Symbol};
+use crate::prelude::*;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -25,22 +26,10 @@ pub enum BridgeError {
 }
 
 // Storage keys
-const ADMIN: Symbol = symbol_short!("admin");
 const BRIDGES: Symbol = symbol_short!("bridges");
 
 fn require_admin(env: &Env, caller: &Address) -> Result<(), BridgeError> {
-    let admin: Address = env
-        .storage()
-        .persistent()
-        .get(&ADMIN)
-        .ok_or(BridgeError::NotAuthorized)?;
-
-    if caller != &admin {
-        return Err(BridgeError::NotAuthorized);
-    }
-
-    caller.require_auth();
-    Ok(())
+    crate::admin::require_admin(env, caller).map_err(|_| BridgeError::NotAuthorized)
 }
 
 /// List all registered bridges
@@ -58,7 +47,7 @@ pub fn get_bridge_config(env: &Env, network_id: u32) -> Result<BridgeConfig, Bri
 }
 
 /// Register a new bridge connection
-/// 
+///
 /// # Arguments
 /// * `env` - The contract environment
 /// * `_caller` - Admin address for authorization (auth is checked)
@@ -97,7 +86,7 @@ pub fn register_bridge(
 }
 
 /// Update the fee for an existing bridge
-/// 
+///
 /// # Arguments
 /// * `env` - The contract environment
 /// * `_caller` - Admin address for authorization
@@ -117,10 +106,10 @@ pub fn set_bridge_fee(
 
     let mut bridges = list_bridges(env);
     let mut config = bridges.get(network_id).ok_or(BridgeError::BridgeNotFound)?;
-    
+
     config.fee_bps = fee_bps;
     bridges.set(network_id, config);
-    
+
     env.storage().persistent().set(&BRIDGES, &bridges);
     Ok(())
 }
@@ -128,7 +117,7 @@ pub fn set_bridge_fee(
 /// Initiate deposit to bridge
 ///
 /// Moves user assets into the lending protocol from a bridge.
-/// 
+///
 /// # Arguments
 /// * `env` - The contract environment
 /// * `user` - User depositing collateral
@@ -150,11 +139,11 @@ pub fn bridge_deposit(
     if !config.is_active {
         return Err(BridgeError::BridgeNotActive);
     }
-    
+
     // Ensure asset is configured in the protocol
     crate::cross_asset::get_asset_config_by_address(env, asset.clone())
         .map_err(|_| BridgeError::AssetNotSupported)?;
-        
+
     // Calculate and deduct fee
     let fee = (amount * config.fee_bps) / 10000;
     let deposit_amount = amount - fee;
@@ -164,7 +153,11 @@ pub fn bridge_deposit(
         .map_err(|_| BridgeError::InvalidAmount)?;
 
     env.events().publish(
-        (symbol_short!("bridge"), symbol_short!("deposit"), network_id),
+        (
+            symbol_short!("bridge"),
+            symbol_short!("deposit"),
+            network_id,
+        ),
         (user, deposit_amount, fee),
     );
 
@@ -174,7 +167,7 @@ pub fn bridge_deposit(
 /// Initiate withdrawal through a bridge
 ///
 /// Withdraws lending collateral and initiates a bridge transfer to remote chain.
-/// 
+///
 /// # Arguments
 /// * `env` - The contract environment
 /// * `user` - User withdrawing collateral
@@ -206,7 +199,11 @@ pub fn bridge_withdraw(
     let withdraw_amount = amount - fee;
 
     env.events().publish(
-        (symbol_short!("bridge"), symbol_short!("withdraw"), network_id),
+        (
+            symbol_short!("bridge"),
+            symbol_short!("withdraw"),
+            network_id,
+        ),
         (user, withdraw_amount, fee),
     );
 

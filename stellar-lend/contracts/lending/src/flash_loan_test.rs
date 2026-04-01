@@ -36,6 +36,40 @@ impl FlashLoanReceiver {
     }
 }
 
+#[contract]
+pub struct FalseFlashLoanReceiver;
+
+#[contractimpl]
+impl FalseFlashLoanReceiver {
+    pub fn on_flash_loan(
+        _env: Env,
+        _initiator: Address,
+        _asset: Address,
+        _amount: i128,
+        _fee: i128,
+        _params: Bytes,
+    ) -> bool {
+        false
+    }
+}
+
+#[contract]
+pub struct RevertingFlashLoanReceiver;
+
+#[contractimpl]
+impl RevertingFlashLoanReceiver {
+    pub fn on_flash_loan(
+        _env: Env,
+        _initiator: Address,
+        _asset: Address,
+        _amount: i128,
+        _fee: i128,
+        _params: Bytes,
+    ) -> bool {
+        panic!("Callback reverted")
+    }
+}
+
 #[test]
 fn test_flash_loan_success() {
     let env = Env::default();
@@ -183,4 +217,145 @@ fn test_flash_loan_reentrancy() {
 
     let amount = 10_000;
     client.flash_loan(&receiver_address, &asset, &amount, &Bytes::new(&env));
+}
+
+#[test]
+fn test_flash_loan_callback_false() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let asset = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let token_admin = token::StellarAssetClient::new(&env, &asset);
+
+    let receiver_id = env.register(FalseFlashLoanReceiver, ());
+    let receiver_address = receiver_id.clone();
+
+    client.initialize(&admin, &1_000_000_000, &1000);
+    token_admin.mint(&contract_id, &100_000);
+
+    let amount = 10_000;
+
+    // Should fail with CallbackFailed (5)
+    let result = client.try_flash_loan(&receiver_address, &asset, &amount, &Bytes::new(&env));
+    assert_eq!(result, Err(Ok(FlashLoanError::CallbackFailed)));
+}
+
+#[test]
+#[should_panic(expected = "Callback reverted")]
+fn test_flash_loan_callback_revert() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let asset = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let token_admin = token::StellarAssetClient::new(&env, &asset);
+
+    let receiver_id = env.register(RevertingFlashLoanReceiver, ());
+    let receiver_address = receiver_id.clone();
+
+    client.initialize(&admin, &1_000_000_000, &1000);
+    token_admin.mint(&contract_id, &100_000);
+
+    let amount = 10_000;
+    client.flash_loan(&receiver_address, &asset, &amount, &Bytes::new(&env));
+}
+
+#[test]
+#[should_panic] // Should panic due to insufficient balance in lending contract
+fn test_flash_loan_exceed_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let asset = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let token_admin = token::StellarAssetClient::new(&env, &asset);
+
+    let receiver_id = env.register(FlashLoanReceiver, ());
+    let receiver_address = receiver_id.clone();
+
+    client.initialize(&admin, &1_000_000_000, &1000);
+    token_admin.mint(&contract_id, &10_000); // Only 10k available
+
+    let amount = 20_000; // Requesting 20k
+    client.flash_loan(&receiver_address, &asset, &amount, &Bytes::new(&env));
+}
+
+#[test]
+fn test_flash_loan_minimal_fee() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let asset = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let token_admin = token::StellarAssetClient::new(&env, &asset);
+
+    let receiver_id = env.register(FlashLoanReceiver, ());
+    let receiver_address = receiver_id.clone();
+
+    client.initialize(&admin, &1_000_000_000, &1000);
+    client.set_flash_loan_fee_bps(&5); // 0.05% fee
+
+    token_admin.mint(&contract_id, &1_000_000);
+    token_admin.mint(&receiver_address, &100);
+
+    // amount = 1000, fee = 1000 * 5 / 10000 = 0.5 -> 0 (integer division)
+    // Wait, let's test a case where it's exactly 1
+    // amount = 2000, fee = 2000 * 5 / 10000 = 1
+    let amount = 2000;
+    client.flash_loan(&receiver_address, &asset, &amount, &Bytes::new(&env));
+
+    let token_client = token::Client::new(&env, &asset);
+    assert_eq!(token_client.balance(&contract_id), 1_000_000 + 1);
+}
+
+#[test]
+fn test_flash_loan_max_fee() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let asset = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let token_admin = token::StellarAssetClient::new(&env, &asset);
+
+    let receiver_id = env.register(FlashLoanReceiver, ());
+    let receiver_address = receiver_id.clone();
+
+    client.initialize(&admin, &1_000_000_000, &1000);
+    client.set_flash_loan_fee_bps(&1000); // 10% fee
+
+    token_admin.mint(&contract_id, &100_000);
+    token_admin.mint(&receiver_address, &2000);
+
+    let amount = 10_000;
+    let expected_fee = 1000;
+    client.flash_loan(&receiver_address, &asset, &amount, &Bytes::new(&env));
+
+    let token_client = token::Client::new(&env, &asset);
+    assert_eq!(token_client.balance(&contract_id), 100_000 + expected_fee);
 }

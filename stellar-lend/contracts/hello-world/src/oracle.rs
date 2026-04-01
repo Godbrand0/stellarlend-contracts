@@ -18,8 +18,9 @@
 #![allow(unused)]
 use crate::deposit::DepositDataKey;
 use crate::events::{emit_price_updated, PriceUpdatedEvent};
-use crate::risk_management::get_admin;
+use crate::admin::get_admin;
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Map, Symbol, Val, Vec};
+use crate::prelude::*;
 
 /// Errors that can occur during oracle operations
 #[contracterror]
@@ -57,6 +58,12 @@ pub enum OracleDataKey {
     /// Address of the designated fallback oracle for an asset
     /// Value type: Address
     FallbackOracle(Address),
+    /// Primary oracle address for an asset
+    /// Value type: Address
+    PrimaryOracle(Address),
+    /// Fallback price feed for an asset
+    /// Value type: PriceFeed
+    FallbackFeed(Address),
     /// Transient price cache for improved gas efficiency
     /// Value type: CachedPrice
     PriceCache(Address),

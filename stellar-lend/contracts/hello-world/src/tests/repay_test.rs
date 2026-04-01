@@ -220,3 +220,84 @@ fn test_repay_interest_accrual() {
         "Interest should be tracked accurately"
     );
 }
+
+#[test]
+fn test_repay_interest_only() {
+    let env = create_test_env();
+    env.ledger().with_mut(|li| li.timestamp = 1000);
+
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    let native_asset_addr = env.register_stellar_asset_contract(admin.clone());
+    env.as_contract(&contract_id, || {
+        env.storage()
+            .persistent()
+            .set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
+    });
+
+    client.deposit_collateral(&user, &None, &10000);
+    client.borrow_asset(&user, &None, &1000);
+
+    let native_token_client = soroban_sdk::token::StellarAssetClient::new(&env, &native_asset_addr);
+    native_token_client.mint(&user, &1000);
+    native_token_client.approve(&user, &contract_id, &1000, &(env.ledger().sequence() + 100));
+
+    env.ledger().with_mut(|li| li.timestamp = 1000 + 31536000);
+
+    // Get position to see how much interest accrued
+    client.borrow_asset(&user, &None, &0); // force accrual, ignore result or just do direct read if possible, to get interest
+    
+    // Actually we can just repay 5, which is < expected interest (12.5)
+    let repay_amount = 5;
+    let (_remaining_debt, interest_paid, principal_paid) =
+        client.repay_debt(&user, &None, &repay_amount);
+
+    assert_eq!(interest_paid, 5, "All repayment should go to interest");
+    assert_eq!(principal_paid, 0, "No principal should be paid");
+
+    let position = get_user_position(&env, &contract_id, &user).unwrap();
+    assert_eq!(position.debt, 1000, "Principal debt should remain untouched");
+}
+
+#[test]
+fn test_repay_tiny_amount() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    let native_asset_addr = env.register_stellar_asset_contract(admin.clone());
+    env.as_contract(&contract_id, || {
+        env.storage()
+            .persistent()
+            .set(&DepositDataKey::NativeAssetAddress, &native_asset_addr);
+    });
+
+    client.deposit_collateral(&user, &None, &10000);
+    client.borrow_asset(&user, &None, &1000);
+
+    let native_token_client = soroban_sdk::token::StellarAssetClient::new(&env, &native_asset_addr);
+    
+    // Repay a tiny amount (dust)
+    let tiny_amount = 1;
+    native_token_client.mint(&user, &tiny_amount);
+    native_token_client.approve(&user, &contract_id, &tiny_amount, &(env.ledger().sequence() + 100));
+
+    let (_remaining_debt, interest_paid, principal_paid) =
+        client.repay_debt(&user, &None, &tiny_amount);
+
+    assert_eq!(interest_paid, 0); // No time passed
+    assert_eq!(principal_paid, tiny_amount);
+
+    let position = get_user_position(&env, &contract_id, &user).unwrap();
+    assert_eq!(position.debt, 999);
+}
+

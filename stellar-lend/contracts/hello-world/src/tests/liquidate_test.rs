@@ -244,6 +244,38 @@ fn test_liquidate_incentive_calculation() {
     assert_eq!(incentive, 50);
 }
 
+/// Test liquidation with custom liquidation incentive configured (#366)
+/// Verifies that on-chain liquidations correctly use updated configuration parameters
+/// and provides the correct expected economic guarantees.
+#[test]
+#[ignore] // Native XLM liquidation not yet supported
+fn test_liquidate_with_custom_incentive() {
+    let env = create_test_env();
+    let (contract_id, admin, client) = setup_contract_with_admin(&env);
+
+    let borrower = Address::generate(&env);
+    let liquidator = Address::generate(&env);
+
+    // Default incentive is 10%. Change it to 11% (1100 bps)
+    client.set_risk_params(&admin, &None, &None, &None, &Some(1_100));
+
+    // Create undercollateralized position
+    // Collateral: 2000, Debt: 2000 (100% ratio, below liquidation threshold)
+    create_liquidatable_position(&env, &contract_id, &borrower, 2000, 2000);
+
+    let debt_to_liquidate = 500;
+    let (_debt_liquidated, collateral_seized, incentive) =
+        client.liquidate(&liquidator, &borrower, &None, &None, &debt_to_liquidate);
+
+    // Collateral seized should be debt_liquidated * (1 + incentive%)
+    // Expected: 500 * (1 + 0.11) = 555
+    // Economic guarantee: liquidators get 11% bonus as configured instead of 10%
+    assert_eq!(collateral_seized, 555);
+
+    // Incentive amount tracking should exactly be 11% of debt: 55
+    assert_eq!(incentive, 55);
+}
+
 // =============================================================================
 // UNDERCOLLATERALIZATION VALIDATION TESTS
 // =============================================================================

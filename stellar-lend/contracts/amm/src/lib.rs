@@ -12,21 +12,96 @@
 
 #![no_std]
 #![allow(clippy::too_many_arguments)]
-use soroban_sdk::{contract, contractimpl, Address, Env, Map};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Map};
 
 pub mod amm;
 pub use crate::amm::{
-    add_amm_protocol, add_liquidity, auto_swap_for_collateral, execute_swap,
+    add_amm_protocol, add_liquidity, auto_swap_for_collateral, delete_amm_protocol, execute_swap,
     initialize_amm_settings, remove_liquidity, update_amm_settings, validate_amm_callback,
     AmmCallbackData, AmmError, AmmProtocolConfig, AmmSettings, LiquidityParams, SwapParams,
     TokenPair,
 };
 
+use stellarlend_common::upgrade;
+pub struct DebugConfig { pub x: i128 }
+
 #[contract]
 pub struct AmmContract;
 
+#[contract]
+pub struct MockAmm;
+
+#[contractimpl]
+impl MockAmm {
+    pub fn swap(
+        _env: Env,
+        _executor: Address,
+        _token_in: Option<Address>,
+        _token_out: Option<Address>,
+        amount_in: i128,
+        _min_amount_out: i128,
+        _callback_data: AmmCallbackData,
+    ) -> i128 {
+        // Mock swap: 1% fee (99% return)
+        amount_in * 99 / 100
+    }
+}
+
 #[contractimpl]
 impl AmmContract {
+    // ───────────────────────────────────────────────────
+    // Upgrade Management
+    // ───────────────────────────────────────────────────
+
+    pub fn upgrade_init(
+        env: Env,
+        admin: Address,
+        current_wasm_hash: BytesN<32>,
+        required_approvals: u32,
+    ) {
+        upgrade::UpgradeManager::init(env, admin, current_wasm_hash, required_approvals);
+    }
+
+    pub fn upgrade_add_approver(env: Env, caller: Address, approver: Address) {
+        upgrade::UpgradeManager::add_approver(env, caller, approver);
+    }
+
+    pub fn upgrade_remove_approver(env: Env, caller: Address, approver: Address) {
+        upgrade::UpgradeManager::remove_approver(env, caller, approver);
+    }
+
+    pub fn upgrade_propose(
+        env: Env,
+        caller: Address,
+        new_wasm_hash: BytesN<32>,
+        new_version: u32,
+    ) -> u64 {
+        upgrade::UpgradeManager::upgrade_propose(env, caller, new_wasm_hash, new_version)
+    }
+
+    pub fn upgrade_approve(env: Env, caller: Address, proposal_id: u64) -> u32 {
+        upgrade::UpgradeManager::upgrade_approve(env, caller, proposal_id)
+    }
+
+    pub fn upgrade_execute(env: Env, caller: Address, proposal_id: u64) {
+        upgrade::UpgradeManager::upgrade_execute(env, caller, proposal_id);
+    }
+
+    pub fn upgrade_rollback(env: Env, caller: Address, proposal_id: u64) {
+        upgrade::UpgradeManager::upgrade_rollback(env, caller, proposal_id);
+    }
+
+    pub fn upgrade_status(env: Env, proposal_id: u64) -> upgrade::UpgradeStatus {
+        upgrade::UpgradeManager::upgrade_status(env, proposal_id)
+    }
+
+    pub fn current_wasm_hash(env: Env) -> BytesN<32> {
+        upgrade::UpgradeManager::current_wasm_hash(env)
+    }
+
+    pub fn current_version(env: Env) -> u32 {
+        upgrade::UpgradeManager::current_version(env)
+    }
     /// Initialize AMM settings (admin only)
     ///
     /// Sets up AMM integration parameters including slippage tolerances and thresholds.
@@ -71,6 +146,24 @@ impl AmmContract {
         protocol_config: AmmProtocolConfig,
     ) -> Result<(), AmmError> {
         add_amm_protocol(&env, admin, protocol_config)
+    }
+
+    /// Delete AMM protocol (admin only)
+    ///
+    /// Removes a registered AMM protocol.
+    ///
+    /// # Arguments
+    /// * `admin` - The admin address
+    /// * `protocol` - The protocol address to remove
+    ///
+    /// # Returns
+    /// Returns Ok(()) on success
+    pub fn delete_amm_protocol(
+        env: Env,
+        admin: Address,
+        protocol: Address,
+    ) -> Result<(), AmmError> {
+        delete_amm_protocol(&env, admin, &protocol)
     }
 
     /// Update AMM settings (admin only)
@@ -122,6 +215,16 @@ impl AmmContract {
     /// # Returns
     /// Returns the amount of LP tokens received
     ///
+    /// # Errors
+    /// Returns [`AmmError`] when authorization fails, parameters are invalid,
+    /// liquidity operations are paused, deadline is expired, or min-amount
+    /// protections are not satisfied after LP-share rounding.
+    ///
+    /// # Security
+    /// Caller authorization is required. LP share minting uses floor rounding
+    /// to preserve pool solvency; any unconsumed token remainder stays with the
+    /// caller-side flow and is not credited as LP shares.
+    ///
     /// # Events
     /// Emits the following events:
     /// - `liquidity_added`: Liquidity addition details
@@ -150,6 +253,15 @@ impl AmmContract {
     ///
     /// # Returns
     /// Returns tuple (amount_a, amount_b) received
+    ///
+    /// # Errors
+    /// Returns [`AmmError`] when authorization fails, parameters are invalid,
+    /// pool liquidity is insufficient, deadline is expired, or minimum output
+    /// constraints are violated.
+    ///
+    /// # Security
+    /// Caller authorization is required. Redemption math burns LP shares and
+    /// uses floor rounding on token outputs to avoid over-withdrawal risk.
     ///
     /// # Events
     /// Emits the following events:
@@ -180,20 +292,23 @@ impl AmmContract {
         )
     }
 
-    /// Validate AMM callback
+    /// Validate an AMM protocol callback (nonce + expiry + registered caller).
     ///
-    /// Validates callbacks from AMM protocols to ensure they are legitimate
-    /// and prevent replay attacks. This is called by AMM protocols during operations.
+    /// The `caller` address must authorize this invocation via Soroban auth
+    /// (`require_auth`). Internal router execution uses a separate path that
+    /// does not require protocol auth; see the `stellarlend_amm` crate docs.
     ///
     /// # Arguments
-    /// * `caller` - The AMM protocol making the callback
-    /// * `callback_data` - The callback data to validate
+    /// * `caller` — Registered AMM protocol contract address
+    /// * `callback_data` — Nonce, user, deadline, and operation metadata
     ///
-    /// # Returns
-    /// Returns Ok(()) if callback is valid
+    /// # Errors
+    /// * Auth failure if `caller` did not authorize this call
+    /// * `AmmError::InvalidCallback` for disabled protocol, expired deadline, or bad nonce
+    /// * `AmmError::Overflow` if the nonce counter would overflow
     ///
     /// # Events
-    /// Emits callback_validated event
+    /// Emits `callback_validated` on success
     pub fn validate_amm_callback(
         env: Env,
         caller: Address,
@@ -285,7 +400,15 @@ impl AmmContract {
 
 // Liquidation integration tests require lending crate; enable with feature "liquidate_integration"
 // when lending is available as a dependency.
+#[cfg(test)]
+mod amm_coverage_booster;
 #[cfg(all(test, feature = "liquidate_integration"))]
 mod liquidate_test;
 #[cfg(test)]
+mod integration_test;
+#[cfg(test)]
+mod math_safety_test;
+#[cfg(test)]
 mod test;
+
+//

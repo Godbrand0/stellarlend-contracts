@@ -7,7 +7,7 @@ The `repay` entrypoint allows users to repay their borrowed assets, reducing bot
 ## Repayment Flow
 
 1.  **Validation**: Ensures the repayment amount is positive and that the protocol is not in a paused state.
-2.  **Asset Identification**: Determines the asset contract address. If the asset is `None`, it fetchs the registered native asset (XLM) contract address from the protocol's storage.
+2.  **Asset Identification**: Determines the asset contract address. If the asset is `None`, it fetches the registered native asset (XLM) contract address from the protocol's storage.
 3.  **Interest Accrual**: Calculates and adds interest accrued since the last interaction to the user's total debt.
 4.  **Transfer**: Transfers the repayment amount from the user to the protocol contract. This requires the user to have previously approved the protocol to spend the tokens.
 5.  **Debt Reduction**:
@@ -25,6 +25,8 @@ Interest is calculated dynamically based on the current protocol utilization usi
 - `base_rate`: The minimum interest rate.
 - `multiplier`: The rate of increase in interest as utilization increases.
 - `kink`: The utilization point beyond which the interest rate increases more sharply.
+
+For the exact numeric bounds behind rate clamping, checked arithmetic, and extreme timestamp handling, see [Interest Numeric Assumptions](../../../docs/INTEREST_NUMERIC_ASSUMPTIONS.md).
 
 ### Storage
 

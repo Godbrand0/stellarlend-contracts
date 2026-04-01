@@ -138,6 +138,7 @@ impl DataStore {
     ///
     /// # Authorization
     /// `admin` must sign the transaction.
+    #[allow(deprecated)]
     pub fn init(env: Env, admin: Address) {
         admin.require_auth();
 
@@ -172,6 +173,7 @@ impl DataStore {
     ///
     /// # Authorization
     /// Only the admin may grant writers.
+    #[allow(deprecated)]
     pub fn grant_writer(env: Env, caller: Address, writer: Address) {
         caller.require_auth();
         Self::assert_admin(&env, &caller);
@@ -196,6 +198,7 @@ impl DataStore {
     ///
     /// # Authorization
     /// Only the admin may revoke writers.
+    #[allow(deprecated)]
     pub fn revoke_writer(env: Env, caller: Address, writer: Address) {
         caller.require_auth();
         Self::assert_admin(&env, &caller);
@@ -243,6 +246,7 @@ impl DataStore {
     ///
     /// # Authorization
     /// `caller` must sign the transaction.
+    #[allow(deprecated)]
     pub fn data_save(env: Env, caller: Address, key: String, value: Bytes) {
         caller.require_auth();
         Self::assert_initialized(&env);
@@ -340,6 +344,10 @@ impl DataStore {
     ///
     /// # Events
     /// Emits `(ds_bkup, caller, backup_name)` on success.
+    ///
+    /// # Authorization
+    /// `caller` must sign the transaction.
+    #[allow(deprecated)]
     pub fn data_backup(env: Env, caller: Address, backup_name: String) {
         caller.require_auth();
         Self::assert_initialized(&env);
@@ -406,6 +414,7 @@ impl DataStore {
     /// # Security note
     /// Only the admin can restore — this operation is destructive and
     /// cannot be undone without another backup.
+    #[allow(deprecated)]
     pub fn data_restore(env: Env, caller: Address, backup_name: String) {
         caller.require_auth();
         Self::assert_initialized(&env);
@@ -480,6 +489,7 @@ impl DataStore {
     ///
     /// # Events
     /// Emits `(ds_migr, caller, new_version)` on success.
+    #[allow(deprecated)]
     pub fn data_migrate_bump_version(
         env: Env,
         caller: Address,
@@ -544,6 +554,7 @@ impl DataStore {
     }
 
     /// Return the admin address.
+    #[allow(dead_code)]
     pub fn get_admin(env: Env) -> Address {
         Self::assert_initialized(&env);
         env.storage()
@@ -553,6 +564,7 @@ impl DataStore {
     }
 
     /// Return `true` if `address` is the admin or a granted writer.
+    #[allow(dead_code)]
     pub fn is_writer(env: Env, address: Address) -> bool {
         if !env.storage().persistent().has(&StoreKey::Admin) {
             return false;

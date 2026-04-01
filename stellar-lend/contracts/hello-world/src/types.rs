@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Bytes, String, Symbol, Vec};
+use soroban_sdk::{contracttype, Address, Bytes, String, Symbol, Val, Vec};
 
 // ========================================================================
 // Proposal Types
@@ -33,6 +33,17 @@ pub enum ProposalType {
     MinCollateralRatio(i128),
     /// Change risk parameters (min_cr, liq_threshold, close_factor, liq_incentive)
     RiskParams(Option<i128>, Option<i128>, Option<i128>, Option<i128>),
+    /// Update asset configuration (asset, collateral_factor, liquidation_threshold, max_supply, max_borrow, can_collateralize, can_borrow)
+    AssetConfigUpdate(
+        Option<Address>,
+        Option<i128>,
+        Option<i128>,
+        Option<i128>,
+        Option<i128>,
+        Option<bool>,
+        Option<bool>,
+        Option<i128>,
+    ),
     /// Pause/unpause operation
     PauseSwitch(Symbol, bool),
     /// Emergency pause
@@ -53,6 +64,7 @@ pub struct Proposal {
     pub end_time: u64,
     pub execution_time: Option<u64>,
     pub voting_threshold: i128, // In basis points (e.g., 5000 = 50%)
+    pub multisig_threshold: Option<u32>, // Required approvals for multisig proposals
     pub for_votes: i128,
     pub against_votes: i128,
     pub abstain_votes: i128,
@@ -142,7 +154,7 @@ pub struct RecoveryRequest {
 pub struct Action {
     pub target: Address,
     pub method: Symbol,
-    pub args: Vec<Bytes>,
+    pub args: Vec<Val>,
     pub value: i128,
 }
 
@@ -157,3 +169,17 @@ pub const DEFAULT_QUORUM_BPS: u32 = 4_000; // 40% default quorum
 pub const DEFAULT_VOTING_THRESHOLD: i128 = 5_000; // 50% default threshold
 pub const DEFAULT_TIMELOCK_DURATION: u64 = 7 * 24 * 60 * 60; // 7 days
 pub const DEFAULT_RECOVERY_PERIOD: u64 = 3 * 24 * 60 * 60; // 3 days
+
+// ========================================================================
+// Vote Type
+// ========================================================================
+
+#[derive(Clone, Debug, PartialEq)]
+#[contracttype]
+pub struct Vote {
+    pub voter: Address,
+    pub proposal_id: u64,
+    pub vote_type: VoteType,
+    pub voting_power: i128,
+    pub timestamp: u64,
+}
