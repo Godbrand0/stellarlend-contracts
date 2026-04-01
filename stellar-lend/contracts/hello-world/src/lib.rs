@@ -636,6 +636,82 @@ impl HelloContract {
         analytics::get_protocol_stats(&env)
     }
 
+    /// Get cumulative protocol revenue sourced from reserve accrual.
+    pub fn get_protocol_revenue(env: Env) -> i128 {
+        reserve::get_protocol_revenue(&env)
+    }
+
+    /// Get aggregate reserve balance across all assets.
+    pub fn get_total_reserves(env: Env) -> i128 {
+        reserve::get_total_reserves(&env)
+    }
+
+    /// Set reserve factor for an asset (admin only).
+    ///
+    /// # Errors
+    /// Returns `ReserveError::Unauthorized` when `caller` is not admin.
+    /// Returns `ReserveError::InvalidReserveFactor` when factor is out of bounds.
+    ///
+    /// # Security
+    /// Requires signed admin authorization and enforces explicit factor bounds.
+    pub fn set_reserve_factor(
+        env: Env,
+        caller: Address,
+        asset: Option<Address>,
+        reserve_factor_bps: i128,
+    ) -> Result<(), crate::reserve::ReserveError> {
+        reserve::set_reserve_factor(&env, caller, asset, reserve_factor_bps)
+    }
+
+    /// Get reserve factor for an asset.
+    pub fn get_reserve_factor(env: Env, asset: Option<Address>) -> i128 {
+        reserve::get_reserve_factor(&env, asset)
+    }
+
+    /// Set treasury destination for reserve withdrawals (admin only).
+    ///
+    /// # Errors
+    /// Returns `ReserveError::Unauthorized` when `caller` is not admin.
+    /// Returns `ReserveError::InvalidTreasury` when destination is invalid.
+    ///
+    /// # Security
+    /// Restricts treasury changes to admin and forbids self-address treasury.
+    pub fn set_treasury_address(
+        env: Env,
+        caller: Address,
+        treasury: Address,
+    ) -> Result<(), crate::reserve::ReserveError> {
+        reserve::set_treasury_address(&env, caller, treasury)
+    }
+
+    /// Get configured treasury address, if set.
+    pub fn get_treasury_address(env: Env) -> Option<Address> {
+        reserve::get_treasury_address(&env)
+    }
+
+    /// Withdraw accrued reserve funds to treasury (admin only).
+    ///
+    /// # Errors
+    /// Returns `ReserveError::Unauthorized` when caller is not admin.
+    /// Returns `ReserveError::InsufficientReserve` when amount exceeds accrued reserve.
+    /// Returns `ReserveError::TreasuryNotSet` when treasury is missing.
+    ///
+    /// # Security
+    /// Uses checks-effects-interactions by updating state before any external transfer.
+    pub fn withdraw_reserve_funds(
+        env: Env,
+        caller: Address,
+        asset: Option<Address>,
+        amount: i128,
+    ) -> Result<i128, crate::reserve::ReserveError> {
+        reserve::withdraw_reserve_funds(&env, caller, asset, amount)
+    }
+
+    /// Get reserve stats tuple for an asset.
+    pub fn get_reserve_stats(env: Env, asset: Option<Address>) -> (i128, i128, Option<Address>) {
+        reserve::get_reserve_stats(&env, asset)
+    }
+
     // ============================================================================
     // Oracle Methods
     // ============================================================================

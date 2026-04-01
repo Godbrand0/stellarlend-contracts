@@ -43,7 +43,7 @@ use soroban_sdk::{contracterror, contracttype, Address, Env, Symbol};
 use crate::prelude::*;
 use crate::prelude::*;
 
-use crate::deposit::DepositDataKey;
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 
 /// Maximum allowed reserve factor (50% = 5000 basis points)
 /// This ensures that at least 50% of interest always goes to lenders
@@ -92,6 +92,112 @@ pub enum ReserveDataKey {
     /// Treasury address: TreasuryAddress -> Address
     /// Destination for reserve withdrawals
     TreasuryAddress,
+    /// Aggregate reserve balance across all assets.
+    /// Value type: i128
+    TotalReservesV1,
+    /// Cumulative protocol revenue sourced from reserve accruals.
+    /// Value type: i128
+    ProtocolRevenueV1,
+}
+
+fn add_to_protocol_tvl(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let mut analytics = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, ProtocolAnalytics>(&DepositDataKey::ProtocolAnalytics)
+        .unwrap_or(ProtocolAnalytics {
+            total_deposits: 0,
+            total_borrows: 0,
+            total_value_locked: 0,
+        });
+
+    analytics.total_value_locked = analytics
+        .total_value_locked
+        .checked_add(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&DepositDataKey::ProtocolAnalytics, &analytics);
+
+    Ok(())
+}
+
+fn sub_from_protocol_tvl(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let mut analytics = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, ProtocolAnalytics>(&DepositDataKey::ProtocolAnalytics)
+        .unwrap_or(ProtocolAnalytics {
+            total_deposits: 0,
+            total_borrows: 0,
+            total_value_locked: 0,
+        });
+
+    analytics.total_value_locked = analytics
+        .total_value_locked
+        .checked_sub(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&DepositDataKey::ProtocolAnalytics, &analytics);
+
+    Ok(())
+}
+
+fn add_to_total_reserves(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let current_total = env
+        .storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::TotalReservesV1)
+        .unwrap_or(0);
+
+    let next_total = current_total
+        .checked_add(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&ReserveDataKey::TotalReservesV1, &next_total);
+
+    Ok(())
+}
+
+fn sub_from_total_reserves(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let current_total = env
+        .storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::TotalReservesV1)
+        .unwrap_or(0);
+
+    let next_total = current_total
+        .checked_sub(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&ReserveDataKey::TotalReservesV1, &next_total);
+
+    Ok(())
+}
+
+fn add_to_protocol_revenue(env: &Env, amount: i128) -> Result<(), ReserveError> {
+    let current_revenue = env
+        .storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::ProtocolRevenueV1)
+        .unwrap_or(0);
+
+    let next_revenue = current_revenue
+        .checked_add(amount)
+        .ok_or(ReserveError::Overflow)?;
+
+    env.storage()
+        .persistent()
+        .set(&ReserveDataKey::ProtocolRevenueV1, &next_revenue);
+
+    Ok(())
 }
 
 /// Initialize reserve configuration for an asset
@@ -267,6 +373,9 @@ pub fn accrue_reserve(
         .ok_or(ReserveError::Overflow)?;
 
     env.storage().persistent().set(&balance_key, &new_balance);
+    add_to_total_reserves(env, reserve_amount)?;
+    add_to_protocol_revenue(env, reserve_amount)?;
+    add_to_protocol_tvl(env, reserve_amount)?;
 
     // Emit event
     let topics = (Symbol::new(env, "reserve_accrued"),);
@@ -287,6 +396,30 @@ pub fn accrue_reserve(
 pub fn get_reserve_balance(env: &Env, asset: Option<Address>) -> i128 {
     let balance_key = ReserveDataKey::ReserveBalance(asset);
     env.storage().persistent().get(&balance_key).unwrap_or(0)
+}
+
+/// Get aggregate reserves across all assets.
+///
+/// # Returns
+/// Total reserves currently held by the protocol.
+pub fn get_total_reserves(env: &Env) -> i128 {
+    env.storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::TotalReservesV1)
+        .unwrap_or(0)
+}
+
+/// Get cumulative protocol revenue from reserve accrual.
+///
+/// This is cumulative protocol income and is not decreased by treasury withdrawals.
+///
+/// # Returns
+/// Total protocol revenue from reserve accruals.
+pub fn get_protocol_revenue(env: &Env) -> i128 {
+    env.storage()
+        .persistent()
+        .get::<ReserveDataKey, i128>(&ReserveDataKey::ProtocolRevenueV1)
+        .unwrap_or(0)
 }
 
 /// Set the treasury address (admin only)
@@ -408,6 +541,8 @@ pub fn withdraw_reserve_funds(
         .ok_or(ReserveError::Overflow)?;
 
     env.storage().persistent().set(&balance_key, &new_balance);
+    sub_from_total_reserves(env, amount)?;
+    sub_from_protocol_tvl(env, amount)?;
 
     // Transfer tokens to treasury
     // Note: In production, this would call the token contract's transfer function

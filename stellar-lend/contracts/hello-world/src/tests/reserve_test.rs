@@ -22,12 +22,13 @@
 
 #![cfg(test)]
 
-use crate::deposit::DepositDataKey;
+use crate::analytics;
+use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use crate::reserve::{
-    accrue_reserve, get_reserve_balance, get_reserve_factor, get_reserve_stats,
-    get_treasury_address, initialize_reserve_config, set_reserve_factor, set_treasury_address,
-    withdraw_reserve_funds, ReserveError, BASIS_POINTS_SCALE, DEFAULT_RESERVE_FACTOR_BPS,
-    MAX_RESERVE_FACTOR_BPS,
+    accrue_reserve, get_protocol_revenue, get_reserve_balance, get_reserve_factor,
+    get_reserve_stats, get_total_reserves, get_treasury_address, initialize_reserve_config,
+    set_reserve_factor, set_treasury_address, withdraw_reserve_funds, ReserveError,
+    BASIS_POINTS_SCALE, DEFAULT_RESERVE_FACTOR_BPS, MAX_RESERVE_FACTOR_BPS,
 };
 use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
 
@@ -65,6 +66,14 @@ fn test_get_reserve_factor(env: &Env, contract_id: &Address, asset: Option<Addre
 
 fn test_get_reserve_balance(env: &Env, contract_id: &Address, asset: Option<Address>) -> i128 {
     env.as_contract(contract_id, || get_reserve_balance(env, asset))
+}
+
+fn test_get_total_reserves(env: &Env, contract_id: &Address) -> i128 {
+    env.as_contract(contract_id, || get_total_reserves(env))
+}
+
+fn test_get_protocol_revenue(env: &Env, contract_id: &Address) -> i128 {
+    env.as_contract(contract_id, || get_protocol_revenue(env))
 }
 
 fn test_set_reserve_factor(
@@ -1908,4 +1917,73 @@ fn test_reentrancy_protection_pattern() {
     let balance_after = test_get_reserve_balance(&env, &contract_id, asset);
     assert_eq!(balance_after, balance_before - withdraw_amount);
     assert_eq!(balance_after, 500);
+}
+
+#[test]
+fn test_reserve_accrual_updates_protocol_analytics_revenue_and_tvl() {
+    let (env, contract_id, _admin, _user, _treasury) = setup_test_env();
+    let asset = Some(Address::generate(&env));
+
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(
+            &DepositDataKey::ProtocolAnalytics,
+            &ProtocolAnalytics {
+                total_deposits: 0,
+                total_borrows: 0,
+                total_value_locked: 0,
+            },
+        );
+    });
+
+    test_initialize_reserve_config(&env, &contract_id, asset.clone(), DEFAULT_RESERVE_FACTOR_BPS)
+        .unwrap();
+
+    let (reserve_amount, lender_amount) =
+        test_accrue_reserve(&env, &contract_id, asset.clone(), 10_000).unwrap();
+    assert_eq!(reserve_amount, 1_000);
+    assert_eq!(lender_amount, 9_000);
+
+    let total_reserves = test_get_total_reserves(&env, &contract_id);
+    let protocol_revenue = test_get_protocol_revenue(&env, &contract_id);
+    let protocol_metrics =
+        env.as_contract(&contract_id, || analytics::get_protocol_stats(&env).unwrap());
+
+    assert_eq!(total_reserves, 1_000);
+    assert_eq!(protocol_revenue, 1_000);
+    assert_eq!(protocol_metrics.total_value_locked, 1_000);
+    assert_eq!(protocol_metrics.protocol_revenue, 1_000);
+}
+
+#[test]
+fn test_reserve_withdraw_keeps_revenue_but_reduces_tvl_and_reserves() {
+    let (env, contract_id, admin, _user, treasury) = setup_test_env();
+    let asset = Some(Address::generate(&env));
+
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(
+            &DepositDataKey::ProtocolAnalytics,
+            &ProtocolAnalytics {
+                total_deposits: 0,
+                total_borrows: 0,
+                total_value_locked: 0,
+            },
+        );
+    });
+
+    test_initialize_reserve_config(&env, &contract_id, asset.clone(), DEFAULT_RESERVE_FACTOR_BPS)
+        .unwrap();
+    test_set_treasury_address(&env, &contract_id, admin.clone(), treasury).unwrap();
+    test_accrue_reserve(&env, &contract_id, asset.clone(), 10_000).unwrap();
+
+    let metrics_before = env.as_contract(&contract_id, || analytics::get_protocol_stats(&env).unwrap());
+    assert_eq!(metrics_before.total_value_locked, 1_000);
+    assert_eq!(metrics_before.protocol_revenue, 1_000);
+
+    test_withdraw_reserve_funds(&env, &contract_id, admin, asset, 400).unwrap();
+
+    let metrics_after = env.as_contract(&contract_id, || analytics::get_protocol_stats(&env).unwrap());
+    assert_eq!(metrics_after.total_value_locked, 600);
+    assert_eq!(metrics_after.protocol_revenue, 1_000);
+    assert_eq!(test_get_total_reserves(&env, &contract_id), 600);
+    assert_eq!(test_get_protocol_revenue(&env, &contract_id), 1_000);
 }
