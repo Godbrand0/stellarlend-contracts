@@ -83,9 +83,9 @@ pub fn ms_set_admins(
         env.storage()
             .persistent()
             .set(&GovernanceDataKey::MultisigAdmins, &admins);
-    } else {
+    } else if let Some(existing_admins) = existing {
         // Post-bootstrap — must be an existing admin
-        if !existing.unwrap().contains(&caller) {
+        if !existing_admins.contains(&caller) {
             return Err(GovernanceError::Unauthorized);
         }
         env.storage()
@@ -110,7 +110,7 @@ pub fn ms_set_admins(
 ///
 /// `new_ratio` is expressed in basis points
 /// (e.g. 15000 = 150%) and must be greater than 100%.
-
+///
 /// # Returns
 /// The ID of the newly created proposal.
 ///
@@ -118,7 +118,6 @@ pub fn ms_set_admins(
 /// - [`GovernanceError::Unauthorized`] if the caller is not an admin.
 /// - [`GovernanceError::InvalidProposal`] if the ratio is economically invalid
 ///   or proposal creation fails.
-
 pub fn ms_propose_set_min_cr(
     env: &Env,
     proposer: Address,

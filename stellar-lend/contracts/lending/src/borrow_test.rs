@@ -326,6 +326,8 @@ fn test_coverage_extremes() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, admin, user, asset, _) = setup_test(&env);
+    let current_hash = BytesN::from_array(&env, &[0; 32]);
+    client.upgrade_init(&admin, &current_hash, &1);
 
     // 1. View Error Paths (Oracle zero/negative)
     // We can't easily mock the oracle to return 0 mid-test without registering a new one

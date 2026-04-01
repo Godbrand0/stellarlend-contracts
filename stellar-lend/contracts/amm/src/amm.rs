@@ -1327,6 +1327,24 @@ pub fn add_amm_protocol(
     Ok(())
 }
 
+/// Delete AMM protocol (admin only)
+pub fn delete_amm_protocol(env: &Env, admin: Address, protocol: &Address) -> Result<(), AmmError> {
+    admin.require_auth();
+    require_admin(env, &admin)?;
+
+    let protocols_key = AmmDataKey::AmmProtocols;
+    let mut protocols = env
+        .storage()
+        .persistent()
+        .get::<AmmDataKey, Map<Address, AmmProtocolConfig>>(&protocols_key)
+        .unwrap_or_else(|| Map::new(env));
+
+    protocols.remove(protocol.clone());
+    env.storage().persistent().set(&protocols_key, &protocols);
+
+    Ok(())
+}
+
 /// Update AMM settings (admin only)
 pub fn update_amm_settings(
     env: &Env,

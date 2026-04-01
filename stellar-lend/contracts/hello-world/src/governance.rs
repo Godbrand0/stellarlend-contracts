@@ -126,6 +126,7 @@ const MAX_TIMELOCK_DURATION: u64 = 30 * 24 * 60 * 60;
 /// # Security
 ///
 /// Only callable once. The caller (`admin`) must authorize the transaction.
+#[allow(clippy::too_many_arguments)]
 pub fn initialize(
     env: &Env,
     admin: Address,
@@ -165,7 +166,7 @@ pub fn initialize(
     if td > MAX_TIMELOCK_DURATION {
         return Err(GovernanceError::MathOverflow);
     }
-    if dvt < 0 || dvt > BASIS_POINTS_SCALE {
+    if !(0..=BASIS_POINTS_SCALE).contains(&dvt) {
         return Err(GovernanceError::InvalidThreshold);
     }
     if pt < 0 {
@@ -269,7 +270,7 @@ pub fn create_proposal(
 
     // ── validate custom threshold ──
     if let Some(vt) = voting_threshold {
-        if vt < 0 || vt > BASIS_POINTS_SCALE {
+        if !(0..=BASIS_POINTS_SCALE).contains(&vt) {
             return Err(GovernanceError::InvalidThreshold);
         }
     }

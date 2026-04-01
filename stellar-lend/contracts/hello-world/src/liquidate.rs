@@ -43,7 +43,7 @@ pub enum LiquidationError {
     /// Invalid debt asset
     InvalidDebtAsset = 10,
     /// Price not available for asset
-    PriceNotAvailable = 10,
+    PriceNotAvailable = 11,
 }
 
 /// Helper to get asset decimals from the token contract or default to 7 for XLM.
@@ -288,7 +288,7 @@ pub fn liquidate(
         .persistent()
         .set(&collateral_key, &position.collateral);
 
-    update_protocol_analytics(env, actual_debt_liquidated, collateral_seized)
+    record_liquidation_analytics(env, actual_debt_liquidated, collateral_seized)
         .map_err(|_| LiquidationError::Overflow)?;
 
     // 9. EXTERNAL INTERACTIONS (TRANSFERS)
@@ -355,7 +355,7 @@ pub fn liquidate(
 }
 
 /// Update protocol analytics after liquidation
-fn update_protocol_analytics(
+fn record_liquidation_analytics(
     env: &Env,
     debt_liquidated: i128,
     collateral_seized: i128,

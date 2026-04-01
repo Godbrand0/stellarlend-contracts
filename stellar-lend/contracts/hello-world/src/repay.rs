@@ -254,7 +254,7 @@ pub fn repay_debt(
         position.borrow_interest
     };
 
-    let principal_paid = actual_repay_amount
+    let principal_paid = repay_amount
         .checked_sub(interest_paid)
         .ok_or(RepayError::Overflow)?;
 
@@ -341,7 +341,7 @@ pub fn repay_debt(
         env,
         &user,
         Symbol::new(env, "repay"),
-        final_repay_amount,
+        repay_amount,
         timestamp,
     );
 
@@ -374,7 +374,7 @@ fn update_user_analytics_repay(
         .storage()
         .persistent()
         .get::<DepositDataKey, UserAnalytics>(&analytics_key)
-        .unwrap_or_else(|| UserAnalytics {
+        .unwrap_or(UserAnalytics {
             total_deposits: 0,
             total_borrows: 0,
             total_withdrawals: 0,

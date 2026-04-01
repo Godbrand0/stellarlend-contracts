@@ -2,6 +2,27 @@ use super::*;
 use crate::amm::{AmmDataKey, *};
 use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address, Env, Symbol, Vec};
 
+// Minimal mock AMM contract for tests that require cross-contract swap calls.
+// execute_amm_swap invokes env.invoke_contract("swap", ...) on the registered protocol.
+#[soroban_sdk::contract]
+pub struct MockAmm;
+
+#[soroban_sdk::contractimpl]
+impl MockAmm {
+    /// Returns amount_in * 99 / 100 (simulates 1% fee).
+    pub fn swap(
+        _env: Env,
+        _executor: Address,
+        _token_in: Option<Address>,
+        _token_out: Option<Address>,
+        amount_in: i128,
+        _min_amount_out: i128,
+        _callback: AmmCallbackData,
+    ) -> i128 {
+        amount_in * 99 / 100
+    }
+}
+
 fn create_amm_contract<'a>(env: &Env) -> AmmContractClient<'a> {
     AmmContractClient::new(env, &env.register(AmmContract {}, ()))
 }
@@ -82,7 +103,7 @@ fn test_add_amm_protocol() {
 
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
+    let _protocol_addr = Address::generate(&env);
 
     // Initialize first
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
@@ -175,7 +196,7 @@ fn test_successful_swap() {
     };
 
     let amount_out = contract.execute_swap(&user, &params);
-    assert_eq!(amount_out, 9900); // 10000 * (10000 - 100) / 10000 = 9900 based on mock execute_amm_swap
+    assert_eq!(amount_out, 9900); // 10000 * 99 / 100 = 9900 from MockAmm
 
     // Verify swap history
     let history = contract.get_swap_history(&Some(user), &10).unwrap();
@@ -252,7 +273,7 @@ fn test_swap_failure_paused() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
+    let _protocol_addr = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &1000, &10000);
     let mut settings = contract.get_amm_settings().unwrap();
@@ -1081,7 +1102,7 @@ fn test_edge_case_max_slippage() {
     let contract = create_amm_contract(&env);
     let admin = Address::generate(&env);
     let user = Address::generate(&env);
-    let protocol_addr = Address::generate(&env);
+    let protocol_addr = env.register(MockAmm, ());
     let token_b = Address::generate(&env);
 
     contract.initialize_amm_settings(&admin, &100, &2000, &10000); // 20% max slippage allowed
@@ -1232,12 +1253,13 @@ fn test_validate_amm_callback_failures() {
         .is_err());
 
     // 2. Expired callback
+    env.ledger().set_timestamp(10);
     let callback_data_expired = AmmCallbackData {
         nonce: 1,
         operation: Symbol::new(&env, "swap"),
         user: user.clone(),
         expected_amounts: Vec::new(&env),
-        deadline: env.ledger().timestamp() - 1,
+        deadline: 5, // Before current ledger timestamp of 10
     };
     assert!(contract
         .try_validate_amm_callback(&protocol_addr, &callback_data_expired)

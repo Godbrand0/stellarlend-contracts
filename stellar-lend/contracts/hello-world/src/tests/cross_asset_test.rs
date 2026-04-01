@@ -235,7 +235,7 @@ fn test_update_asset_config_success() {
     assert_eq!(fetched.liquidation_threshold, 7000);
     // Unchanged fields preserved
     assert_eq!(fetched.reserve_factor, 1000);
-    assert_eq!(fetched.can_collateralize, true);
+    assert!(fetched.can_collateralize);
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn test_update_asset_config_partial_update() {
     client.update_asset_config(&None, &None, &None, &None, &None, &None, &Some(false));
 
     let fetched = client.get_asset_config(&None);
-    assert_eq!(fetched.can_borrow, false);
+    assert!(!fetched.can_borrow);
     assert_eq!(fetched.collateral_factor, 7500); // Unchanged
 }
 
@@ -437,8 +437,8 @@ fn test_deposit_unlimited_supply_cap() {
     client.initialize_asset(&None, &config);
 
     let user = Address::generate(&env);
-    let position = client.cross_asset_deposit(&user, &None, &999_999_999_0000000);
-    assert_eq!(position.collateral, 999_999_999_0000000);
+    let position = client.cross_asset_deposit(&user, &None, &9_999_999_990_000_000);
+    assert_eq!(position.collateral, 9_999_999_990_000_000);
 }
 
 // ============================================================================
@@ -729,7 +729,7 @@ fn test_get_user_position_summary_no_positions() {
     assert_eq!(summary.total_collateral_value, 0);
     assert_eq!(summary.total_debt_value, 0);
     assert_eq!(summary.health_factor, i128::MAX);
-    assert_eq!(summary.is_liquidatable, false);
+    assert!(!summary.is_liquidatable);
 }
 
 #[test]
@@ -748,7 +748,7 @@ fn test_get_user_position_summary_with_collateral_only() {
     assert_eq!(summary.weighted_collateral_value, 800_0000000);
     assert_eq!(summary.total_debt_value, 0);
     assert_eq!(summary.health_factor, i128::MAX);
-    assert_eq!(summary.is_liquidatable, false);
+    assert!(!summary.is_liquidatable);
     assert_eq!(summary.borrow_capacity, 800_0000000);
 }
 
@@ -768,7 +768,7 @@ fn test_get_user_position_summary_with_debt() {
     assert_eq!(summary.total_debt_value, 5000_0000000);
     // Health = 8000 / 5000 * 10000 = 16000
     assert_eq!(summary.health_factor, 16000);
-    assert_eq!(summary.is_liquidatable, false);
+    assert!(!summary.is_liquidatable);
     assert_eq!(summary.borrow_capacity, 3000_0000000);
 }
 
@@ -842,7 +842,7 @@ fn test_multi_asset_deposit_and_borrow() {
     assert_eq!(summary2.total_debt_value, 1000_0000000);
     // Health = 1500 / 1000 * 10000 = 15000
     assert_eq!(summary2.health_factor, 15000);
-    assert_eq!(summary2.is_liquidatable, false);
+    assert!(!summary2.is_liquidatable);
 }
 
 #[test]
@@ -880,7 +880,7 @@ fn test_stale_price_rejects_borrow() {
 
     // Advance time beyond staleness threshold
     env.ledger().with_mut(|li| {
-        li.timestamp = li.timestamp + 3601;
+        li.timestamp += 3601;
     });
 
     // Borrow triggers health check which reads stale price → should fail
@@ -900,7 +900,7 @@ fn test_stale_price_rejects_withdraw_with_debt() {
 
     // Advance time beyond staleness threshold
     env.ledger().with_mut(|li| {
-        li.timestamp = li.timestamp + 3601;
+        li.timestamp += 3601;
     });
 
     client.cross_asset_withdraw(&user, &None, &100_0000000);
@@ -917,7 +917,7 @@ fn test_stale_price_allows_withdraw_without_debt() {
 
     // Advance time — no debt, so health check doesn't reject
     env.ledger().with_mut(|li| {
-        li.timestamp = li.timestamp + 7200;
+        li.timestamp += 7200;
     });
 
     // Should succeed since no debt (health check skipped for no-debt positions)
@@ -941,7 +941,7 @@ fn test_position_becomes_liquidatable_after_price_drop() {
 
     // Health = (10000 * 0.80) / 7000 * 10000 = 8000/7000 * 10000 ≈ 11428 (healthy)
     let summary = client.get_user_position_summary(&user);
-    assert_eq!(summary.is_liquidatable, false);
+    assert!(!summary.is_liquidatable);
 
     // Drop price to $0.50
     client.update_asset_price(&None, &5_000_000);
@@ -955,7 +955,7 @@ fn test_position_becomes_liquidatable_after_price_drop() {
     // Let me set up a proper cross-asset scenario instead:
     let summary2 = client.get_user_position_summary(&user);
     // With same asset, the ratio stays the same. This is expected.
-    assert_eq!(summary2.is_liquidatable, false);
+    assert!(!summary2.is_liquidatable);
 }
 
 #[test]
