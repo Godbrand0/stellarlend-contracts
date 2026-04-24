@@ -317,6 +317,87 @@ Result:
 4. **Partial Repayments**: Regularly repay debt to maintain healthy position
 5. **Avoid Maximum Borrowing**: Don't borrow at full capacity to prevent liquidation
 
+## View Guarantees
+
+The following guarantees hold for `get_cross_position_summary` and all other read-only view functions. These are verified by the invariant test suite in `cross_asset_view_invariants_test.rs`.
+
+### G-1 — Read-only (no state mutation)
+
+`get_cross_position_summary` reads from persistent storage only; it never writes. Calling it any number of times in any order does not change collateral balances, debt balances, or any other contract state.
+
+### G-2 — Determinism
+
+For a fixed contract state, every call to `get_cross_position_summary` for the same user returns the same `PositionSummary`. The function is purely deterministic.
+
+### G-3 — Total collateral consistency
+
+`total_collateral_usd` always equals the arithmetic sum of `amount_i × price_i ÷ PRICE_DIVISOR` for every asset `i` in the user's `collateral_balances` map. No asset is double-counted or omitted.
+
+```
+total_collateral_usd = Σ_i  (collateral_balances[i] × price_i) / 10_000_000
+```
+
+### G-4 — Total debt consistency
+
+`total_debt_usd` always equals the arithmetic sum of `amount_j × price_j ÷ PRICE_DIVISOR` for every asset `j` in the user's `debt_balances` map.
+
+```
+total_debt_usd = Σ_j  (debt_balances[j] × price_j) / 10_000_000
+```
+
+### G-5 — Health factor formula
+
+`health_factor` is computed from the above totals using:
+
+```
+if total_debt_usd == 0:
+    health_factor = 1_000_000   # HF_NO_DEBT sentinel
+else:
+    weighted_collateral = Σ_i (collateral_value_i × ltv_i) / BPS_SCALE
+    health_factor       = weighted_collateral × BPS_SCALE / total_debt_usd
+```
+
+All divisions use integer floor semantics (truncation toward zero). `BPS_SCALE = 10_000`.
+
+### G-6 — Monotonicity in collateral and debt
+
+- Adding collateral (while debt is constant) never decreases `health_factor`.
+- Adding debt (while collateral is constant) never increases `health_factor`.
+
+These properties hold as long as prices are positive (guaranteed by asset param validation).
+
+### G-7 — User isolation
+
+`get_cross_position_summary(user_A)` depends only on `user_A`'s position storage. Operations by `user_B` (deposits, borrows, repayments) have no effect on `user_A`'s summary.
+
+### G-8 — Ordering invariance
+
+Depositing assets in any order produces the same `total_collateral_usd` and `health_factor` because position maps accumulate balances additively regardless of insertion sequence.
+
+### G-9 — Rounding is conservative (floor division)
+
+All LTV weighting and USD-value conversions use integer floor division. This means:
+- `weighted_collateral` can only be less than or equal to the real-valued result.
+- A borrow is only permitted when the floor-divided health factor is **strictly above 1.0** (> `BPS_SCALE`).
+- Borrowers cannot extract more value than the floor-rounded weighted collateral.
+
+### G-10 — No view-based exploitation
+
+Because view functions are read-only and deterministic, there is no mechanism through which a caller can:
+- Manipulate another user's health factor by calling the view.
+- Gain assets or reduce debt through repeated view calls.
+- Trigger liquidation thresholds without an actual price or balance change.
+
+### Boundary conditions
+
+| Condition | Guaranteed behaviour |
+|-----------|----------------------|
+| No collateral, no debt | `total_collateral_usd = 0`, `total_debt_usd = 0`, `health_factor = HF_NO_DEBT` |
+| Collateral but no debt | `total_collateral_usd ≥ 0`, `total_debt_usd = 0`, `health_factor = HF_NO_DEBT` |
+| LTV = 0 | `weighted_collateral = 0`; borrow rejected by health check |
+| Overpayment of debt | Capped at outstanding balance; `total_debt_usd` goes to 0 |
+| Same asset in collateral and debt | Counted independently in both totals (no netting) |
+
 ## Conclusion
 
 The cross-asset system provides flexibility for users to manage positions across multiple assets while maintaining protocol solvency through health factor enforcement. Understanding these rules and invariants is crucial for safe protocol usage and integration.
