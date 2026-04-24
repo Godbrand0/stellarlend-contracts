@@ -41,3 +41,5 @@ pub mod oracle_staleness_fallback_test;
 pub mod recovery_test;
 // pub mod fuzz_test;
 // pub mod fees_test;
+
+pub mod snapshot_test;
