@@ -102,7 +102,6 @@ mod token_receiver_test;
 #[cfg(test)]
 mod views_test;
 
-#[cfg(test)]
 // mod withdraw_test; // temporarily disabled - pre-existing ContractEvents API mismatch
 #[cfg(test)]
 mod bad_debt_test;
