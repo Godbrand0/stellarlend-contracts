@@ -439,3 +439,4 @@ fn test_borrow_cap_lowered_below_current_debt_blocks_new_borrows() {
     let res = client.try_cross_asset_borrow(&user2, &Some(usdc.clone()), &50);
     assert!(res.is_err());
 }
+}
