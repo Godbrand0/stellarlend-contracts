@@ -10,8 +10,8 @@
 //! - Edge cases (zero amounts, overflow, re-initialization)
 //! - Read-only queries
 
-use crate::cross_asset::{AssetConfig, CrossAssetError};
-use crate::{HelloContract, HelloContractClient};
+use crate::cross_asset::CrossAssetError;
+use crate::{LendingContract, LendingContractClient};
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
 
 // ============================================================================
