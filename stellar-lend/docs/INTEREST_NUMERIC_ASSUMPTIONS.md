@@ -19,16 +19,28 @@ This note documents numeric assumptions for long-horizon interest accrual and th
 ### Lending contract (`borrow.rs`)
 
 - Interest calculation uses `I256` intermediates to avoid intermediate multiplication overflow.
+- Positive fractional borrower interest is rounded up on accrual so debt cannot leak due to truncation.
 - Conversion back to `i128` is clamped with `unwrap_or(i128::MAX)`, producing a saturating upper bound.
 - `get_user_debt` applies `saturating_add` when accumulating interest, preventing overflow on repeated reads/accrual events.
 
 ### Hello-world contract (`interest_rate.rs`)
 
 - Accrued interest uses checked arithmetic (`checked_mul`, `checked_div`) and returns `InterestRateError::Overflow` instead of panicking.
+- Positive fractional borrower interest is rounded up after division so utilization changes cannot undercharge debt by repeated sub-unit truncation.
 - Borrow rate is explicitly clamped with:
   - `max(rate_floor_bps)`
   - `min(rate_ceiling_bps)`
 - Utilization is capped at 100% (`10000` bps), even when borrows exceed deposits.
+
+## Rounding Direction
+
+- Borrow interest accrual rounds positive fractional results up, favoring lender/protocol safety over borrower convenience.
+- Numeric proof used in tests:
+  - principal = `100_000`
+  - rate = `500` bps
+  - elapsed = `1` second
+  - exact interest = `100_000 * 500 * 1 / (10_000 * 31_536_000) = 50_000_000 / 315_360_000_000`
+  - exact result is greater than `0` and less than `1`, so conservative accrual stores `1` unit rather than `0`
 
 ## Long-Horizon / Extreme Scenarios Covered
 

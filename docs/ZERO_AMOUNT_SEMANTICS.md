@@ -14,6 +14,7 @@ All core lending operations **reject** amounts ≤ 0 with their respective
 | `withdraw_collateral`  | `Err(WithdrawError::InvalidAmount)`        |
 | `borrow_asset`         | `Err(BorrowError::InvalidAmount)`          |
 | `repay_debt`           | `Err(RepayError::InvalidAmount)`           |
+| `liquidate`            | `Err(LiquidationError::InvalidAmount)`     |
 
 ### Invariants
 
@@ -23,6 +24,22 @@ All core lending operations **reject** amounts ≤ 0 with their respective
    unhandled panic or abort.
 3. **Composability**: A rejected zero-amount operation must not corrupt state
    for subsequent valid operations.
+
+## Security Notes
+
+- **Trust boundaries**: Admin and guardian roles can change protocol-wide
+  configuration and recovery state, but they do not bypass the amount checks on
+  user entrypoints.
+- **Token transfer flows**: Deposit, repay, and token-based liquidation use
+  token `transfer_from`; withdraw and collateral payout paths use outbound
+  contract transfers. The zero-amount guard executes before those external call
+  paths.
+- **Authorization and reentrancy**: User-facing state-changing flows enforce
+  caller authorization and/or reentrancy guards within their modules. Zero
+  amounts are rejected before any external token transfer or storage mutation.
+- **Arithmetic safety**: Amount validation short-circuits before balance math,
+  and the protocol uses checked arithmetic on value-changing paths to avoid
+  overflow-induced state corruption.
 
 ## Risk Management / Liquidation Functions
 

@@ -235,6 +235,7 @@ fn set_asset_params(
             deposit_enabled,
             collateral_factor,
             max_deposit,
+            borrow_fee_bps: 0,
         };
         let key = DepositDataKey::AssetParams(asset.clone());
         env.storage().persistent().set(&key, &params);
@@ -503,7 +504,7 @@ fn test_borrow_asset_with_different_collateral_factor() {
 /// Scenario: User attempts to borrow zero amount.
 /// Expected: Returns BorrowError::InvalidAmount.
 #[test]
-#[should_panic(expected = "InvalidAmount")]
+#[should_panic(expected = "Error(Contract, #1)")] // BorrowError::InvalidAmount = 1
 fn test_borrow_asset_zero_amount() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -523,7 +524,7 @@ fn test_borrow_asset_zero_amount() {
 /// Scenario: User attempts to borrow negative amount.
 /// Expected: Returns BorrowError::InvalidAmount.
 #[test]
-#[should_panic(expected = "InvalidAmount")]
+#[should_panic(expected = "Error(Contract, #1)")] // BorrowError::InvalidAmount = 1
 fn test_borrow_asset_negative_amount() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -543,7 +544,7 @@ fn test_borrow_asset_negative_amount() {
 /// Scenario: User attempts to borrow using contract address as asset.
 /// Expected: Returns BorrowError::InvalidAsset.
 #[test]
-#[should_panic(expected = "InvalidAsset")]
+#[should_panic(expected = "Error(Contract, #2)")] // BorrowError::InvalidAsset = 2
 fn test_borrow_asset_invalid_asset_contract_address() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -563,7 +564,7 @@ fn test_borrow_asset_invalid_asset_contract_address() {
 /// Scenario: User attempts to borrow without depositing collateral.
 /// Expected: Returns BorrowError::InsufficientCollateral.
 #[test]
-#[should_panic(expected = "InsufficientCollateral")]
+#[should_panic(expected = "Error(Contract, #3)")] // BorrowError::InsufficientCollateral = 3
 fn test_borrow_asset_no_collateral() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -580,7 +581,7 @@ fn test_borrow_asset_no_collateral() {
 /// Scenario: User attempts to borrow more than allowed by collateral ratio.
 /// Expected: Returns BorrowError::MaxBorrowExceeded or InsufficientCollateralRatio.
 #[test]
-#[should_panic(expected = "MaxBorrowExceeded")]
+#[should_panic(expected = "Error(Contract, #8)")] // BorrowError::MaxBorrowExceeded = 8
 fn test_borrow_asset_exceeds_collateral_ratio() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -603,7 +604,7 @@ fn test_borrow_asset_exceeds_collateral_ratio() {
 /// Scenario: User borrows, then attempts to borrow more than remaining capacity.
 /// Expected: Returns BorrowError::MaxBorrowExceeded.
 #[test]
-#[should_panic(expected = "MaxBorrowExceeded")]
+#[should_panic(expected = "Error(Contract, #8)")] // BorrowError::MaxBorrowExceeded = 8
 fn test_borrow_asset_max_borrow_exceeded() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -631,7 +632,7 @@ fn test_borrow_asset_max_borrow_exceeded() {
 /// Scenario: User attempts to borrow asset that is not enabled (deposit_enabled = false).
 /// Expected: Returns BorrowError::AssetNotEnabled.
 #[test]
-#[should_panic(expected = "AssetNotEnabled")]
+#[should_panic(expected = "Error(Contract, #9)")] // BorrowError::AssetNotEnabled = 9
 fn test_borrow_asset_not_enabled() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -826,7 +827,7 @@ fn test_borrow_interest_resets_on_zero_debt() {
 /// Scenario: Borrow operations are paused via pause switch.
 /// Expected: Returns BorrowError::BorrowPaused.
 #[test]
-#[should_panic(expected = "BorrowPaused")]
+#[should_panic(expected = "Error(Contract, #4)")] // BorrowError::BorrowPaused = 4
 fn test_borrow_asset_paused() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -1067,7 +1068,7 @@ fn test_borrow_asset_one_below_max() {
 /// Scenario: User attempts to borrow 1 unit more than maximum.
 /// Expected: Returns BorrowError::MaxBorrowExceeded.
 #[test]
-#[should_panic(expected = "MaxBorrowExceeded")]
+#[should_panic(expected = "Error(Contract, #8)")] // BorrowError::MaxBorrowExceeded = 8
 fn test_borrow_asset_one_above_max() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -1158,7 +1159,7 @@ fn test_borrow_asset_multiple_users() {
 /// Scenario: Asset has 0% collateral factor.
 /// Expected: Max borrow should be zero, borrow should fail.
 #[test]
-#[should_panic(expected = "MaxBorrowExceeded")]
+#[should_panic(expected = "Error(Contract, #8)")] // BorrowError::MaxBorrowExceeded = 8
 fn test_borrow_asset_zero_collateral_factor() {
     let env = create_test_env();
     let contract_id = env.register(HelloContract, ());
@@ -1499,4 +1500,377 @@ fn test_borrow_last_activity_updated() {
     // Verify last activity updated
     let analytics_after = get_user_analytics(&env, &contract_id, &user).unwrap();
     assert!(analytics_after.last_activity > initial_activity);
+}
+
+// ============================================================================
+// EVENT FIELD COMPLETENESS TESTS (for indexers)
+//
+// These tests verify that every field of the BorrowEvent emitted by borrow_asset
+// can be decoded from env.events().all() and matches the values provided at
+// call time. Indexers MUST be able to reconstruct borrow state from events alone;
+// any missing or wrong field breaks that guarantee.
+//
+// Trust boundaries:
+// - Only the position owner (user) can trigger a borrow event; admin/guardian
+//   cannot borrow on behalf of others.
+// - Token transfers are skipped in test mode (#[cfg(not(test))]), so event
+//   integrity is verified without real token contracts.
+// - The debt_after value returned by borrow_asset == position.debt + position.borrow_interest
+//   immediately after the call (no interest between event emission and position read).
+// ============================================================================
+
+use soroban_sdk::{contracttype, testutils::Events, TryFromVal};
+
+/// Mirror of BorrowEvent for decoding from the raw event log.
+///
+/// Must match the field layout in events::BorrowEvent exactly.
+/// Schema: user | asset | amount | timestamp
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct DecodedBorrowEvent {
+    pub user: Address,
+    pub asset: Option<Address>,
+    pub amount: i128,
+    pub timestamp: u64,
+}
+
+/// Find the first BorrowEvent in env.events().all() and return it decoded.
+///
+/// Panics if no BorrowEvent is found or decoding fails, giving an actionable
+/// message so failing tests are easy to diagnose.
+fn find_borrow_event(env: &Env, contract_id: &Address) -> DecodedBorrowEvent {
+    let all = env.events().all();
+    for i in 0..all.len() {
+        let (emitter, _topics, data) = all.get_unchecked(i);
+        if emitter != *contract_id {
+            continue;
+        }
+        if let Ok(ev) = DecodedBorrowEvent::try_from_val(env, &data) {
+            return ev;
+        }
+    }
+    panic!("no BorrowEvent found in event log");
+}
+
+/// BorrowEvent carries correct user, none-asset, amount, and timestamp.
+///
+/// This is the primary indexer-completeness test. Indexers that rely on BorrowEvent
+/// to track borrow volume MUST see every field filled correctly.
+#[test]
+fn test_borrow_event_all_fields_native_asset() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+
+    client.deposit_collateral(&user, &None, &3000);
+
+    let borrow_amount: i128 = 1500;
+    let expected_timestamp = env.ledger().timestamp();
+    let debt_after = client.borrow_asset(&user, &None, &borrow_amount);
+
+    let ev = find_borrow_event(&env, &contract_id);
+
+    // user field – must identify who initiated the borrow
+    assert_eq!(ev.user, user, "BorrowEvent.user mismatch");
+    // asset field – None for native XLM borrows
+    assert_eq!(ev.asset, None, "BorrowEvent.asset should be None for native borrows");
+    // amount field – must equal the requested borrow, not a net-of-fee value
+    assert_eq!(ev.amount, borrow_amount, "BorrowEvent.amount mismatch");
+    // timestamp field – must be the ledger timestamp at time of borrow
+    assert_eq!(ev.timestamp, expected_timestamp, "BorrowEvent.timestamp mismatch");
+
+    // debt_after – the return value of borrow_asset is total debt (principal + interest)
+    // immediately after the call. For a first borrow with no prior debt, this equals the amount.
+    assert_eq!(debt_after, borrow_amount, "debt_after (return value) should equal borrow amount on first borrow");
+
+    // Cross-check: position.debt + position.borrow_interest == debt_after
+    let position = get_user_position(&env, &contract_id, &user).unwrap();
+    let computed_total = position.debt + position.borrow_interest;
+    assert_eq!(debt_after, computed_total, "debt_after must equal position.debt + position.borrow_interest");
+}
+
+/// BorrowEvent carries the correct token asset address when borrowing a token asset.
+///
+/// Indexers routing events by asset address rely on this field being non-None
+/// and equal to the configured asset contract address.
+#[test]
+fn test_borrow_event_asset_field_token_address() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Enable the token for borrowing
+    set_asset_params(&env, &contract_id, &token, true, 10000, 0);
+    client.deposit_collateral(&user, &None, &3000);
+
+    let borrow_amount: i128 = 1000;
+    let _debt_after = client.borrow_asset(&user, &Some(token.clone()), &borrow_amount);
+
+    let ev = find_borrow_event(&env, &contract_id);
+
+    // asset must carry the actual token address, not None
+    assert_eq!(ev.asset, Some(token.clone()), "BorrowEvent.asset must match token address");
+    assert_eq!(ev.user, user, "BorrowEvent.user must match borrower");
+    assert_eq!(ev.amount, borrow_amount, "BorrowEvent.amount must match requested amount");
+}
+
+/// BorrowEvent amount field equals the requested borrow amount (not receive_amount after fee).
+///
+/// Security note: the event logs the gross borrow (what is added to debt),
+/// not the net amount the user receives after fee deduction. Indexers computing
+/// total protocol debt must use event.amount, not a fee-adjusted value.
+#[test]
+fn test_borrow_event_amount_is_gross_not_net_after_fee() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Set 1% borrow fee (100 bps)
+    env.as_contract(&contract_id, || {
+        use crate::deposit::{AssetParams, DepositDataKey};
+        let params = AssetParams {
+            deposit_enabled: true,
+            collateral_factor: 10000,
+            max_deposit: 0,
+            borrow_fee_bps: 100, // 1% fee
+        };
+        let key = DepositDataKey::AssetParams(token.clone());
+        env.storage().persistent().set(&key, &params);
+    });
+
+    client.deposit_collateral(&user, &None, &3000);
+
+    let borrow_amount: i128 = 1000;
+    client.borrow_asset(&user, &Some(token.clone()), &borrow_amount);
+
+    let ev = find_borrow_event(&env, &contract_id);
+
+    // The event amount must be the gross borrow amount (what is added to debt),
+    // not net receive_amount (borrow_amount - fee). Debt tracking uses gross.
+    assert_eq!(
+        ev.amount, borrow_amount,
+        "BorrowEvent.amount must be gross borrow (debt increment), not net after fee"
+    );
+}
+
+/// BorrowEvent timestamp corresponds to the ledger timestamp at exec time.
+///
+/// Indexers use the timestamp to order and bucket borrow events. A wrong or
+/// missing timestamp breaks time-series analytics.
+#[test]
+fn test_borrow_event_timestamp_matches_ledger() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    client.deposit_collateral(&user, &None, &3000);
+
+    // Advance ledger to a known non-zero timestamp
+    advance_ledger_time(&env, 7200);
+    let expected_ts = env.ledger().timestamp();
+
+    client.borrow_asset(&user, &None, &500);
+
+    let ev = find_borrow_event(&env, &contract_id);
+
+    assert_eq!(
+        ev.timestamp, expected_ts,
+        "BorrowEvent.timestamp must equal ledger timestamp at borrow time"
+    );
+}
+
+/// BorrowEvent is emitted exactly once per borrow_asset call.
+///
+/// Multiple events per call would cause double-counting in indexers.
+/// Exactly one BorrowEvent must appear per borrow call.
+#[test]
+fn test_borrow_event_emitted_exactly_once_per_call() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    client.deposit_collateral(&user, &None, &3000);
+
+    client.borrow_asset(&user, &None, &500);
+
+    let all = env.events().all();
+
+    // Count events that decode successfully as BorrowEvent
+    let borrow_event_count = (0..all.len())
+        .filter(|&i| {
+            let (emitter, _topics, data) = all.get_unchecked(i);
+            emitter == contract_id
+                && DecodedBorrowEvent::try_from_val(&env, &data).is_ok()
+        })
+        .count();
+
+    assert_eq!(
+        borrow_event_count, 1,
+        "exactly one BorrowEvent must be emitted per borrow_asset call, got {}",
+        borrow_event_count
+    );
+}
+
+/// Sequential borrows each emit a BorrowEvent with independently correct fields.
+///
+/// Indexers processing a stream of events must see one distinct event per call,
+/// each carrying the correct amount for that specific borrow.
+#[test]
+fn test_borrow_event_fields_across_sequential_borrows() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    client.deposit_collateral(&user, &None, &5000);
+
+    let borrow1: i128 = 1000;
+    let borrow2: i128 = 500;
+
+    client.borrow_asset(&user, &None, &borrow1);
+    client.borrow_asset(&user, &None, &borrow2);
+
+    // Collect all BorrowEvents in emission order
+    let all = env.events().all();
+    let borrow_events: soroban_sdk::Vec<DecodedBorrowEvent> = {
+        let mut collected = soroban_sdk::Vec::new(&env);
+        for i in 0..all.len() {
+            let (emitter, _topics, data) = all.get_unchecked(i);
+            if emitter == contract_id {
+                if let Ok(ev) = DecodedBorrowEvent::try_from_val(&env, &data) {
+                    collected.push_back(ev);
+                }
+            }
+        }
+        collected
+    };
+
+    assert_eq!(borrow_events.len(), 2, "expected two BorrowEvents for two borrow calls");
+
+    let ev1 = borrow_events.get_unchecked(0);
+    assert_eq!(ev1.user, user);
+    assert_eq!(ev1.amount, borrow1, "first BorrowEvent.amount should be {}", borrow1);
+    assert_eq!(ev1.asset, None);
+
+    let ev2 = borrow_events.get_unchecked(1);
+    assert_eq!(ev2.user, user);
+    assert_eq!(ev2.amount, borrow2, "second BorrowEvent.amount should be {}", borrow2);
+    assert_eq!(ev2.asset, None);
+}
+
+/// debt_after return value equals position.debt + position.borrow_interest after interest accrual.
+///
+/// The borrow_asset return value is what indexers use as the authoritative
+/// post-borrow total debt. It must match on-chain state exactly.
+#[test]
+fn test_borrow_debt_after_includes_accrued_interest() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    client.deposit_collateral(&user, &None, &5000);
+
+    // First borrow – no prior interest
+    client.borrow_asset(&user, &None, &2000);
+
+    // Simulate time passing so interest accrues on second borrow
+    env.as_contract(&contract_id, || {
+        let key = crate::deposit::DepositDataKey::Position(user.clone());
+        let mut pos = env
+            .storage()
+            .persistent()
+            .get::<crate::deposit::DepositDataKey, crate::deposit::Position>(&key)
+            .unwrap();
+        pos.last_accrual_time = env.ledger().timestamp().saturating_sub(86400); // 1 day
+        env.storage().persistent().set(&key, &pos);
+    });
+
+    // Second borrow triggers interest accrual; debt_after includes accrued interest
+    let debt_after = client.borrow_asset(&user, &None, &500);
+
+    let position = get_user_position(&env, &contract_id, &user).unwrap();
+    let expected_total = position.debt + position.borrow_interest;
+
+    assert_eq!(
+        debt_after, expected_total,
+        "debt_after must equal position.debt + position.borrow_interest after interest accrual"
+    );
+    // debt_after must be at least principal (2000 + 500)
+    assert!(
+        debt_after >= 2500,
+        "debt_after {} must be >= 2500 (sum of borrows)",
+        debt_after
+    );
+}
+
+/// BorrowEvent is NOT emitted when borrow_asset returns an error.
+///
+/// If validation fails (zero amount, paused, insufficient collateral),
+/// no BorrowEvent must appear. Indexers must not record a borrow for
+/// a transaction that was rejected by the contract.
+#[test]
+fn test_no_borrow_event_on_validation_failure() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    // No collateral deposited – borrow must fail with InsufficientCollateral
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.borrow_asset(&user, &None, &500);
+    }));
+
+    // The call should have panicked (soroban test clients panic on contract errors)
+    assert!(result.is_err(), "borrow without collateral should have panicked");
+
+    // No BorrowEvent should have been emitted
+    let borrow_event_count = env
+        .events()
+        .all()
+        .iter()
+        .filter(|(emitter, _topics, data)| {
+            emitter == contract_id
+                && DecodedBorrowEvent::try_from_val(&env, data).is_ok()
+        })
+        .count();
+
+    assert_eq!(
+        borrow_event_count, 0,
+        "BorrowEvent must not be emitted for a failed borrow"
+    );
+}
+
+/// BorrowEvent user field identifies the actual borrower, never another address.
+///
+/// Authorization: require_auth() is not visible in the current borrow signature,
+/// but the user address stored in the event and position must be the address
+/// provided in the call – the contract does not substitute or override it.
+#[test]
+fn test_borrow_event_user_matches_borrower_not_another_address() {
+    let env = create_test_env();
+    let contract_id = env.register(HelloContract, ());
+    let client = HelloContractClient::new(&env, &contract_id);
+
+    let borrower = Address::generate(&env);
+    let unrelated = Address::generate(&env);
+
+    client.deposit_collateral(&borrower, &None, &3000);
+    client.borrow_asset(&borrower, &None, &1000);
+
+    let ev = find_borrow_event(&env, &contract_id);
+
+    assert_eq!(ev.user, borrower, "BorrowEvent.user must be the actual borrower");
+    assert_ne!(ev.user, unrelated, "BorrowEvent.user must not be an unrelated address");
 }

@@ -20,7 +20,7 @@ use soroban_sdk::{
     Address, Env, String,
 };
 
-use crate::{
+use crate::monitor::{
     HealthStatus, Monitor, MonitorClient, MonitorError, MonitorSignal, SecuritySeverity, SignalKind,
 };
 

@@ -554,6 +554,7 @@ impl DataStore {
     }
 
     /// Return the admin address.
+    #[allow(dead_code)]
     pub fn get_admin(env: Env) -> Address {
         Self::assert_initialized(&env);
         env.storage()
@@ -563,6 +564,7 @@ impl DataStore {
     }
 
     /// Return `true` if `address` is the admin or a granted writer.
+    #[allow(dead_code)]
     pub fn is_writer(env: Env, address: Address) -> bool {
         if !env.storage().persistent().has(&StoreKey::Admin) {
             return false;

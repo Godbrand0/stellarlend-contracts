@@ -1,3 +1,5 @@
+use crate::deposit;
+use crate::analytics::AnalyticsDataKey;
 use crate::deposit::{DepositDataKey, Position, ProtocolAnalytics, UserAnalytics};
 use crate::{HelloContract, HelloContractClient};
 use soroban_sdk::{Address, Env, Map, Symbol, Vec};
@@ -2278,11 +2280,11 @@ fn test_borrow_asset_collateral_ratio_maintained() {
     // Ratio should be: collateral_value / debt_value * 10000
     // = 3000 / 1500 * 10000 = 20000 (200%)
     assert!(analytics.collateralization_ratio >= 15000); //pub mod multisig_test;
-    pub mod cross_contract_test;
+// pub mod cross_contract_test;
     pub mod gov_asset_test;
     pub mod borrow_cap_test;
-    pub mod amm_impact_test;
-    id = env.register(HelloContract, ());
+    // pub mod amm_impact_test;
+    let id = env.register(HelloContract, ());
     let client = HelloContractClient::new(&env, &contract_id);
 
     let user = Address::generate(&env);

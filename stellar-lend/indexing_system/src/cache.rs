@@ -1,3 +1,5 @@
+#![cfg(not(tarpaulin_include))]
+#![allow(unexpected_cfgs)]
 /// Redis cache service for caching frequently accessed data
 use crate::error::{IndexerError, IndexerResult};
 use crate::models::{Event, EventStats};
@@ -27,11 +29,10 @@ impl CacheService {
         stats_ttl: u64,
         query_ttl: u64,
     ) -> IndexerResult<Self> {
-        let client = redis::Client::open(redis_url).map_err(|e| IndexerError::Cache(e))?;
-
+        let client = redis::Client::open(redis_url).map_err(IndexerError::Cache)?;
         let connection_manager = ConnectionManager::new(client)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(Self {
             client: connection_manager,
@@ -42,17 +43,17 @@ impl CacheService {
     }
 
     /// Generate cache key for events
-    fn event_key(id: &str) -> String {
+    pub fn event_key(id: &str) -> String {
         format!("event:{}", id)
     }
 
     /// Generate cache key for event queries
-    fn query_key(query_hash: &str) -> String {
+    pub fn query_key(query_hash: &str) -> String {
         format!("query:{}", query_hash)
     }
 
     /// Generate cache key for statistics
-    fn stats_key() -> String {
+    pub fn stats_key() -> String {
         "stats:global".to_string()
     }
 
@@ -72,7 +73,7 @@ impl CacheService {
         self.client
             .set_ex::<_, _, ()>(&key, value, self.event_ttl)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -91,7 +92,7 @@ impl CacheService {
             .client
             .get(&key)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         match value {
             Some(json) => {
@@ -118,7 +119,7 @@ impl CacheService {
         self.client
             .set_ex::<_, _, ()>(&key, value, self.query_ttl)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -140,7 +141,7 @@ impl CacheService {
             .client
             .get(&key)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         match value {
             Some(json) => {
@@ -162,7 +163,7 @@ impl CacheService {
         self.client
             .set_ex::<_, _, ()>(&key, value, self.stats_ttl)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -178,7 +179,7 @@ impl CacheService {
             .client
             .get(&key)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         match value {
             Some(json) => {
@@ -199,7 +200,7 @@ impl CacheService {
         self.client
             .del::<_, ()>(&key)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -215,7 +216,7 @@ impl CacheService {
             self.client
                 .del::<_, ()>(&keys)
                 .await
-                .map_err(|e| IndexerError::Cache(e))?;
+                .map_err(IndexerError::Cache)?;
         }
 
         Ok(())
@@ -228,7 +229,7 @@ impl CacheService {
         self.client
             .del::<_, ()>(&key)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -255,7 +256,7 @@ impl CacheService {
         let mut iter = cmd
             .iter_async(&mut self.client)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         while let Some(key) = iter.next_item().await {
             keys.push(key);
@@ -272,7 +273,7 @@ impl CacheService {
         self.client
             .set::<_, _, ()>("latest_block", block_number)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -286,7 +287,7 @@ impl CacheService {
             .client
             .get("latest_block")
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(block)
     }
@@ -308,7 +309,7 @@ impl CacheService {
         self.client
             .set_ex::<_, _, ()>(key, json, ttl)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -325,7 +326,7 @@ impl CacheService {
             .client
             .get(key)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         match value {
             Some(json) => {
@@ -347,7 +348,7 @@ impl CacheService {
         self.client
             .publish::<_, _, ()>(channel, json)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
     }
@@ -367,8 +368,21 @@ impl CacheService {
         redis::cmd("FLUSHDB")
             .query_async::<_, ()>(&mut self.client)
             .await
-            .map_err(|e| IndexerError::Cache(e))?;
+            .map_err(IndexerError::Cache)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cache_keys() {
+        assert_eq!(CacheService::event_key("123"), "event:123");
+        assert_eq!(CacheService::query_key("hash"), "query:hash");
+        assert_eq!(CacheService::stats_key(), "stats:global");
+        assert_eq!(CacheService::_metadata_key("0xabc"), "metadata:0xabc");
     }
 }

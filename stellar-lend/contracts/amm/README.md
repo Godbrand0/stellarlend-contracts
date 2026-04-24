@@ -30,10 +30,25 @@ This contract provides Automated Market Maker (AMM) integration for the StellarL
 ## Security Features
 
 - Slippage protection with configurable tolerances
-- Callback validation with nonce-based replay protection
+- Callback validation with nonce-based replay protection and deadline (expiry) checks
 - Admin-only configuration functions
 - Comprehensive parameter validation
 - Emergency pause functionality integration
+- Authorization checks (`require_auth`) on admin/user/protocol entrypoints
+
+## Liquidity Share Math and Rounding
+
+- Initial LP minting uses `floor(sqrt(amount_a * amount_b))`.
+- Subsequent LP minting uses `floor(min(amount_a * total_lp / reserve_a, amount_b * total_lp / reserve_b))`.
+- LP burns return `floor(lp_burned * reserve / total_lp)` per token.
+- All rounding is floor-biased to preserve solvency and prevent over-credit/over-withdraw.
+
+## Trust Boundaries
+
+- **Admin authority**: can initialize and update AMM settings, and register protocol configs.
+- **User authority**: users must authorize their own swap/add/remove operations.
+- **Protocol callbacks**: registered AMM protocol addresses must authorize callback validation calls.
+- **Token transfer flows**: this integration tracks AMM routing/LP accounting and callback safety; actual token transfer semantics depend on the integrated AMM/token contracts.
 
 ## Events
 

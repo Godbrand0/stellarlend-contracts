@@ -24,10 +24,12 @@
 
 #![allow(unused)]
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Map, Symbol, Val, Vec};
+use crate::prelude::*;
 
 use crate::events::{
-    emit_analytics_updated, emit_deposit, emit_position_updated, emit_user_activity_tracked,
-    AnalyticsUpdatedEvent, DepositEvent, PositionUpdatedEvent, UserActivityTrackedEvent,
+    emit_analytics_updated, emit_borrower_health_v1, emit_deposit, emit_position_updated,
+    emit_user_activity_tracked, AnalyticsUpdatedEvent, BorrowerHealthEventV1, DepositEvent,
+    PositionUpdatedEvent, UserActivityTrackedEvent,
 };
 
 /// Errors that can occur during deposit operations
@@ -64,11 +66,6 @@ pub enum DepositDataKey {
     AssetParams(Address),
     /// Legacy operation pause switches: Map<Symbol, bool>
     PauseSwitches,
-    /// Protocol admin address
-    /// Value type: Address
-    Admin,
-    /// User's unified position tracking
-    /// Value type: Position
     Position(Address),
     /// Global protocol analytics (TVL, aggregate borrows/deposits)
     /// Value type: ProtocolAnalytics
@@ -242,54 +239,56 @@ pub fn deposit_collateral(
     // Get current timestamp
     let timestamp = env.ledger().timestamp();
 
-    // Handle asset transfer
-    if let Some(ref asset_addr) = asset {
-        // Validate asset address - ensure it's not the contract itself
-        if asset_addr == &env.current_contract_address() {
-            return Err(DepositError::InvalidAsset);
-        }
-
-        // Check asset parameters
-        let asset_params_key = DepositDataKey::AssetParams(asset_addr.clone());
-        if let Some(params) = env
+    let actual_asset = match &asset {
+        Some(addr) => addr.clone(),
+        None => env
             .storage()
             .persistent()
-            .get::<DepositDataKey, AssetParams>(&asset_params_key)
-        {
-            if !params.deposit_enabled {
-                return Err(DepositError::AssetNotEnabled);
-            }
+            .get::<DepositDataKey, Address>(&DepositDataKey::NativeAssetAddress)
+            .ok_or(DepositError::InvalidAsset)?,
+    };
 
-            // Check max deposit limit
-            if params.max_deposit > 0 && amount > params.max_deposit {
-                return Err(DepositError::InvalidAmount);
-            }
-        }
-
-        // Transfer tokens from user to contract using token contract
-        // Use the token contract's transfer_from method
-        let token_client = soroban_sdk::token::Client::new(env, asset_addr);
-
-        // Check user balance
-        let user_balance = token_client.balance(&user);
-        if user_balance < amount {
-            return Err(DepositError::InsufficientBalance);
-        }
-
-        // Transfer tokens from user to contract
-        // The user must have approved the contract to spend their tokens
-        // transfer_from requires: spender (contract), from (user), to (contract), amount
-        token_client.transfer_from(
-            &env.current_contract_address(), // spender (this contract)
-            &user,                           // from (user)
-            &env.current_contract_address(), // to (this contract)
-            &amount,
-        );
-    } else {
-        // Native XLM deposit - in Soroban, native assets are handled differently
-        // For now, we'll track it but actual XLM handling depends on Soroban's native asset support
-        // This is a placeholder for native asset handling
+    // Validate asset address - ensure it's not the contract itself
+    if actual_asset == env.current_contract_address() {
+        return Err(DepositError::InvalidAsset);
     }
+
+    // Check asset parameters
+    let asset_params_key = DepositDataKey::AssetParams(actual_asset.clone());
+    if let Some(params) = env
+        .storage()
+        .persistent()
+        .get::<DepositDataKey, AssetParams>(&asset_params_key)
+    {
+        if !params.deposit_enabled {
+            return Err(DepositError::AssetNotEnabled);
+        }
+
+        // Check max deposit limit
+        if params.max_deposit > 0 && amount > params.max_deposit {
+            return Err(DepositError::InvalidAmount);
+        }
+    }
+
+    // Transfer tokens from user to contract using token contract
+    // Use the token contract's transfer_from method
+    let token_client = soroban_sdk::token::Client::new(env, &actual_asset);
+
+    // Check user balance
+    let user_balance = token_client.balance(&user);
+    if user_balance < amount {
+        return Err(DepositError::InsufficientBalance);
+    }
+
+    // Transfer tokens from user to contract
+    // The user must have approved the contract to spend their tokens
+    // transfer_from requires: spender (contract), from (user), to (contract), amount
+    token_client.transfer_from(
+        &env.current_contract_address(), // spender (this contract)
+        &user,                           // from (user)
+        &env.current_contract_address(), // to (this contract)
+        &amount,
+    );
 
     // Get or create user position
     let position_key = DepositDataKey::Position(user.clone());
@@ -356,7 +355,13 @@ pub fn deposit_collateral(
     );
 
     // Emit position updated event
-    emit_position_updated_event(env, &user, &position);
+    emit_position_updated_event(
+        env,
+        &user,
+        &position,
+        Symbol::new(env, "deposit"),
+        timestamp,
+    );
 
     // Emit analytics updated event
     emit_analytics_updated_event(env, &user, "deposit", amount, timestamp);
@@ -374,11 +379,8 @@ pub fn set_native_asset_address(
     caller: Address,
     native_asset: Address,
 ) -> Result<(), DepositError> {
-    let admin = crate::admin::get_admin(env).ok_or(DepositError::InvalidAsset)?;
-    if caller != admin {
-        return Err(DepositError::InvalidAsset);
-    }
-    caller.require_auth();
+    crate::admin::require_admin(env, &caller).map_err(|_| DepositError::InvalidAsset)?;
+    
     if native_asset == env.current_contract_address() {
         return Err(DepositError::InvalidAsset);
     }
@@ -504,8 +506,14 @@ pub fn add_activity_log(
     Ok(())
 }
 
-/// Emit position updated event
-pub fn emit_position_updated_event(env: &Env, user: &Address, position: &Position) {
+/// Emit legacy position and stable borrower-health events for indexers.
+pub fn emit_position_updated_event(
+    env: &Env,
+    user: &Address,
+    position: &Position,
+    operation: Symbol,
+    timestamp: u64,
+) {
     emit_position_updated(
         env,
         PositionUpdatedEvent {
@@ -514,6 +522,71 @@ pub fn emit_position_updated_event(env: &Env, user: &Address, position: &Positio
             debt: position.debt,
         },
     );
+
+    let snapshot = build_borrower_health_snapshot(position);
+    emit_borrower_health_v1(
+        env,
+        BorrowerHealthEventV1 {
+            schema_version: 1,
+            user: user.clone(),
+            operation,
+            collateral: position.collateral,
+            principal_debt: position.debt,
+            borrow_interest: position.borrow_interest,
+            total_debt: snapshot.total_debt,
+            health_factor: snapshot.health_factor,
+            risk_level: snapshot.risk_level,
+            is_liquidatable: snapshot.is_liquidatable,
+            timestamp,
+        },
+    );
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+struct BorrowerHealthSnapshot {
+    total_debt: i128,
+    health_factor: i128,
+    risk_level: i128,
+    is_liquidatable: bool,
+}
+
+fn build_borrower_health_snapshot(position: &Position) -> BorrowerHealthSnapshot {
+    let total_debt = position
+        .debt
+        .checked_add(position.borrow_interest)
+        .unwrap_or(i128::MAX);
+    let health_factor = if total_debt == 0 {
+        i128::MAX
+    } else {
+        position
+            .collateral
+            .checked_mul(10_000)
+            .and_then(|value| value.checked_div(total_debt))
+            .unwrap_or(0)
+    };
+    let risk_level = calculate_risk_level(health_factor);
+    let is_liquidatable = total_debt > 0 && health_factor < 10_500;
+
+    BorrowerHealthSnapshot {
+        total_debt,
+        health_factor,
+        risk_level,
+        is_liquidatable,
+    }
+}
+
+fn calculate_risk_level(health_factor: i128) -> i128 {
+    if health_factor >= 15_000 {
+        1
+    } else if health_factor >= 12_000 {
+        2
+    } else if health_factor >= 11_000 {
+        3
+    } else if health_factor >= 10_500 {
+        4
+    } else {
+        5
+    }
 }
 
 /// Emit analytics updated event
