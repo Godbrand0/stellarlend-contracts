@@ -13,20 +13,7 @@ use crate::constants::{
 use crate::pause::{self, blocks_high_risk_ops, PauseType};
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env, I256};
 
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum BorrowError {
-    InsufficientCollateral = 1,
-    DebtCeilingReached = 2,
-    ProtocolPaused = 3,
-    InvalidAmount = 4,
-    Overflow = 5,
-    Unauthorized = 6,
-    AssetNotSupported = 7,
-    BelowMinimumBorrow = 8,
-    RepayAmountTooHigh = 9,
-}
+pub use crate::errors::BorrowError;
 
 #[contracttype]
 #[derive(Clone)]

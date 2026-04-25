@@ -89,20 +89,7 @@ use soroban_sdk::{contracterror, contractevent, contracttype, token, Address, En
 use crate::constants::{BPS_SCALE, HEALTH_FACTOR_SCALE};
 use crate::pause::{self, PauseType};
 
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum CrossAssetError {
-    InsufficientCollateral = 1,
-    DebtCeilingReached = 2,
-    ProtocolPaused = 3,
-    InvalidAmount = 4,
-    Overflow = 5,
-    Unauthorized = 6,
-    AssetNotSupported = 7,
-    PriceUnavailable = 8,
-    AlreadyInitialized = 9,
-}
+pub use crate::errors::CrossAssetError;
 
 #[contractevent]
 #[derive(Clone, Debug)]
