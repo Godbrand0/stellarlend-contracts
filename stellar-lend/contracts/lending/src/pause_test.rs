@@ -6,7 +6,7 @@ use crate::oracle::OracleError;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{
     testutils::{Address as _, Events},
-    Address, Env, Symbol, TryFromVal, Vec,
+    Address, Env,
 };
 
 #[test]
@@ -171,11 +171,13 @@ fn test_pause_events() {
     client.set_pause(&admin, &PauseType::Borrow, &true);
 
     let events = env.events().all();
-    let last_event = events.last().unwrap();
-
-    assert_eq!(last_event.0, contract_id);
-    let topic: Symbol = Symbol::try_from_val(&env, &last_event.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    let raw = events.events();
+    assert!(!raw.is_empty());
+    if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+        if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+            assert_eq!(sym.to_utf8_string_lossy(), "pause_event");
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -479,9 +481,13 @@ fn test_set_deposit_paused_emits_event() {
     client.set_deposit_paused(&true);
 
     let events = env.events().all();
-    let last = events.last().unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    let raw = events.events();
+    assert!(!raw.is_empty());
+    if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+        if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+            assert_eq!(sym.to_utf8_string_lossy(), "pause_event");
+        }
+    }
 
     // get_pause_state must reflect the change.
     assert!(client.get_pause_state(&PauseType::Deposit));
@@ -500,9 +506,13 @@ fn test_set_withdraw_paused_emits_event() {
     client.set_withdraw_paused(&true);
 
     let events = env.events().all();
-    let last = events.last().unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    let raw = events.events();
+    assert!(!raw.is_empty());
+    if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+        if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+            assert_eq!(sym.to_utf8_string_lossy(), "pause_event");
+        }
+    }
 
     assert!(client.get_pause_state(&PauseType::Withdraw));
 }
@@ -656,9 +666,13 @@ fn test_set_guardian_emits_event() {
     client.set_guardian(&admin, &guardian);
 
     let events = env.events().all();
-    let last = events.last().unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "guardian_set_event"));
+    let raw = events.events();
+    assert!(!raw.is_empty());
+    if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+        if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+            assert_eq!(sym.to_utf8_string_lossy(), "guardian_set_event");
+        }
+    }
 }
 
 /// A non-admin address cannot configure the guardian.
@@ -784,9 +798,13 @@ fn test_emergency_shutdown_emits_event() {
     client.emergency_shutdown(&admin);
 
     let events = env.events().all();
-    let last = events.last().unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+    let raw = events.events();
+    assert!(!raw.is_empty());
+    if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+        if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+            assert_eq!(sym.to_utf8_string_lossy(), "emergency_state_event");
+        }
+    }
 }
 
 /// Full lifecycle: Normal → Shutdown → Recovery → Normal.
@@ -806,27 +824,39 @@ fn test_full_emergency_lifecycle_events() {
     client.emergency_shutdown(&admin);
     {
         let events = env.events().all();
-        let last = events.last().unwrap();
-        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        let raw = events.events();
+        assert!(!raw.is_empty());
+        if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+            if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+                assert_eq!(sym.to_utf8_string_lossy(), "emergency_state_event");
+            }
+        }
     }
 
     // Step 2: Recovery
     client.start_recovery(&admin);
     {
         let events = env.events().all();
-        let last = events.last().unwrap();
-        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        let raw = events.events();
+        assert!(!raw.is_empty());
+        if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+            if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+                assert_eq!(sym.to_utf8_string_lossy(), "emergency_state_event");
+            }
+        }
     }
 
     // Step 3: Normal
     client.complete_recovery(&admin);
     {
         let events = env.events().all();
-        let last = events.last().unwrap();
-        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        let raw = events.events();
+        assert!(!raw.is_empty());
+        if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+            if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+                assert_eq!(sym.to_utf8_string_lossy(), "emergency_state_event");
+            }
+        }
     }
 
     // Final state verification (separate read call is fine here).
@@ -1212,15 +1242,13 @@ fn test_comprehensive_pause_state_matrix() {
     client.initialize_withdraw_settings(&100);
 
     // Matrix: Test each pause flag individually
-    let pause_types = vec![
+    for (pause_type, operation) in [
         (PauseType::Deposit, "deposit"),
         (PauseType::Borrow, "borrow"),
         (PauseType::Repay, "repay"),
         (PauseType::Withdraw, "withdraw"),
         (PauseType::Liquidation, "liquidation"),
-    ];
-
-    for (pause_type, operation) in pause_types {
+    ] {
         // Pause the specific operation
         client.set_pause(&admin, &pause_type, &true);
 

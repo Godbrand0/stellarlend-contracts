@@ -317,6 +317,32 @@ Result:
 4. **Partial Repayments**: Regularly repay debt to maintain healthy position
 5. **Avoid Maximum Borrowing**: Don't borrow at full capacity to prevent liquidation
 
+## View Guarantees
+
+`get_cross_position_summary` and related read-only view methods satisfy the following guarantees.
+These are verified by the invariant test suite in `cross_asset_view_invariants_test.rs`.
+
+| ID   | Guarantee                                                                                         |
+|------|---------------------------------------------------------------------------------------------------|
+| G-1  | **Read-only**: calling the view never mutates ledger state. Balances before and after are equal. |
+| G-2  | **Idempotency**: calling the view N times in a row returns identical values every time.           |
+| G-3  | **Collateral accuracy**: `total_collateral_usd` equals the sum of each asset's amount × price.   |
+| G-4  | **Debt accuracy**: `total_debt_usd` equals the sum of each asset's current debt × price.         |
+| G-5  | **Health factor formula**: `health_factor = weighted_collateral × BPS_SCALE / total_debt_usd` when debt > 0, and `HF_NO_DEBT` (1 000 000) when debt = 0. |
+| G-6  | **Monotonicity**: adding collateral never decreases `health_factor`; adding debt never increases it. |
+| G-7  | **User isolation**: operations on user B's position have no effect on user A's summary.          |
+| G-8  | **Order invariance**: depositing assets in any order produces the same summary totals.           |
+| G-9  | **Conservative rounding**: weighted-collateral arithmetic truncates toward zero (floor division), so the view never overestimates borrowing capacity. |
+| G-10 | **No view exploitation**: a view call cannot be used as a side channel to bypass access controls or alter protocol state. |
+
+### Sentinel values
+
+| Condition                     | `health_factor` value |
+|-------------------------------|-----------------------|
+| No debt (fresh or fully repaid) | `1_000_000`          |
+| Debt > 0                      | `weighted_collateral × 10_000 / total_debt_usd` |
+| Collateral = 0, debt > 0      | `0`                   |
+
 ## Conclusion
 
 The cross-asset system provides flexibility for users to manage positions across multiple assets while maintaining protocol solvency through health factor enforcement. Understanding these rules and invariants is crucial for safe protocol usage and integration.
