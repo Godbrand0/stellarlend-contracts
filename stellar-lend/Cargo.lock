@@ -2364,7 +2364,7 @@ dependencies = [
  "soroban-env-guest 25.0.1",
  "soroban-env-host 25.0.1",
  "soroban-ledger-snapshot",
- "soroban-sdk-macros 25.3.1",
+ "soroban-sdk-macros 25.3.0",
  "stellar-strkey 0.0.16",
  "visibility",
 ]
@@ -2391,9 +2391,9 @@ dependencies = [
 
 [[package]]
 name = "soroban-sdk-macros"
-version = "25.3.1"
+version = "25.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca03e9cf61d241cb9afdd6ddf41f6c25698b3f566a875e7009ea799b89e2bf0a"
+checksum = "dec603a62a90abdef898f8402471a24d8b58a0043b9a998ed6a607a19a5dabe1"
 dependencies = [
  "darling",
  "heck",
