@@ -46,8 +46,8 @@ pub fn flash_loan(
     }
 
     // 1. Acquire Reentrancy Guard (Temporary Storage Lock)
-    let _guard = crate::reentrancy::ReentrancyGuard::new(env)
-        .map_err(|_| FlashLoanError::Reentrancy)?;
+    let _guard =
+        crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| FlashLoanError::Reentrancy)?;
 
     let fee = calculate_fee(env, amount);
 

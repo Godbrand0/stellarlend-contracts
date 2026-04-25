@@ -394,7 +394,7 @@ impl DepositMutantReceiver {
         _params: Bytes,
     ) -> bool {
         let client = LendingContractClient::new(&env, &env.current_contract_address());
-        
+
         // Try to deposit - this should be blocked by reentrancy guard or state check
         // even if we have funds.
         client.deposit(&env.current_contract_address(), &asset, &100);
@@ -418,7 +418,7 @@ fn test_state_mutation_during_flash_loan_blocked() {
     env.mock_all_auths();
     let (client, _, asset) = setup_with_balance(&env, 100_000);
     let receiver = env.register(DepositMutantReceiver, ());
-    
+
     // Give receiver some funds to deposit
     token::StellarAssetClient::new(&env, &asset).mint(&receiver, &1000);
 

@@ -3,7 +3,6 @@
 #![allow(clippy::absurd_extreme_comparisons)]
 #![allow(unexpected_cfgs)]
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Val, Vec};
-mod reentrancy;
 mod borrow;
 mod constants;
 mod cross_asset;
@@ -12,6 +11,7 @@ mod flash_loan;
 mod liquidate;
 mod oracle;
 mod pause;
+mod reentrancy;
 mod token_receiver;
 mod withdraw;
 
@@ -259,7 +259,8 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<i128, DepositError> {
-        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| DepositError::Reentrancy)?;
+        let _guard =
+            reentrancy::ReentrancyGuard::new(&env).map_err(|_| DepositError::Reentrancy)?;
         if is_paused(&env, PauseType::Deposit) || blocks_high_risk_ops(&env) {
             return Err(DepositError::DepositPaused);
         }
@@ -591,7 +592,8 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<i128, WithdrawError> {
-        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| WithdrawError::Reentrancy)?;
+        let _guard =
+            reentrancy::ReentrancyGuard::new(&env).map_err(|_| WithdrawError::Reentrancy)?;
         withdraw_logic(&env, user, asset, amount)
     }
 
