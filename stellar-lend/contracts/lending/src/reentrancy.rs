@@ -1,4 +1,4 @@
-// #![cfg(not(tarpaulin_include))]
+#![cfg(not(tarpaulin_include))]
 #![allow(unexpected_cfgs)]
 //! Reentrancy protection for same-transaction nested calls.
 //!
@@ -10,8 +10,6 @@
 //! The guard does not persist across transactions and does not replace authorization,
 //! pause-switch, or collateral checks. It is a defense-in-depth layer for fund-moving entry
 //! points that perform external contract calls.
-#![cfg(not(tarpaulin_include))]
-#![allow(unexpected_cfgs)]
 
 use soroban_sdk::{contracttype, Env};
 
