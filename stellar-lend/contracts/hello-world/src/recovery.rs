@@ -500,6 +500,8 @@ pub fn execute_recovery(env: &Env, executor: Address) -> Result<(), GovernanceEr
     }
     new_admins.push_back(recovery.new_admin.clone());
 
+    let mut config = crate::governance::get_multisig_config(env).ok_or(GovernanceError::InvalidMultisigConfig)?;
+
     config.admins = new_admins;
     env.storage()
         .instance()

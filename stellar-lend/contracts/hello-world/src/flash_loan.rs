@@ -53,6 +53,8 @@ pub enum FlashLoanError {
     InvalidCallback = 9,
     /// Callback execution failed
     CallbackFailed = 10,
+    /// Protocol is in read-only mode
+    ReadOnlyMode = 11,
 }
 
 /// Storage keys for flash loan-related data
@@ -214,12 +216,23 @@ pub fn execute_flash_loan(
         return Err(FlashLoanError::InvalidAmount);
     }
 
-    // Check if flash loans are paused
-    let pause_key = FlashLoanDataKey::PauseSwitches;
+    // Check pause status
+    // 1. Read-only mode (highest precedence)
+    if crate::risk_management::is_read_only_mode(env) {
+        return Err(FlashLoanError::ReadOnlyMode);
+    }
+
+    // 2. Emergency pause
+    if crate::risk_management::is_emergency_paused(env) {
+        return Err(FlashLoanError::FlashLoanPaused);
+    }
+
+    // 3. Per-operation pause
+    let pause_switches_key = FlashLoanDataKey::PauseSwitches;
     if let Some(pause_map) = env
         .storage()
         .persistent()
-        .get::<FlashLoanDataKey, Map<Symbol, bool>>(&pause_key)
+        .get::<FlashLoanDataKey, Map<Symbol, bool>>(&pause_switches_key)
     {
         if let Some(paused) = pause_map.get(Symbol::new(env, "pause_flash_loan")) {
             if paused {

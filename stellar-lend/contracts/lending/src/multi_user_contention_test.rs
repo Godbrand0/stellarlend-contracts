@@ -55,7 +55,7 @@ fn test_contention_interleaved_deposits_borrows() {
         // Every user deposits collateral
         let deposit_amount = 50_000 + (i as i128 * 100);
         client.deposit(&user, &collateral_asset, &deposit_amount);
-        _expected_total_deposits += deposit_amount;
+        expected_total_deposits += deposit_amount;
 
         // Alternate users borrow
         if i % 2 == 0 {
@@ -128,7 +128,7 @@ fn test_contention_paused_operations() {
     client.deposit(&user1, &collateral_asset, &50_000);
 
     // Pause deposits
-    client.set_deposit_paused(&true);
+    client.set_deposit_paused(&admin, &true);
 
     // Trying to deposit while paused under contention scenario
     let deposit_res = client.try_deposit(&user2, &collateral_asset, &50_000);

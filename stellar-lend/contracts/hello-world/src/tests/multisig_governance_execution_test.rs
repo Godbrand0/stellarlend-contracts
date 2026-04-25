@@ -23,7 +23,7 @@ use crate::governance::{
     set_multisig_threshold,
 };
 use crate::types::ProposalType;
-use crate::types::{Action, GovernanceConfig, MultisigConfig};
+use crate::types::{Action, GovernanceConfig, MultisigConfig, ProposalStatus};
 use crate::HelloContract;
 use soroban_sdk::{
     testutils::{Address as _, Ledger},

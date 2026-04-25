@@ -43,7 +43,7 @@
 //! - All state changes emit events for transparency and auditability
 
 #![allow(unused)]
-use soroban_sdk::{contracterror, contracttype, Address, Env, Symbol};
+use soroban_sdk::{contracterror, contracttype, Address, Env, Map, Symbol};
 use crate::prelude::*;
 use crate::prelude::*;
 

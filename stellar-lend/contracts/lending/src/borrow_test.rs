@@ -317,8 +317,8 @@ fn test_coverage_boost_emergency() {
     client.upgrade_remove_approver(&admin, &user);
 
     client.initialize_borrow_settings(&1000, &100);
-    client.set_deposit_paused(&true);
-    client.set_deposit_paused(&false);
+    client.set_deposit_paused(&admin, &true);
+    client.set_deposit_paused(&admin, &false);
 }
 
 #[test]
@@ -345,11 +345,12 @@ fn test_coverage_extremes() {
     // We'd need to know the exact serialization.
     // Instead, let's just use regular borrow with a very large amount if ceiling allows.
     client.initialize_borrow_settings(&i128::MAX, &1);
+    client.initialize_deposit_settings(&i128::MAX, &0);
     client.borrow(&user, &asset, &1_000_000_000, &asset, &2_000_000_000);
 
     // 3. Upgrade Branch Coverage
     let hash = BytesN::from_array(&env, &[1; 32]);
-    client.upgrade_init(&admin, &hash, &1); // initialize upgrade system first
+    // client.upgrade_init(&admin, &hash, &1); // Already initialized at top of test
     let pid = client.upgrade_propose(&admin, &hash, &100);
     assert_eq!(client.upgrade_status(&pid).stage, UpgradeStage::Approved);
 
@@ -373,7 +374,7 @@ fn test_borrow_zero_collateral_rejected() {
     let (client, _admin, user, asset, collateral_asset) = setup_test(&env);
 
     let result = client.try_borrow(&user, &asset, &10_000, &collateral_asset, &0);
-    assert_eq!(result, Err(Ok(BorrowError::InvalidAmount)));
+    assert_eq!(result, Err(Ok(BorrowError::InsufficientCollateral)));
 }
 
 /// Collateral exactly at 150 % of borrow amount must be accepted.
@@ -479,7 +480,40 @@ fn test_borrow_large_collateral_no_overflow() {
 
     // Very large collateral, modest borrow — should succeed.
     let large_collateral: i128 = 1_000_000_000_000;
+    client.initialize_deposit_settings(&i128::MAX, &0);
     client.borrow(&user, &asset, &1000, &collateral_asset, &large_collateral);
     let debt = client.get_user_debt(&user);
     assert_eq!(debt.borrowed_amount, 1000);
+}
+
+#[test]
+fn test_deposit_collateral_exceeds_cap() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, user, _asset, collateral_asset) = setup_test(&env);
+    
+    // Set cap to 50k
+    client.initialize_deposit_settings(&50_000, &100);
+    
+    // Deposit 50k - should succeed
+    client.deposit_collateral(&user, &collateral_asset, &50_000);
+    assert_eq!(client.get_user_collateral(&user).amount, 50_000);
+    
+    // Try to deposit 1 more - should fail
+    let result = client.try_deposit_collateral(&user, &collateral_asset, &1);
+    assert_eq!(result, Err(Ok(BorrowError::ExceedsDepositCap)));
+}
+
+#[test]
+fn test_borrow_collateral_exceeds_cap() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, user, asset, collateral_asset) = setup_test(&env);
+    
+    // Set cap to 50k
+    client.initialize_deposit_settings(&50_000, &100);
+    
+    // Borrow with 50,001 collateral - should fail
+    let result = client.try_borrow(&user, &asset, &10_000, &collateral_asset, &50_001);
+    assert_eq!(result, Err(Ok(BorrowError::ExceedsDepositCap)));
 }

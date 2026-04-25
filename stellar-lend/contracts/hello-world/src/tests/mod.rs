@@ -39,5 +39,6 @@ pub mod multisig_governance_execution_test;
 pub mod multisig_test;
 pub mod oracle_staleness_fallback_test;
 pub mod recovery_test;
+pub mod read_only_test;
 // pub mod fuzz_test;
 // pub mod fees_test;

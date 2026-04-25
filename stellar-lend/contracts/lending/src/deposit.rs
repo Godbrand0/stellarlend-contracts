@@ -137,24 +137,24 @@ fn save_deposit_position(env: &Env, user: &Address, position: &DepositCollateral
         .set(&DepositDataKey::UserCollateral(user.clone()), position);
 }
 
-fn get_total_deposits(env: &Env) -> i128 {
+pub(crate) fn get_total_deposits(env: &Env) -> i128 {
     env.storage()
         .persistent()
         .get(&DepositDataKey::TotalAmount)
         .unwrap_or(0)
 }
 
-fn set_total_deposits(env: &Env, amount: i128) {
-    env.storage()
-        .persistent()
-        .set(&DepositDataKey::TotalAmount, &amount);
-}
-
-fn get_deposit_cap(env: &Env) -> i128 {
+pub(crate) fn get_deposit_cap(env: &Env) -> i128 {
     env.storage()
         .persistent()
         .get(&DepositDataKey::CapAmount)
         .unwrap_or(i128::MAX)
+}
+
+pub(crate) fn set_total_deposits(env: &Env, amount: i128) {
+    env.storage()
+        .persistent()
+        .set(&DepositDataKey::TotalAmount, &amount);
 }
 
 fn get_min_deposit_amount(env: &Env) -> i128 {

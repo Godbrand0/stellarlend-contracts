@@ -120,6 +120,9 @@ fn test_borrow_cap_update_via_admin() {
     let xlm_config = create_asset_config(&env, None, 1_0000000, 0);
     client.initialize_asset(&None, &xlm_config);
 
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+
     // User 1 deposits collateral (Native XLM) via cross-asset deposit
     client.cross_asset_deposit(&user1, &None, &5000);
 
@@ -140,6 +143,7 @@ fn test_borrow_cap_update_via_admin() {
 // ============================================================================
 // 2. Per-asset isolation: "ceiling hit while others have room" (issue #519)
 // ============================================================================
+}
 
 /// Hitting asset A's ceiling must not affect asset B's borrowing.
 #[test]

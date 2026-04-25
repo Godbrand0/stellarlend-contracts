@@ -54,6 +54,8 @@ pub enum RepayError {
     Overflow = 6,
     /// Reentrancy detected
     Reentrancy = 7,
+    /// Protocol is in read-only mode
+    ReadOnlyMode = 8,
 }
 
 #[derive(Clone, Copy)]
@@ -210,7 +212,18 @@ pub fn repay_debt(
     let _guard =
         crate::reentrancy::ReentrancyGuard::new(env).map_err(|_| RepayError::Reentrancy)?;
 
-    // Check if repayments are paused
+    // Check pause status
+    // 1. Read-only mode (highest precedence)
+    if crate::risk_management::is_read_only_mode(env) {
+        return Err(RepayError::ReadOnlyMode);
+    }
+
+    // 2. Emergency pause
+    if crate::risk_management::is_emergency_paused(env) {
+        return Err(RepayError::RepayPaused);
+    }
+
+    // 3. Per-operation pause
     let pause_switches_key = DepositDataKey::PauseSwitches;
     if let Some(pause_map) = env
         .storage()
@@ -317,6 +330,7 @@ pub fn repay_debt(
     // Delegates to the reserve module which owns the canonical ReserveDataKey::ReserveBalance
     // storage and enforces the configured reserve factor per asset.
     if interest_paid > 0 {
+        let reserve_factor = crate::reserve::get_reserve_factor(env, asset.clone());
         let reserve_amount = interest_paid
             .checked_mul(reserve_factor)
             .ok_or(RepayError::Overflow)?
@@ -362,7 +376,7 @@ pub fn repay_debt(
     };
     log_repay(env, event);
     emit_position_updated_event(env, &user, &position, Symbol::new(env, "repay"), timestamp);
-    emit_analytics_updated_event(env, &user, "repay", final_repay_amount, timestamp);
+    emit_analytics_updated_event(env, &user, "repay", repay_amount, timestamp);
     emit_user_activity_tracked_event(
         env,
         &user,
