@@ -7,6 +7,8 @@ members = [
   "contracts/common",
   "contracts/hello-world",
   "contracts/lending",
+  "contracts/timelock",
+  "contracts/vesting",
 ]
 exclude = [
   "contracts/hello-world",

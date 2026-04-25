@@ -407,21 +407,21 @@ fn test_receive_deposit_exceeds_cap() {
     let from = Address::generate(&env);
     let asset = register_token(&env, &admin);
     let payload = action_payload(&env, "deposit");
-    
+
     // Set cap to 50k
     client.initialize_deposit_settings(&50_000, &100);
-    
+
     // Try to deposit 50,001
     mint_and_approve(&env, &asset, &from, &contract_id, 50_001);
     let result = client.try_receive(&asset, &from, &50_001, &payload);
-    
+
     assert_eq!(result, Err(Ok(BorrowError::ExceedsDepositCap)));
-    
+
     // Verify atomicity: tokens should NOT have been pulled from the user
     let token_client = token::Client::new(&env, &asset);
     assert_eq!(token_client.balance(&from), 50_001);
     assert_eq!(token_client.balance(&contract_id), 0);
-    
+
     // Verify state: collateral should be 0
     assert_eq!(client.get_user_collateral(&from).amount, 0);
 }
@@ -432,16 +432,16 @@ fn test_receive_deposit_at_cap_boundary() {
     let from = Address::generate(&env);
     let asset = register_token(&env, &admin);
     let payload = action_payload(&env, "deposit");
-    
+
     // Set cap to 50k
     client.initialize_deposit_settings(&50_000, &100);
-    
+
     // Deposit exactly 50k
     mint_and_approve(&env, &asset, &from, &contract_id, 50_000);
     client.receive(&asset, &from, &50_000, &payload);
-    
+
     assert_eq!(client.get_user_collateral(&from).amount, 50_000);
-    
+
     // Next 1 unit should fail
     mint_and_approve(&env, &asset, &from, &contract_id, 1);
     let result = client.try_receive(&asset, &from, &1, &payload);

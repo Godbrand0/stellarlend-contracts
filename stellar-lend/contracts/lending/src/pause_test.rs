@@ -1,10 +1,10 @@
 use super::*;
-use soroban_sdk::vec;
 use crate::cross_asset::CrossAssetError;
 use crate::deposit::DepositError;
 use crate::flash_loan::FlashLoanError;
 use crate::oracle::OracleError;
 use crate::withdraw::WithdrawError;
+use soroban_sdk::vec;
 use soroban_sdk::{
     testutils::{Address as _, Events},
     Address, Env, Symbol, TryFromVal, Vec,
@@ -971,13 +971,16 @@ fn test_cross_asset_deposit_pause_matrix() {
 
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_admin(&admin);
-    client.set_asset_params(&asset, &AssetParams {
-        ltv: 7000,
-        liquidation_threshold: 8000,
-        price_feed: Address::generate(&env),
-        debt_ceiling: 1_000_000_000,
-        is_active: true,
-    });
+    client.set_asset_params(
+        &asset,
+        &AssetParams {
+            ltv: 7000,
+            liquidation_threshold: 8000,
+            price_feed: Address::generate(&env),
+            debt_ceiling: 1_000_000_000,
+            is_active: true,
+        },
+    );
 
     // Test Deposit pause blocks cross-asset deposit
     client.set_pause(&admin, &PauseType::Deposit, &true);
@@ -1013,20 +1016,26 @@ fn test_cross_asset_borrow_pause_matrix() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_admin(&admin);
     let collateral_asset = Address::generate(&env);
-    client.set_asset_params(&asset, &AssetParams {
-        ltv: 7000,
-        liquidation_threshold: 8000,
-        price_feed: Address::generate(&env),
-        debt_ceiling: 1_000_000_000,
-        is_active: true,
-    });
-    client.set_asset_params(&collateral_asset, &AssetParams {
-        ltv: 7000,
-        liquidation_threshold: 8000,
-        price_feed: Address::generate(&env),
-        debt_ceiling: 1_000_000_000,
-        is_active: true,
-    });
+    client.set_asset_params(
+        &asset,
+        &AssetParams {
+            ltv: 7000,
+            liquidation_threshold: 8000,
+            price_feed: Address::generate(&env),
+            debt_ceiling: 1_000_000_000,
+            is_active: true,
+        },
+    );
+    client.set_asset_params(
+        &collateral_asset,
+        &AssetParams {
+            ltv: 7000,
+            liquidation_threshold: 8000,
+            price_feed: Address::generate(&env),
+            debt_ceiling: 1_000_000_000,
+            is_active: true,
+        },
+    );
     client.deposit_collateral_asset(&user, &collateral_asset, &100_000);
 
     // Test Borrow pause blocks cross-asset borrow
@@ -1063,20 +1072,26 @@ fn test_cross_asset_repay_pause_matrix() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_admin(&admin);
     let collateral_asset = Address::generate(&env);
-    client.set_asset_params(&asset, &AssetParams {
-        ltv: 7000,
-        liquidation_threshold: 8000,
-        price_feed: Address::generate(&env),
-        debt_ceiling: 1_000_000_000,
-        is_active: true,
-    });
-    client.set_asset_params(&collateral_asset, &AssetParams {
-        ltv: 7000,
-        liquidation_threshold: 8000,
-        price_feed: Address::generate(&env),
-        debt_ceiling: 1_000_000_000,
-        is_active: true,
-    });
+    client.set_asset_params(
+        &asset,
+        &AssetParams {
+            ltv: 7000,
+            liquidation_threshold: 8000,
+            price_feed: Address::generate(&env),
+            debt_ceiling: 1_000_000_000,
+            is_active: true,
+        },
+    );
+    client.set_asset_params(
+        &collateral_asset,
+        &AssetParams {
+            ltv: 7000,
+            liquidation_threshold: 8000,
+            price_feed: Address::generate(&env),
+            debt_ceiling: 1_000_000_000,
+            is_active: true,
+        },
+    );
     client.deposit_collateral_asset(&user, &collateral_asset, &100_000);
     client.borrow_asset(&user, &asset, &20_000);
 
@@ -1113,13 +1128,16 @@ fn test_cross_asset_withdraw_pause_matrix() {
 
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_admin(&admin);
-    client.set_asset_params(&asset, &AssetParams {
-        ltv: 7000,
-        liquidation_threshold: 8000,
-        price_feed: Address::generate(&env),
-        debt_ceiling: 1_000_000_000,
-        is_active: true,
-    });
+    client.set_asset_params(
+        &asset,
+        &AssetParams {
+            ltv: 7000,
+            liquidation_threshold: 8000,
+            price_feed: Address::generate(&env),
+            debt_ceiling: 1_000_000_000,
+            is_active: true,
+        },
+    );
     client.deposit_collateral_asset(&user, &asset, &50_000);
 
     // Test Withdraw pause blocks cross-asset withdraw
@@ -1188,7 +1206,7 @@ fn test_oracle_pause_independence() {
 
     // Pause all core operations but not oracle
     client.set_pause(&admin, &PauseType::All, &true);
-    
+
     // Oracle should still work if not paused
     client.update_price_feed(&oracle, &asset, &100_000);
 

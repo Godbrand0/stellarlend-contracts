@@ -26,9 +26,9 @@ use crate::analytics;
 use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use crate::reserve::{
     accrue_reserve, get_protocol_revenue, get_reserve_balance, get_reserve_factor,
-    get_total_reserves, get_treasury_address, initialize_reserve_config,
-    set_reserve_factor, set_treasury_address, withdraw_reserve_funds, ReserveError,
-    BASIS_POINTS_SCALE, DEFAULT_RESERVE_FACTOR_BPS, MAX_RESERVE_FACTOR_BPS,
+    get_total_reserves, get_treasury_address, initialize_reserve_config, set_reserve_factor,
+    set_treasury_address, withdraw_reserve_funds, ReserveError, BASIS_POINTS_SCALE,
+    DEFAULT_RESERVE_FACTOR_BPS, MAX_RESERVE_FACTOR_BPS,
 };
 use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
 
@@ -1940,8 +1940,13 @@ fn test_reserve_accrual_updates_protocol_analytics_revenue_and_tvl() {
         );
     });
 
-    test_initialize_reserve_config(&env, &contract_id, asset.clone(), DEFAULT_RESERVE_FACTOR_BPS)
-        .unwrap();
+    test_initialize_reserve_config(
+        &env,
+        &contract_id,
+        asset.clone(),
+        DEFAULT_RESERVE_FACTOR_BPS,
+    )
+    .unwrap();
 
     let (reserve_amount, lender_amount) =
         test_accrue_reserve(&env, &contract_id, asset.clone(), 10_000).unwrap();
@@ -1950,8 +1955,9 @@ fn test_reserve_accrual_updates_protocol_analytics_revenue_and_tvl() {
 
     let total_reserves = test_get_total_reserves(&env, &contract_id);
     let protocol_revenue = test_get_protocol_revenue(&env, &contract_id);
-    let protocol_metrics =
-        env.as_contract(&contract_id, || analytics::get_protocol_stats(&env).unwrap());
+    let protocol_metrics = env.as_contract(&contract_id, || {
+        analytics::get_protocol_stats(&env).unwrap()
+    });
 
     assert_eq!(total_reserves, 1_000);
     assert_eq!(protocol_revenue, 1_000);
@@ -1975,18 +1981,27 @@ fn test_reserve_withdraw_keeps_revenue_but_reduces_tvl_and_reserves() {
         );
     });
 
-    test_initialize_reserve_config(&env, &contract_id, asset.clone(), DEFAULT_RESERVE_FACTOR_BPS)
-        .unwrap();
+    test_initialize_reserve_config(
+        &env,
+        &contract_id,
+        asset.clone(),
+        DEFAULT_RESERVE_FACTOR_BPS,
+    )
+    .unwrap();
     test_set_treasury_address(&env, &contract_id, admin.clone(), treasury).unwrap();
     test_accrue_reserve(&env, &contract_id, asset.clone(), 10_000).unwrap();
 
-    let metrics_before = env.as_contract(&contract_id, || analytics::get_protocol_stats(&env).unwrap());
+    let metrics_before = env.as_contract(&contract_id, || {
+        analytics::get_protocol_stats(&env).unwrap()
+    });
     assert_eq!(metrics_before.total_value_locked, 1_000);
     assert_eq!(metrics_before.protocol_revenue, 1_000);
 
     test_withdraw_reserve_funds(&env, &contract_id, admin, asset, 400).unwrap();
 
-    let metrics_after = env.as_contract(&contract_id, || analytics::get_protocol_stats(&env).unwrap());
+    let metrics_after = env.as_contract(&contract_id, || {
+        analytics::get_protocol_stats(&env).unwrap()
+    });
     assert_eq!(metrics_after.total_value_locked, 600);
     assert_eq!(metrics_after.protocol_revenue, 1_000);
     assert_eq!(test_get_total_reserves(&env, &contract_id), 600);

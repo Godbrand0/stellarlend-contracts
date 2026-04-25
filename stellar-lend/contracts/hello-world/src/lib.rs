@@ -7,7 +7,6 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, Map, Symbol, Vec,
 };
 
-
 pub mod admin;
 pub mod amm;
 pub mod analytics;
@@ -64,8 +63,8 @@ use crate::oracle::OracleConfig;
 use crate::repay::repay_debt;
 use crate::risk_management::{
     check_emergency_pause, get_risk_config, initialize_risk_management, is_emergency_paused,
-    is_operation_paused, is_read_only_mode, set_pause_switch, set_pause_switches, set_read_only_mode,
-    RiskConfig, RiskManagementError,
+    is_operation_paused, is_read_only_mode, set_pause_switch, set_pause_switches,
+    set_read_only_mode, RiskConfig, RiskManagementError,
 };
 use crate::risk_params::{
     can_be_liquidated, get_liquidation_incentive_amount, get_max_liquidatable_amount,
@@ -604,10 +603,7 @@ impl HelloContract {
     ///
     /// # Returns
     /// `(reserve_balance, reserve_factor_bps, treasury_address)`
-    pub fn get_reserve_stats(
-        env: Env,
-        asset: Option<Address>,
-    ) -> (i128, i128, Option<Address>) {
+    pub fn get_reserve_stats(env: Env, asset: Option<Address>) -> (i128, i128, Option<Address>) {
         let balance = crate::reserve::get_reserve_balance(&env, asset.clone());
         let factor = crate::reserve::get_reserve_factor(&env, asset.clone());
         let treasury = crate::reserve::get_treasury_address(&env);
@@ -726,7 +722,6 @@ impl HelloContract {
     pub fn get_total_reserves(env: Env) -> i128 {
         reserve::get_total_reserves(&env)
     }
-
 
     // ============================================================================
     // Oracle Methods

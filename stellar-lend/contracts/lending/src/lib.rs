@@ -87,9 +87,9 @@ mod flash_loan_test;
 #[cfg(test)]
 mod pause_test;
 #[cfg(test)]
-mod token_receiver_test;
-#[cfg(test)]
 mod read_only_test;
+#[cfg(test)]
+mod token_receiver_test;
 #[cfg(test)]
 mod views_test;
 
@@ -111,7 +111,8 @@ mod withdraw_test;
 #[cfg(test)]
 mod bad_debt_test;
 #[cfg(test)]
-mod liquidation_boundary_test;#[cfg(test)]
+mod liquidation_boundary_test;
+#[cfg(test)]
 mod multi_user_contention_test;
 #[cfg(test)]
 mod stress_test;
@@ -276,7 +277,9 @@ impl LendingContract {
         amount: i128,
     ) -> Result<(), BorrowError> {
         user.require_auth();
-        if is_read_only_logic(&env) || is_paused(&env, PauseType::Deposit) || blocks_high_risk_ops(&env)
+        if is_read_only_logic(&env)
+            || is_paused(&env, PauseType::Deposit)
+            || blocks_high_risk_ops(&env)
         {
             return Err(BorrowError::ProtocolPaused);
         }
@@ -640,7 +643,8 @@ impl LendingContract {
         amount: i128,
         params: Bytes,
     ) -> Result<(), FlashLoanError> {
-        if is_read_only_logic(&env) || is_paused(&env, PauseType::All) || blocks_high_risk_ops(&env) {
+        if is_read_only_logic(&env) || is_paused(&env, PauseType::All) || blocks_high_risk_ops(&env)
+        {
             return Err(FlashLoanError::ProtocolPaused);
         }
         flash_loan_impl(&env, receiver, asset, amount, params)
@@ -683,7 +687,11 @@ impl LendingContract {
     ///
     /// # Errors
     /// Returns [`WithdrawError::Unauthorized`] if the caller is not the admin.
-    pub fn set_withdraw_paused(env: Env, admin: Address, paused: bool) -> Result<(), WithdrawError> {
+    pub fn set_withdraw_paused(
+        env: Env,
+        admin: Address,
+        paused: bool,
+    ) -> Result<(), WithdrawError> {
         ensure_admin(&env, &admin).map_err(|_| WithdrawError::Unauthorized)?;
         set_pause_impl(&env, admin, PauseType::Withdraw, paused);
         Ok(())

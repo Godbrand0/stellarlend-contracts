@@ -359,7 +359,6 @@ fn test_coverage_extremes() {
     let _ = client.get_liquidation_incentive_amount(&1_000_000);
 }
 
-
 // ── Issue #472: borrow insufficient-collateral error matrix ───────────────
 
 /// User with zero collateral cannot borrow any amount.
@@ -491,14 +490,14 @@ fn test_deposit_collateral_exceeds_cap() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, _admin, user, _asset, collateral_asset) = setup_test(&env);
-    
+
     // Set cap to 50k
     client.initialize_deposit_settings(&50_000, &100);
-    
+
     // Deposit 50k - should succeed
     client.deposit_collateral(&user, &collateral_asset, &50_000);
     assert_eq!(client.get_user_collateral(&user).amount, 50_000);
-    
+
     // Try to deposit 1 more - should fail
     let result = client.try_deposit_collateral(&user, &collateral_asset, &1);
     assert_eq!(result, Err(Ok(BorrowError::ExceedsDepositCap)));
@@ -509,10 +508,10 @@ fn test_borrow_collateral_exceeds_cap() {
     let env = Env::default();
     env.mock_all_auths();
     let (client, _admin, user, asset, collateral_asset) = setup_test(&env);
-    
+
     // Set cap to 50k
     client.initialize_deposit_settings(&50_000, &100);
-    
+
     // Borrow with 50,001 collateral - should fail
     let result = client.try_borrow(&user, &asset, &10_000, &collateral_asset, &50_001);
     assert_eq!(result, Err(Ok(BorrowError::ExceedsDepositCap)));

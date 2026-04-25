@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 
-use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 use crate::prelude::*;
+use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 
 use crate::types::{AssetStatus, ProposalType, VoteType};
 
@@ -501,14 +501,20 @@ pub fn emit_admin_action(e: &Env, event: AdminActionEvent) {
 
 pub fn emit_interest_rate_config_updated(e: &Env, event: InterestRateConfigUpdatedEvent) {
     e.events().publish(
-        (Symbol::new(e, "interest_rate_config_updated"), event.actor.clone()),
+        (
+            Symbol::new(e, "interest_rate_config_updated"),
+            event.actor.clone(),
+        ),
         event,
     );
 }
 
 pub fn emit_emergency_rate_adjustment(e: &Env, event: EmergencyRateAdjustmentEvent) {
     e.events().publish(
-        (Symbol::new(e, "emergency_rate_adjustment"), event.actor.clone()),
+        (
+            Symbol::new(e, "emergency_rate_adjustment"),
+            event.actor.clone(),
+        ),
         event,
     );
 }

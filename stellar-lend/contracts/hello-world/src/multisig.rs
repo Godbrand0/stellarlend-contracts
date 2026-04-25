@@ -256,4 +256,3 @@ pub fn get_ms_proposal(env: &Env, proposal_id: u64) -> Option<Proposal> {
 pub fn get_ms_approvals(env: &Env, proposal_id: u64) -> Option<Vec<Address>> {
     get_proposal_approvals(env, proposal_id)
 }
-

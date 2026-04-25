@@ -20,8 +20,8 @@
 //!   reentrancy surface of its own.
 #![allow(unused)]
 
-use soroban_sdk::{Address, Env, Vec};
 use crate::prelude::*;
+use soroban_sdk::{Address, Env, Vec};
 
 use crate::errors::GovernanceError;
 use crate::governance::{
@@ -500,7 +500,8 @@ pub fn execute_recovery(env: &Env, executor: Address) -> Result<(), GovernanceEr
     }
     new_admins.push_back(recovery.new_admin.clone());
 
-    let mut config = crate::governance::get_multisig_config(env).ok_or(GovernanceError::InvalidMultisigConfig)?;
+    let mut config = crate::governance::get_multisig_config(env)
+        .ok_or(GovernanceError::InvalidMultisigConfig)?;
 
     config.admins = new_admins;
     env.storage()

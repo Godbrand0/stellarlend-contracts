@@ -49,8 +49,8 @@
 //! - Checked arithmetic is used throughout — no unchecked ops.
 //! - `SECONDS_PER_YEAR = 365 × 86_400 = 31_536_000` (no leap seconds).
 
-use soroban_sdk::{contracterror, contracttype, Address, Env};
 use crate::prelude::*;
+use soroban_sdk::{contracterror, contracttype, Address, Env};
 
 use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 
@@ -298,7 +298,10 @@ pub fn calculate_utilization(env: &Env) -> Result<i128, InterestRateError> {
 /// # Security
 /// - All arithmetic uses checked operations.
 /// - Rate is always clamped to `[rate_floor_bps, rate_ceiling_bps]`.
-pub fn calculate_borrow_rate_internal(env: &Env, config: &InterestRateConfig) -> Result<i128, InterestRateError> {
+pub fn calculate_borrow_rate_internal(
+    env: &Env,
+    config: &InterestRateConfig,
+) -> Result<i128, InterestRateError> {
     let utilization = calculate_utilization(env)?;
 
     let mut rate = config.base_rate_bps;

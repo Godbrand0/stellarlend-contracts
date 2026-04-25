@@ -24,8 +24,8 @@
 //! **borrow asset** when `asset` is `Some`. See `COLLATERAL_FACTOR_MAX_BORROW.md` in this crate.
 
 #![allow(unused)]
-use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};
 use crate::prelude::*;
+use soroban_sdk::{contracterror, Address, Env, IntoVal, Map, Symbol, Val, Vec};
 
 use crate::deposit::{
     add_activity_log, emit_analytics_updated_event, emit_position_updated_event,
@@ -631,7 +631,9 @@ mod verification_hooks_tests {
         };
 
         assert!(fv_borrow_preconditions(50, &position, 1_000));
-        assert!(fv_borrow_postconditions(&snapshot, &position, 50, 156, 1_000));
+        assert!(fv_borrow_postconditions(
+            &snapshot, &position, 50, 156, 1_000
+        ));
     }
 
     #[test]
@@ -649,6 +651,8 @@ mod verification_hooks_tests {
         };
 
         assert!(!fv_borrow_preconditions(0, &position, 1_000));
-        assert!(!fv_borrow_postconditions(&snapshot, &position, 50, 155, 999));
+        assert!(!fv_borrow_postconditions(
+            &snapshot, &position, 50, 155, 999
+        ));
     }
 }

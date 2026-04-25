@@ -36,7 +36,10 @@ fn test_read_only_mode_initial_state() {
     let e = env();
     let (_id, _admin, client) = setup(&e);
 
-    assert!(!client.is_read_only_mode(), "Read-only mode must be OFF at start");
+    assert!(
+        !client.is_read_only_mode(),
+        "Read-only mode must be OFF at start"
+    );
 }
 
 #[test]
@@ -49,7 +52,7 @@ fn test_set_read_only_mode_admin_only() {
     // Note: mock_all_auths is on, so we check if it fails without auth or if we can simulate failure
     // Actually mock_all_auths makes it pass if we don't explicitly check auth inside.
     // But our implementation uses require_admin which calls require_auth.
-    
+
     client.set_read_only_mode(&admin, &true);
     assert!(client.is_read_only_mode());
 
@@ -67,14 +70,20 @@ fn test_read_only_blocks_mutating_ops() {
 
     // 1. Deposit
     let res_deposit = client.try_deposit_collateral(&user, &None, &1000);
-    assert!(res_deposit.is_err(), "Deposit should fail in read-only mode");
+    assert!(
+        res_deposit.is_err(),
+        "Deposit should fail in read-only mode"
+    );
 
     // 2. Withdraw (need to have some balance first, so we unpause, deposit, then pause)
     client.set_read_only_mode(&admin, &false);
     client.deposit_collateral(&user, &None, &5000);
     client.set_read_only_mode(&admin, &true);
     let res_withdraw = client.try_withdraw_collateral(&user, &None, &1000);
-    assert!(res_withdraw.is_err(), "Withdraw should fail in read-only mode");
+    assert!(
+        res_withdraw.is_err(),
+        "Withdraw should fail in read-only mode"
+    );
 
     // 3. Borrow
     let res_borrow = client.try_borrow_asset(&user, &None, &500);
@@ -87,7 +96,10 @@ fn test_read_only_blocks_mutating_ops() {
     // 5. Liquidate
     let liquidator = Address::generate(&e);
     let res_liquidate = client.try_liquidate(&liquidator, &user, &None, &None, &100);
-    assert!(res_liquidate.is_err(), "Liquidate should fail in read-only mode");
+    assert!(
+        res_liquidate.is_err(),
+        "Liquidate should fail in read-only mode"
+    );
 }
 
 #[test]
@@ -99,11 +111,18 @@ fn test_read_only_blocks_admin_ops() {
 
     // 1. set_risk_params
     let res_risk = client.try_set_risk_params(&admin, &Some(12000), &None, &None, &None);
-    assert!(res_risk.is_err(), "set_risk_params should fail in read-only mode");
+    assert!(
+        res_risk.is_err(),
+        "set_risk_params should fail in read-only mode"
+    );
 
     // 2. update_interest_rate_config
-    let res_ir = client.try_update_interest_rate_config(&admin, &None, &None, &None, &None, &None, &None, &None);
-    assert!(res_ir.is_err(), "update_interest_rate_config should fail in read-only mode");
+    let res_ir = client
+        .try_update_interest_rate_config(&admin, &None, &None, &None, &None, &None, &None, &None);
+    assert!(
+        res_ir.is_err(),
+        "update_interest_rate_config should fail in read-only mode"
+    );
 }
 
 #[test]
@@ -120,7 +139,7 @@ fn test_read_only_allows_view_ops() {
     assert!(!client.is_emergency_paused());
     let config = client.get_risk_config();
     assert!(config.is_some());
-    
+
     // Check interest rate view
     let rate = client.get_borrow_rate();
     assert!(rate >= 0);

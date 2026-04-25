@@ -41,11 +41,11 @@ fn xlm_collateral_config(env: &Env) -> AssetConfig {
         collateral_factor: 8000,
         liquidation_threshold: 8000,
         reserve_factor: 1000,
-        max_supply: 0,      // unlimited
-        max_borrow: 0,      // unlimited (XLM is collateral only in these tests)
+        max_supply: 0, // unlimited
+        max_borrow: 0, // unlimited (XLM is collateral only in these tests)
         can_collateralize: true,
         can_borrow: false,
-        price: 1_0000000,   // $1.00
+        price: 1_0000000, // $1.00
         price_updated_at: env.ledger().timestamp(),
     }
 }
@@ -112,7 +112,10 @@ fn test_borrow_cap_update_via_admin() {
     let user = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 500));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 500),
+    );
 
     client.cross_asset_deposit(&user, &None, &5000);
 
@@ -140,9 +143,9 @@ fn test_borrow_cap_update_via_admin() {
     // User 2 deposits collateral
     client.cross_asset_deposit(&user2, &None, &5000);
 
-// ============================================================================
-// 2. Per-asset isolation: "ceiling hit while others have room" (issue #519)
-// ============================================================================
+    // ============================================================================
+    // 2. Per-asset isolation: "ceiling hit while others have room" (issue #519)
+    // ============================================================================
 }
 
 /// Hitting asset A's ceiling must not affect asset B's borrowing.
@@ -158,9 +161,15 @@ fn test_borrow_cap_asset_a_full_asset_b_still_available() {
     // XLM collateral
     client.initialize_asset(&None, &xlm_collateral_config(&env));
     // USDC: cap 1 000
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 1000));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 1000),
+    );
     // DAI: cap 2 000 (has room)
-    client.initialize_asset(&Some(dai.clone()), &token_borrow_config(&env, &dai, 1_0000000, 2000));
+    client.initialize_asset(
+        &Some(dai.clone()),
+        &token_borrow_config(&env, &dai, 1_0000000, 2000),
+    );
 
     // Large collateral so the health factor is not the bottleneck
     client.cross_asset_deposit(&user, &None, &100_000);
@@ -195,7 +204,10 @@ fn test_borrow_cap_shared_across_users() {
     let user3 = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 1000));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 1000),
+    );
 
     // Three users each deposit collateral
     for u in [&user1, &user2, &user3] {
@@ -227,7 +239,10 @@ fn test_borrow_cap_repay_frees_capacity() {
     let user = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 1000));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 1000),
+    );
 
     client.cross_asset_deposit(&user, &None, &5000);
 
@@ -235,11 +250,9 @@ fn test_borrow_cap_repay_frees_capacity() {
     client.cross_asset_borrow(&user, &Some(usdc.clone()), &1000);
 
     // Cannot borrow more
-    assert!(
-        client
-            .try_cross_asset_borrow(&user, &Some(usdc.clone()), &1)
-            .is_err()
-    );
+    assert!(client
+        .try_cross_asset_borrow(&user, &Some(usdc.clone()), &1)
+        .is_err());
 
     // Repay 300 → total drops to 700
     client.cross_asset_repay(&user, &Some(usdc.clone()), &300);
@@ -267,7 +280,10 @@ fn test_borrow_cap_zero_means_unlimited() {
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
     // max_borrow = 0 → no cap
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 0));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 0),
+    );
 
     client.cross_asset_deposit(&user, &None, &100_000);
 
@@ -287,7 +303,10 @@ fn test_borrow_cap_exact_boundary() {
     let user2 = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 1000));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 1000),
+    );
 
     client.cross_asset_deposit(&user, &None, &5000);
     client.cross_asset_deposit(&user2, &None, &5000);
@@ -316,7 +335,10 @@ fn test_total_borrow_tracking() {
     let user2 = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 5000));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 5000),
+    );
 
     client.cross_asset_deposit(&user1, &None, &5000);
     client.cross_asset_deposit(&user2, &None, &5000);
@@ -344,8 +366,14 @@ fn test_total_borrow_isolation_between_assets() {
     let user = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 5000));
-    client.initialize_asset(&Some(dai.clone()), &token_borrow_config(&env, &dai, 1_0000000, 5000));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 5000),
+    );
+    client.initialize_asset(
+        &Some(dai.clone()),
+        &token_borrow_config(&env, &dai, 1_0000000, 5000),
+    );
 
     client.cross_asset_deposit(&user, &None, &20_000);
 
@@ -385,7 +413,10 @@ fn test_borrow_cap_lowered_below_current_debt_blocks_new_borrows() {
     let user2 = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
-    client.initialize_asset(&Some(usdc.clone()), &token_borrow_config(&env, &usdc, 1_0000000, 2000));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 2000),
+    );
 
     client.cross_asset_deposit(&user, &None, &5000);
     client.cross_asset_deposit(&user2, &None, &5000);
