@@ -391,7 +391,7 @@ fn test_withdraw_emits_event() {
 
     client.withdraw(&user, &asset, &20_000);
 
-    let events = env.events().all();
+    let events = env.events().all().to_vec();
     let last_event = events.last().unwrap();
 
     let topic: Symbol = Symbol::from_val(&env, &last_event.1.get(0).unwrap());

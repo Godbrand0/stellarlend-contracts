@@ -45,22 +45,22 @@ pub fn flash_loan(
         return Err(FlashLoanError::InvalidAmount);
     }
 
-    let guard_key = FlashLoanDataKey::ReentrancyGuard;
-    if env.storage().instance().get(&guard_key).unwrap_or(false) {
-        return Err(FlashLoanError::Reentrancy);
-    }
-    env.storage().instance().set(&guard_key, &true);
+    // 1. Acquire Reentrancy Guard (Temporary Storage Lock)
+    let _guard = crate::reentrancy::ReentrancyGuard::new(env)
+        .map_err(|_| FlashLoanError::Reentrancy)?;
 
     let fee = calculate_fee(env, amount);
 
-    // 0. Record initial balance
+    // 2. Record initial protocol state
     let token_client = token::Client::new(env, &asset);
     let initial_balance = token_client.balance(&env.current_contract_address());
+    let initial_total_debt = crate::borrow::get_total_debt(env);
+    let initial_total_deposits = crate::deposit::get_total_deposits(env);
 
-    // 1. Transfer funds to the receiver
+    // 3. Transfer funds to the receiver
     token_client.transfer(&env.current_contract_address(), &receiver, &amount);
 
-    // 2. Execute callback on receiver
+    // 4. Execute callback on receiver
     let callback_result: bool = env.invoke_contract(
         &receiver,
         &Symbol::new(env, "on_flash_loan"),
@@ -75,18 +75,22 @@ pub fn flash_loan(
     );
 
     if !callback_result {
-        env.storage().instance().set(&guard_key, &false);
         return Err(FlashLoanError::CallbackFailed);
     }
 
-    // 3. Verify repayment
+    // 5. Verify repayment and state invariants
     let final_balance = token_client.balance(&env.current_contract_address());
+    let final_total_debt = crate::borrow::get_total_debt(env);
+    let final_total_deposits = crate::deposit::get_total_deposits(env);
 
-    // Clear the reentrancy guard
-    env.storage().instance().set(&guard_key, &false);
-
+    // Repayment must cover principal + fee
     if final_balance < initial_balance + fee {
         return Err(FlashLoanError::InsufficientRepayment);
+    }
+
+    // Protocol state must not have been mutated during the callback (Reentrancy Protection)
+    if final_total_debt != initial_total_debt || final_total_deposits != initial_total_deposits {
+        return Err(FlashLoanError::Reentrancy);
     }
 
     Ok(())

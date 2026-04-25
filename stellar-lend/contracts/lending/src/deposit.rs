@@ -12,6 +12,7 @@ pub enum DepositError {
     AssetNotSupported = 4,
     ExceedsDepositCap = 5,
     Unauthorized = 6,
+    Reentrancy = 7,
 }
 
 /// Storage keys for deposit-related data
@@ -137,7 +138,7 @@ fn save_deposit_position(env: &Env, user: &Address, position: &DepositCollateral
         .set(&DepositDataKey::UserCollateral(user.clone()), position);
 }
 
-fn get_total_deposits(env: &Env) -> i128 {
+pub(crate) fn get_total_deposits(env: &Env) -> i128 {
     env.storage()
         .persistent()
         .get(&DepositDataKey::TotalAmount)
