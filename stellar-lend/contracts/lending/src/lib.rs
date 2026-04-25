@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod math_safety_test;
 #![no_std]
 #![allow(deprecated)]
 #![allow(clippy::absurd_extreme_comparisons)]
@@ -334,8 +336,42 @@ impl LendingContract {
     }
 
     /// Get user's debt position
-    pub fn get_user_debt(env: Env, user: Address) -> DebtPosition {
-        get_user_debt_impl(&env, &user)
+   pub fn get_user_debt(env: &Env, user: &Address) -> DebtPosition {
+    let mut position = get_debt_position(env, user);
+    let accrued = calculate_interest(env, &position);
+    position.interest_accrued = position.interest_accrued.saturating_add(accrued);
+    position
+}
+pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
+    if position.borrowed_amount == 0 {
+        return 0;
+    }
+
+    let time_elapsed = env
+        .ledger()
+        .timestamp()
+        .saturating_sub(position.last_update);
+
+    let borrowed_256 = I256::from_i128(env, position.borrowed_amount);
+    let rate_256 = I256::from_i128(env, INTEREST_RATE_PER_YEAR);
+    let time_256 = I256::from_i128(env, time_elapsed as i128);
+
+    let denominator =
+        I256::from_i128(env, 10000).mul(&I256::from_i128(env, SECONDS_PER_YEAR as i128));
+
+    let numerator = borrowed_256.mul(&rate_256).mul(&time_256);
+
+    let interest_256 = if numerator > I256::from_i128(env, 0) {
+        numerator
+            .add(&denominator.sub(&I256::from_i128(env, 1)))
+            .div(&denominator)
+    } else {
+        numerator.div(&denominator)
+    };
+
+    interest_256.to_i128().unwrap_or(i128::MAX)
+}
+
     }
 
     /// Get user's collateral position (borrow module)
