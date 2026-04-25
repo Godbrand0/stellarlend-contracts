@@ -85,6 +85,10 @@ mod flash_adversarial_test;
 #[cfg(test)]
 mod flash_loan_test;
 #[cfg(test)]
+mod oracle_test;
+#[cfg(test)]
+mod oracle_staleness_test;
+#[cfg(test)]
 mod pause_test;
 #[cfg(test)]
 mod token_receiver_test;
@@ -109,8 +113,7 @@ mod withdraw_test;
 #[cfg(test)]
 mod bad_debt_test;
 #[cfg(test)]
-mod liquidation_boundary_test;#[cfg(test)]
-mod multi_user_contention_test;
+mod liquidation_boundary_test;
 #[cfg(test)]
 mod multi_user_contention_test;
 #[cfg(test)]
@@ -455,6 +458,45 @@ impl LendingContract {
         oracle::set_oracle_paused(&env, caller, paused)
     }
 
+    /// Set a per-asset maximum staleness override (admin only).
+    ///
+    /// Overrides the global `OracleConfig.max_staleness_seconds` for `asset`.
+    /// Useful when different assets have different oracle update cadences.
+    ///
+    /// # Errors
+    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
+    /// - `OracleError::InvalidPrice` — `max_staleness_seconds` is zero.
+    pub fn set_asset_max_staleness(
+        env: Env,
+        caller: Address,
+        asset: Address,
+        max_staleness_seconds: u64,
+    ) -> Result<(), OracleError> {
+        oracle::set_asset_max_staleness(&env, caller, asset, max_staleness_seconds)
+    }
+
+    /// Remove the per-asset staleness override for `asset` (admin only).
+    ///
+    /// After this call the global `OracleConfig.max_staleness_seconds` applies.
+    ///
+    /// # Errors
+    /// - `OracleError::Unauthorized` — caller is not the protocol admin.
+    pub fn clear_asset_max_staleness(
+        env: Env,
+        caller: Address,
+        asset: Address,
+    ) -> Result<(), OracleError> {
+        oracle::clear_asset_max_staleness(&env, caller, asset)
+    }
+
+    /// Return the effective max-staleness for `asset` in seconds.
+    ///
+    /// Returns the per-asset override if set, otherwise the global config value
+    /// (default 3 600 s).
+    pub fn get_asset_max_staleness(env: Env, asset: Address) -> u64 {
+        oracle::get_asset_max_staleness(&env, &asset)
+    }
+
     /// Set liquidation threshold in basis points, e.g. 8000 = 80% (admin only).
     pub fn set_liquidation_threshold_bps(
         env: Env,
@@ -745,7 +787,8 @@ impl LendingContract {
 
     /// Initialize admin for cross-asset operations
     pub fn initialize_admin(env: Env, admin: Address) -> Result<(), CrossAssetError> {
-        cross_init_admin(&env, admin)
+        cross_init_admin(&env, admin);
+        Ok(())
     }
 
     /// Set parameters for a specific asset (admin only)

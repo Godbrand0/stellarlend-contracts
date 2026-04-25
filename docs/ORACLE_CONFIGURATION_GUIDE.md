@@ -49,7 +49,7 @@ This document outlines the procedures for managing oracle configurations in the 
 pub struct OracleConfig {
     /// Maximum price deviation in basis points (e.g., 500 = 5%)
     pub max_deviation_bps: i128,
-    /// Maximum staleness in seconds
+    /// Maximum staleness in seconds (global default for all assets)
     pub max_staleness_seconds: u64,
     /// Cache TTL in seconds
     pub cache_ttl_seconds: u64,
@@ -59,6 +59,47 @@ pub struct OracleConfig {
     pub max_price: i128,
 }
 ```
+
+### Per-Asset Staleness Configuration (Issue #645)
+
+In addition to the global `max_staleness_seconds`, each asset can have its own
+staleness limit. This is useful when different assets have different oracle update
+cadences — for example, a stablecoin oracle that updates every 60 seconds versus
+a long-tail asset oracle that updates every 30 minutes.
+
+**Resolution order** (most specific wins):
+1. Per-asset override (`set_asset_max_staleness`) — if set for this asset.
+2. Global config (`configure_oracle`) — if no per-asset override.
+3. Hard-coded default (3 600 s) — if neither has been stored.
+
+**New contract functions:**
+
+| Function | Description |
+|----------|-------------|
+| `set_asset_max_staleness(caller, asset, seconds)` | Set per-asset staleness limit. Admin only. `seconds` must be > 0. |
+| `clear_asset_max_staleness(caller, asset)` | Remove per-asset override; reverts to global config. Admin only. |
+| `get_asset_max_staleness(asset)` | Read the effective staleness limit for `asset` (read-only). |
+
+**Example — tighter limit for a stablecoin:**
+```bash
+# Stablecoin oracle updates every 60s; reject prices older than 90s
+contract.set_asset_max_staleness(admin, usdc_address, 90)
+
+# Verify
+effective = contract.get_asset_max_staleness(usdc_address)
+assert(effective == 90)
+```
+
+**Example — remove per-asset override:**
+```bash
+contract.clear_asset_max_staleness(admin, usdc_address)
+# Now falls back to global max_staleness_seconds
+```
+
+**Storage layout note:** The per-asset override is stored under a new
+`OracleKey::AssetStaleness(Address)` variant. This is additive — no existing
+storage keys are modified and no migration is required when upgrading from a
+version that did not have this feature.
 
 ### Provider Configuration
 
