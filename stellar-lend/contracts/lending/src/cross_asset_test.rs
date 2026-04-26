@@ -10,7 +10,7 @@
 //! - Edge cases (zero amounts, overflow, re-initialization)
 //! - Read-only queries
 
-use crate::cross_asset::{AssetConfig, CrossAssetError};
+use crate::cross_asset::{AssetParams, CrossAssetError};
 use crate::{HelloContract, HelloContractClient};
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
 
@@ -19,8 +19,8 @@ use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env}
 // ============================================================================
 
 /// Create a default valid asset config for testing.
-fn default_config(env: &Env) -> AssetConfig {
-    AssetConfig {
+fn default_config(env: &Env) -> AssetParams {
+    AssetParams {
         asset: None,
         collateral_factor: 7500,       // 75% LTV
         liquidation_threshold: 8000,   // 80%
@@ -36,9 +36,9 @@ fn default_config(env: &Env) -> AssetConfig {
 }
 
 /// Create a token-backed asset config for testing.
-fn token_config(env: &Env, addr: &Address) -> AssetConfig {
+fn token_config(env: &Env, addr: &Address) -> AssetParams {
     let price = 20_000_000;
-    AssetConfig {
+    AssetParams {
         asset: Some(addr.clone()),
         collateral_factor: 6000,     // 60% LTV
         liquidation_threshold: 7000, // 70%

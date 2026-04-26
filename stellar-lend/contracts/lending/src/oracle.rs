@@ -91,7 +91,7 @@ pub enum OracleKey {
     /// Latest price submitted by the fallback oracle for an asset.
     FallbackFeed(Address),
     /// Pause flag for oracle updates.
-    Paused,
+    OraclePaused,
     /// Per-asset maximum staleness override (seconds).
     /// When present, takes precedence over the global `Config.max_staleness_seconds`.
     AssetStaleness(Address),
@@ -291,7 +291,7 @@ pub fn update_price_feed(
     if env
         .storage()
         .persistent()
-        .get::<OracleKey, bool>(&OracleKey::Paused)
+        .get::<OracleKey, bool>(&OracleKey::OraclePaused)
         .unwrap_or(false)
     {
         return Err(OracleError::OraclePaused);
@@ -480,6 +480,6 @@ pub fn get_asset_max_staleness(env: &Env, asset: &Address) -> u64 {
 pub fn set_oracle_paused(env: &Env, caller: Address, paused: bool) -> Result<(), OracleError> {
     require_admin_caller(env, &caller)?;
     caller.require_auth();
-    env.storage().persistent().set(&OracleKey::Paused, &paused);
+    env.storage().persistent().set(&OracleKey::OraclePaused, &paused);
     Ok(())
 }

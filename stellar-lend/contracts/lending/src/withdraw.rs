@@ -6,7 +6,7 @@
 //! ## Pause & emergency alignment
 //!
 //! Withdraw respects:
-//! - Legacy `WithdrawDataKey::Paused` (storage compatibility),
+//! - Legacy `WithdrawDataKey::WithdrawPaused` (storage compatibility),
 //! - Granular [`crate::pause::PauseType::Withdraw`] and global [`crate::pause::PauseType::All`]
 //!   via [`crate::pause::is_paused`],
 //! - Emergency lifecycle: **shutdown** blocks unwind; **recovery** allows `withdraw` and `repay`
@@ -45,7 +45,7 @@ pub enum WithdrawError {
 #[contracttype]
 #[derive(Clone)]
 pub enum WithdrawDataKey {
-    Paused,
+    WithdrawPaused,
     MinWithdrawAmount,
 }
 
@@ -80,7 +80,7 @@ fn ensure_withdraw_allowed(env: &Env) -> Result<(), WithdrawError> {
 fn legacy_withdraw_paused(env: &Env) -> bool {
     env.storage()
         .persistent()
-        .get(&WithdrawDataKey::Paused)
+        .get(&WithdrawDataKey::WithdrawPaused)
         .unwrap_or(false)
 }
 
@@ -202,7 +202,7 @@ pub fn initialize_withdraw_settings(
         .set(&WithdrawDataKey::MinWithdrawAmount, &min_withdraw_amount);
     env.storage()
         .persistent()
-        .set(&WithdrawDataKey::Paused, &false);
+        .set(&WithdrawDataKey::WithdrawPaused, &false);
     Ok(())
 }
 
@@ -216,7 +216,7 @@ pub fn initialize_withdraw_settings(
 pub fn set_withdraw_paused(env: &Env, paused: bool) -> Result<(), WithdrawError> {
     env.storage()
         .persistent()
-        .set(&WithdrawDataKey::Paused, &paused);
+        .set(&WithdrawDataKey::WithdrawPaused, &paused);
     Ok(())
 }
 
