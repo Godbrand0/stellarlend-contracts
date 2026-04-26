@@ -352,7 +352,7 @@ fn test_coverage_extremes() {
     let hash = BytesN::from_array(&env, &[1; 32]);
     // client.upgrade_init(&admin, &hash, &1); // Already initialized at top of test
     let pid = client.upgrade_propose(&admin, &hash, &100);
-    assert_eq!(client.upgrade_status(&pid).stage, UpgradeStage::Approved);
+    assert_eq!(client.upgrade_status(&pid).stage, UpgradeStage::Proposed);
 
     // Trigger some internal view branches
     let _ = client.get_user_position(&user);

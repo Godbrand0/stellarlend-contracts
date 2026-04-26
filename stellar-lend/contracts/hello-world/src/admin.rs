@@ -81,6 +81,7 @@ pub fn set_admin(env: &Env, new_admin: Address, caller: Option<Address>) -> Resu
             if *c != current_admin {
                 return Err(AdminError::Unauthorized);
             }
+            c.require_auth();
         } else {
             return Err(AdminError::Unauthorized);
         }
@@ -149,41 +150,25 @@ pub fn accept_admin(env: &Env, claimant: &Address) -> Result<(), AdminError> {
     Ok(())
 }
 
-/// Require that caller is super admin
+/// Require that the claimant is the current super admin.
 ///
-/// # Authorization
-///
-/// Uses address comparison against stored admin address.
+/// Uses both explicit address check and Soroban `require_auth()`.
 /// This ensures security in production and correctness in mock tests.
 pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AdminError> {
     let admin = get_admin(env).ok_or(AdminError::Unauthorized)?;
     if admin != *caller {
         return Err(AdminError::Unauthorized);
     }
-    admin.require_auth();
+    caller.require_auth();
     Ok(())
 }
 
-// ============================================================================
-// Role Registry & Management
-// ============================================================================
-
-/// Grant a specific role to an address (admin only)
+/// Grant a specific role to an address.
 ///
-/// # Authorization
-///
-/// Uses `require_admin()` which verifies the caller is the super admin.
-/// The caller must also authenticate via `require_auth()`.
-/// This ensures only the super admin can delegate roles.
-///
-/// # Arguments
-/// * `env` - The Soroban environment
-/// * `caller` - The caller address
-/// * `role` - The role to grant
-/// * `account` - The address to grant the role to
+/// Only the super admin is authorized to manage roles.
 pub fn grant_role(
     env: &Env,
-    caller: Address,
+    claimant: &Address,
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {
@@ -220,22 +205,12 @@ pub fn grant_role(
     Ok(())
 }
 
-/// Revoke a specific role from an address (admin only)
+/// Revoke a specific role from an address.
 ///
-/// # Authorization
-///
-/// Uses `require_admin()` which verifies the caller is the super admin.
-/// The caller must also authenticate via `require_auth()`.
-/// This ensures only the super admin can remove roles.
-///
-/// # Arguments
-/// * `env` - The Soroban environment
-/// * `caller` - The caller address
-/// * `role` - The role to revoke
-/// * `account` - The address to revoke the role from
+/// Only the super admin is authorized to manage roles.
 pub fn revoke_role(
     env: &Env,
-    caller: Address,
+    claimant: &Address,
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {

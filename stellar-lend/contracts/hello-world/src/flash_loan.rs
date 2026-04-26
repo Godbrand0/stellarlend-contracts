@@ -127,11 +127,26 @@ fn get_flash_loan_config(env: &Env) -> FlashLoanConfig {
         .unwrap_or_else(get_default_config)
 }
 
-/// Calculate flash loan fee
+/// Calculate flash loan fee.
+///
+/// ## Rounding Semantics
+/// `fee = amount * fee_bps / 10_000` — integer division truncates toward zero.
+/// Small `amount` values may produce a zero fee; the minimum non-zero fee
+/// occurs when `amount >= ceil(10_000 / fee_bps)`.
+///
+/// ## Overflow
+/// Uses `checked_mul` / `checked_div`; if `amount * fee_bps` exceeds `i128::MAX`
+/// the function returns `FlashLoanError::Overflow` rather than silently
+/// saturating — this is stricter than the lending contract's `saturating_*`
+/// behavior and should be preferred for large-amount safety.
+///
+/// ## Fee-Splitting (Security)
+/// Because rounding is per-call, splitting one large loan into N sub-threshold
+/// calls can reduce total fees.  Use `configure_flash_loan` to set `min_amount`
+/// ≥ `ceil(10_000 / fee_bps)` to prevent zero-fee loans.
 fn calculate_flash_loan_fee(env: &Env, amount: i128) -> Result<i128, FlashLoanError> {
     let config = get_flash_loan_config(env);
 
-    // Fee = amount * fee_bps / 10000
     amount
         .checked_mul(config.fee_bps)
         .ok_or(FlashLoanError::Overflow)?

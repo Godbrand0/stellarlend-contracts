@@ -5,13 +5,12 @@
 
 #![cfg(test)]
 
-use crate::errors::GovernanceError;
-use crate::governance::{
-    approve_recovery, execute_recovery, initialize, remove_guardian, set_guardian_threshold,
-    set_guardians, start_recovery,
-};
-use crate::storage::{GovernanceDataKey, GuardianConfig};
-use soroban_sdk::{Address, Env, Vec};
+use soroban_sdk::{Address, Env};
+use stellarlend_hello_world::errors::GovernanceError;
+use stellarlend_hello_world::governance::*;
+use stellarlend_hello_world::recovery::*;
+use stellarlend_hello_world::storage::GovernanceDataKey;
+use stellarlend_hello_world::types::GuardianConfig;
 
 #[test]
 fn test_guardian_threshold_change_during_recovery_fails() {

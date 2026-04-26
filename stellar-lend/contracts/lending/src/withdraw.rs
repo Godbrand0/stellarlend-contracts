@@ -24,22 +24,11 @@
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env};
 
 use crate::borrow::{validate_collateral_ratio, BorrowDataKey, BorrowError, DebtPosition};
-use crate::constants::BPS_SCALE;
 use crate::deposit::{DepositCollateral, DepositDataKey};
 use crate::pause::{self, PauseType};
 
 /// Errors that can occur during withdraw operations
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum WithdrawError {
-    InvalidAmount = 1,
-    WithdrawPaused = 2,
-    Overflow = 3,
-    InsufficientCollateral = 4,
-    InsufficientCollateralRatio = 5,
-    Unauthorized = 6,
-}
+pub use crate::errors::WithdrawError;
 
 /// Storage keys for withdraw-related data
 #[contracttype]

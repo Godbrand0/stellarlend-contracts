@@ -373,7 +373,11 @@ pub fn borrow_asset(
         interest_before: position.borrow_interest,
         collateral_before: current_collateral,
     };
-    // debug_assert!(fv_borrow_preconditions(amount, &position, current_collateral));
+    debug_assert!(fv_borrow_preconditions(
+        amount,
+        &position,
+        current_collateral
+    ));
 
     // Get asset parameters for collateral factor
     let collateral_factor = if let Some(asset_addr) = asset.as_ref() {

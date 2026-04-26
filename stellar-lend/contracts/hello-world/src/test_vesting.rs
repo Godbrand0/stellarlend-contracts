@@ -369,7 +369,7 @@ fn leap_year_handling() {
     let (mut env, _contract_id, client, beneficiary) = setup_vesting_test();
 
     // Set timestamp to February 28, 2024 (leap year)
-    env.ledger().with_mut(|li| li.timestamp = 1709078400); // Feb 28, 2024 00:00:00 UTC
+    env.ledger().set_timestamp(1709078400); // Feb 28, 2024 00:00:00 UTC
 
     let start_time = env.ledger().timestamp();
     client

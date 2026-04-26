@@ -45,7 +45,7 @@
 #![allow(unused)]
 use crate::prelude::*;
 use crate::prelude::*;
-use soroban_sdk::{contracterror, contracttype, Address, Env, Map, Symbol};
+use soroban_sdk::{contracterror, contracttype, Address, Env, Symbol};
 
 use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 
