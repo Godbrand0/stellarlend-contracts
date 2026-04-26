@@ -53,6 +53,9 @@ use pause::{
 };
 use token_receiver::receive as receive_impl;
 
+mod interest_rate;
+pub use interest_rate::{InterestRateConfig, InterestRateError};
+
 mod views;
 use views::{
     get_collateral_balance as view_collateral_balance,
@@ -121,6 +124,8 @@ mod upgrade_migration_safety_test;
 #[cfg(test)]
 mod storage_collision_test;
 mod withdraw_boundary_test;
+#[cfg(test)]
+mod rate_model_test;
 
 #[contract]
 pub struct LendingContract;
