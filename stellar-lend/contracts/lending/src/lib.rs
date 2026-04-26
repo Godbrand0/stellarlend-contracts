@@ -13,6 +13,7 @@ mod flash_loan;
 mod liquidate;
 mod oracle;
 mod pause;
+mod reentrancy;
 mod token_receiver;
 mod withdraw;
 
@@ -147,6 +148,9 @@ impl LendingContract {
         collateral_asset: Address,
         collateral_amount: i128,
     ) -> Result<(), BorrowError> {
+        // Reentrancy guard - prevents callback-based reentry during token transfers
+        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
+
         if blocks_high_risk_ops(&env) {
             return Err(BorrowError::ProtocolPaused);
         }
@@ -230,6 +234,9 @@ impl LendingContract {
 
     /// Repay borrowed assets
     pub fn repay(env: Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
+        // Reentrancy guard - prevents callback-based reentry during token transfers
+        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
+
         user.require_auth();
         if is_paused(&env, PauseType::Repay) || (!is_recovery(&env) && blocks_high_risk_ops(&env)) {
             return Err(BorrowError::ProtocolPaused);
@@ -244,6 +251,9 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), BorrowError> {
+        // Reentrancy guard - prevents callback-based reentry during token transfers
+        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
+
         user.require_auth();
         if is_paused(&env, PauseType::Deposit) || blocks_high_risk_ops(&env) {
             return Err(BorrowError::ProtocolPaused);
@@ -258,6 +268,9 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<i128, DepositError> {
+        // Reentrancy guard - prevents callback-based reentry during token transfers
+        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| DepositError::Reentrancy)?;
+
         if is_paused(&env, PauseType::Deposit) || blocks_high_risk_ops(&env) {
             return Err(DepositError::DepositPaused);
         }
@@ -273,6 +286,9 @@ impl LendingContract {
         collateral_asset: Address,
         amount: i128,
     ) -> Result<(), BorrowError> {
+        // Reentrancy guard - prevents callback-based reentry during token transfers
+        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
+
         liquidator.require_auth();
         if is_paused(&env, PauseType::Liquidation) || blocks_high_risk_ops(&env) {
             return Err(BorrowError::ProtocolPaused);
@@ -622,6 +638,9 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         asset: Address,
         amount: i128,
     ) -> Result<i128, WithdrawError> {
+        // Reentrancy guard - prevents callback-based reentry during token transfers
+        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| WithdrawError::Reentrancy)?;
+
         withdraw_logic(&env, user, asset, amount)
     }
 
@@ -657,6 +676,9 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         amount: i128,
         payload: Vec<Val>,
     ) -> Result<(), BorrowError> {
+        // Reentrancy guard - prevents callback-based reentry during token transfers
+        let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
+
         receive_impl(env, token_asset, from, amount, payload)
     }
 
