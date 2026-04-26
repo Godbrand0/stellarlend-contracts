@@ -3,6 +3,7 @@ use crate::deposit::DepositError;
 use crate::flash_loan::FlashLoanError;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{testutils::Address as _, Address, Env};
+use pause::PauseType;
 
 /// Emergency lifecycle conformance test suite
 ///
