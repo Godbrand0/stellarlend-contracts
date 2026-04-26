@@ -95,9 +95,9 @@ fn test_max_liquidatable_zero_when_oracle_not_set() {
     // Without an oracle the health factor cannot be computed → must not liquidate.
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, user, asset, collateral_asset) = setup(&env);
+    let (client, admin, user, asset, collateral_asset) = setup(&env);
     // Collateral 15_000, borrow 10_000 (150% ratio). Liquidation threshold 40% → HF < 1 when oracle exists.
-    client.set_liquidation_threshold_bps(&_admin, &4000);
+    client.set_liquidation_threshold_bps(&admin, &4000);
     client.borrow(&user, &asset, &10_000, &collateral_asset, &15_000);
     assert_eq!(client.get_max_liquidatable_amount(&user), 0);
 }
@@ -194,8 +194,6 @@ fn test_max_liquidatable_just_below_boundary_is_liquidatable() {
     env.mock_all_auths();
     let (client, admin, user, asset, collateral_asset) = setup_with_oracle(&env);
     client.set_liquidation_threshold_bps(&admin, &6667);
-    // Borrow 10_000 with 14_999 collateral — still passes 150% borrow rule? 14_999 < 15_000 → no.
-    // Use higher collateral to pass borrow rule but use a threshold that makes it sub-healthy.
     // threshold 4000: collateral 15_000, debt 10_000 → HF = 15_000*0.4*10000/10000 = 6000 < 10000.
     client.set_liquidation_threshold_bps(&admin, &4000);
     client.borrow(&user, &asset, &10_000, &collateral_asset, &15_000);
@@ -437,64 +435,4 @@ fn test_max_liquidatable_still_computable_when_liquidation_paused() {
     client.set_pause(&admin, &PauseType::Liquidation, &true);
     // View must still work
     assert_eq!(client.get_max_liquidatable_amount(&user), 5_000);
-}
-
-
-use soroban_sdk::{testutils::Address as _, Address, Env, String, Symbol};
-// Ensure you have imported your contract client and relevant math/constants
-use crate::{LendingClient, constants::HEALTH_FACTOR_SCALE}; 
-use crate::test_helpers::{setup_env_with_mock_oracle, mock_asset_and_price}; // Replace with actual test setup helpers in your repo
-
-#[test]
-#[should_panic(expected = "HealthFactorNotBelowThreshold")] // Assuming this is your error
-fn test_liquidation_fails_when_health_factor_exactly_threshold() {
-    let env = Env::default();
-    env.mock_all_auths();
-    
-    // 1. Setup Environment
-    let admin = Address::generate(&env);
-    let contract_id = env.register_contract(None, crate::LendingContract);
-    let client = LendingClient::new(&env, &contract_id);
-    
-    // 2. Mock asset states to hit exactly 10_000 scaled Health Factor.
-    // Adjust collateral / borrow amount / oracle price precisely so that 
-    // (Collateral Value * Liquidation Threshold) / Borrow Value == 10000 exactly
-    let collateral_amount = 1000;
-    let borrow_amount = 800; // Assuming 80% Liquidation Threshold for this asset
-    
-    // pseudo-code to setup the position:
-    // client.deposit(&user, &asset, &collateral_amount);
-    // client.borrow(&user, &asset, &borrow_amount);
-    
-    // Assert Health factor is exactly 10_000
-    let health_factor = client.get_health_factor(&user);
-    assert_eq!(health_factor, 10_000); // 1.0 scaled
-    
-    // 3. Attempt Liquidation - This should fail
-    let liquidator = Address::generate(&env);
-    client.liquidate_position(&liquidator, &user, &asset, &asset, &100);
-}
-
-#[test]
-#[should_panic(expected = "HealthFactorNotBelowThreshold")]
-fn test_liquidation_fails_when_health_factor_just_above_threshold() {
-    let env = Env::default();
-    env.mock_all_auths();
-    
-    // Setup position such that HF is 10001 (1.0001 scaled)
-    // health_factor = 10001; 
-    
-    // Attempt Liquidation - Should fail
-}
-
-#[test]
-fn test_liquidation_succeeds_when_health_factor_just_below_threshold() {
-    let env = Env::default();
-    env.mock_all_auths();
-    
-    // Setup position such that HF is 9999 (0.9999 scaled)
-    // health_factor = 9999;
-    
-    // Attempt Liquidation - Should succeed without panicking
-    // client.liquidate_position(...)
 }

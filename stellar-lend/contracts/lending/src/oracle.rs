@@ -38,7 +38,7 @@
 //! - Fallback oracle address cannot be the zero address or the contract itself.
 //! - Future timestamps in stored feeds are treated as stale (clock-skew guard).
 
-use soroban_sdk::{contracterror, contracttype, Address, Env};
+use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env};
 
 use crate::borrow::get_admin;
 
@@ -100,6 +100,16 @@ pub struct OracleConfig {
     /// Maximum age of a price feed in seconds before it is considered stale.
     /// Default: 3600 (1 hour).
     pub max_staleness_seconds: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct OracleConfigEvent {
+    pub admin: Address,
+    pub asset: Option<Address>,
+    pub oracle: Option<Address>,
+    pub max_staleness: Option<u64>,
+    pub timestamp: u64,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -192,6 +202,16 @@ pub fn configure_oracle(
     }
 
     env.storage().persistent().set(&OracleKey::Config, &config);
+
+    OracleConfigEvent {
+        admin: caller,
+        asset: None,
+        oracle: None,
+        max_staleness: Some(config.max_staleness_seconds),
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
+
     Ok(())
 }
 
@@ -219,7 +239,17 @@ pub fn set_primary_oracle(
 
     env.storage()
         .persistent()
-        .set(&OracleKey::PrimaryOracle(asset), &primary_oracle);
+        .set(&OracleKey::PrimaryOracle(asset.clone()), &primary_oracle);
+
+    OracleConfigEvent {
+        admin: caller,
+        asset: Some(asset),
+        oracle: Some(primary_oracle),
+        max_staleness: None,
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
+
     Ok(())
 }
 
@@ -247,7 +277,17 @@ pub fn set_fallback_oracle(
 
     env.storage()
         .persistent()
-        .set(&OracleKey::FallbackOracle(asset), &fallback_oracle);
+        .set(&OracleKey::FallbackOracle(asset.clone()), &fallback_oracle);
+
+    OracleConfigEvent {
+        admin: caller,
+        asset: Some(asset),
+        oracle: Some(fallback_oracle),
+        max_staleness: None,
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
+
     Ok(())
 }
 

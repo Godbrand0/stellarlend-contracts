@@ -6,7 +6,7 @@ use crate::oracle::OracleError;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{
     testutils::{Address as _, Events},
-    vec, Address, Env, Symbol, TryFromVal,
+    vec, xdr, Address, Env, Symbol, TryFromVal, Val,
 };
 
 fn last_event_topic(env: &Env) -> Symbol {
@@ -41,6 +41,7 @@ fn test_pause_borrow_granular() {
 
     // Pause borrow
     client.set_pause(&admin, &PauseType::Borrow, &true);
+    assert_eq!(last_event_topic(&env), Symbol::new(&env, "pause_event"));
 
     // Try borrow - should fail
     let result = client.try_borrow(&user, &asset, &10_000, &collateral_asset, &20_000);
@@ -74,7 +75,7 @@ fn test_global_pause() {
 
     // All operations should fail
     assert_eq!(
-        client.try_borrow(&user, &asset, &10_000, &collateral_asset, &20_000),
+        client.try_borrow(&user, &asset, &1_000_000, &collateral_asset, &2_000_000),
         Err(Ok(BorrowError::ProtocolPaused))
     );
     assert_eq!(
@@ -182,12 +183,7 @@ fn test_pause_events() {
 
     client.set_pause(&admin, &PauseType::Borrow, &true);
 
-    let events = env.events().all();
-    let last_event = events.get(events.len() - 1).unwrap();
-
-    // assert_eq!(last_event.0, contract_id);
-    // let topic: Symbol = Symbol::try_from_val(&env, &last_event.1.get(0).unwrap()).unwrap();
-    // assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    assert_eq!(last_event_topic(&env), Symbol::new(&env, "pause_event"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -490,10 +486,7 @@ fn test_set_deposit_paused_emits_event() {
 
     client.set_deposit_paused(&true);
 
-    let events = env.events().all();
-    let last = events.get(events.len() - 1).unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    assert_eq!(last_event_topic(&env), Symbol::new(&env, "pause_event"));
 
     // get_pause_state must reflect the change.
     assert!(client.get_pause_state(&PauseType::Deposit));
@@ -511,10 +504,7 @@ fn test_set_withdraw_paused_emits_event() {
 
     client.set_withdraw_paused(&true);
 
-    let events = env.events().all();
-    let last = events.get(events.len() - 1).unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    assert_eq!(last_event_topic(&env), Symbol::new(&env, "pause_event"));
 
     assert!(client.get_pause_state(&PauseType::Withdraw));
 }
@@ -667,10 +657,7 @@ fn test_set_guardian_emits_event() {
 
     client.set_guardian(&admin, &guardian);
 
-    let events = env.events().all();
-    let last = events.get(events.len() - 1).unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "guardian_set_event"));
+    assert_eq!(last_event_topic(&env), Symbol::new(&env, "guardian_set_event"));
 }
 
 /// A non-admin address cannot configure the guardian.
@@ -795,10 +782,7 @@ fn test_emergency_shutdown_emits_event() {
 
     client.emergency_shutdown(&admin);
 
-    let events = env.events().all();
-    let last = events.get(events.len() - 1).unwrap();
-    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+    assert_eq!(last_event_topic(&env), Symbol::new(&env, "emergency_state_event"));
 }
 
 /// Full lifecycle: Normal → Shutdown → Recovery → Normal.
@@ -816,28 +800,19 @@ fn test_full_emergency_lifecycle_events() {
     // Step 1: Shutdown
     client.emergency_shutdown(&admin);
     {
-        let events = env.events().all();
-        let last = events.get(events.len() - 1).unwrap();
-        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        assert_eq!(last_event_topic(&env), Symbol::new(&env, "emergency_state_event"));
     }
 
     // Step 2: Recovery
     client.start_recovery(&admin);
     {
-        let events = env.events().all();
-        let last = events.get(events.len() - 1).unwrap();
-        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        assert_eq!(last_event_topic(&env), Symbol::new(&env, "emergency_state_event"));
     }
 
     // Step 3: Normal
     client.complete_recovery(&admin);
     {
-        let events = env.events().all();
-        let last = events.get(events.len() - 1).unwrap();
-        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        assert_eq!(last_event_topic(&env), Symbol::new(&env, "emergency_state_event"));
     }
 
     // Final state verification (separate read call is fine here).
@@ -1223,7 +1198,7 @@ fn test_comprehensive_pause_state_matrix() {
     client.initialize_withdraw_settings(&100);
 
     // Matrix: Test each pause flag individually
-    let pause_types: [(PauseType, &str); 5] = [
+    for (pause_type, _name) in [
         (PauseType::Deposit, "deposit"),
         (PauseType::Borrow, "borrow"),
         (PauseType::Repay, "repay"),

@@ -47,28 +47,7 @@ fn create_test_protocol_config(env: &Env) -> AmmProtocolConfig {
     }
 }
 
-// Mock AMM contract for testing
-#[contract]
-pub struct MockAmm;
-
-#[contractimpl]
-impl MockAmm {
-    pub fn swap(
-        _env: Env,
-        _executor: Address,
-        _token_in: Option<Address>,
-        _token_out: Option<Address>,
-        amount_in: i128,
-        _min_amount_out: i128,
-        _callback_data: AmmCallbackData,
-    ) -> i128 {
-        // Simulate 1% fee
-        amount_in
-            .checked_mul(9900)
-            .and_then(|v| v.checked_div(10000))
-            .unwrap_or(0)
-    }
-}
+// Removed duplicate MockAmm definition
 
 #[test]
 fn test_initialize_amm_settings() {

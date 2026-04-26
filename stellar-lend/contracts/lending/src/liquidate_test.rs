@@ -632,8 +632,8 @@ fn test_liquidate_bonus_never_exceeds_collateral_extreme_oracle_and_close_factor
     client.initialize(&admin, &1_000_000_000, &1000);
 
     let oracle_id = env.register(LiqStorageOracle, ());
-    set_liq_oracle_price(&env, &oracle_id, &debt_asset, &PRICE_UNITY);
-    set_liq_oracle_price(&env, &oracle_id, &collateral_asset, &PRICE_UNITY);
+    set_liq_oracle_price(&env, &oracle_id, &debt_asset, PRICE_UNITY);
+    set_liq_oracle_price(&env, &oracle_id, &collateral_asset, PRICE_UNITY);
     client.set_oracle(&admin, &oracle_id);
 
     // 80% liq. threshold: position is healthy at equal $1 / $1 notionals, then
@@ -654,7 +654,7 @@ fn test_liquidate_bonus_never_exceeds_collateral_extreme_oracle_and_close_factor
         &env,
         &oracle_id,
         &collateral_asset,
-        &PRICE_COLLAT_CRASH,
+        PRICE_COLLAT_CRASH,
     );
     let hf = client.get_health_factor(&borrower);
     assert!(hf < HEALTH_FACTOR_SCALE);
