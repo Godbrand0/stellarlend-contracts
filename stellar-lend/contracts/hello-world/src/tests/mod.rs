@@ -36,7 +36,10 @@ pub mod cross_contract_test;
 pub mod gov_asset_test;
 pub mod multisig_governance_execution_test;
 pub mod multisig_test;
+pub mod multisig_threshold_safety_test;
 pub mod oracle_staleness_fallback_test;
 pub mod recovery_test;
 // pub mod fuzz_test;
 // pub mod fees_test;
+
+pub mod snapshot_test;

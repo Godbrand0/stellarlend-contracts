@@ -13,21 +13,7 @@ use crate::constants::{
 use crate::pause::{self, blocks_high_risk_ops, PauseType};
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env, I256};
 
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum BorrowError {
-    InsufficientCollateral = 1,
-    DebtCeilingReached = 2,
-    ProtocolPaused = 3,
-    InvalidAmount = 4,
-    Overflow = 5,
-    Unauthorized = 6,
-    AssetNotSupported = 7,
-    BelowMinimumBorrow = 8,
-    RepayAmountTooHigh = 9,
-    Reentrancy = 10,
-}
+pub use crate::errors::BorrowError;
 
 #[contracttype]
 #[derive(Clone)]
@@ -37,7 +23,7 @@ pub enum BorrowDataKey {
     BorrowUserCollateral(Address),
     BorrowTotalDebt,
     BorrowDebtCeiling,
-    BorrowMinAmount,
+    BorrowMinAmountPerAsset(Address),
     OracleAddress,
     LiquidationThresholdBps,
     CloseFactor,
@@ -49,16 +35,22 @@ pub enum BorrowDataKey {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DebtPosition {
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub borrowed_amount: i128,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub interest_accrued: i128,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub last_update: u64,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub asset: Address,
 }
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BorrowCollateral {
+    /// Schema `v1`: stable getter field for `get_user_collateral`.
     pub amount: i128,
+    /// Schema `v1`: stable getter field for `get_user_collateral`.
     pub asset: Address,
 }
 
@@ -125,7 +117,7 @@ pub fn borrow(
     }
 
     // Instance storage read (Cheap)
-    let min_borrow = get_min_borrow_amount(env);
+    let min_borrow = get_min_borrow_amount(env, &asset);
     if amount < min_borrow {
         return Err(BorrowError::BelowMinimumBorrow);
     }
@@ -396,7 +388,7 @@ pub fn initialize_borrow_settings(
         .set(&BorrowDataKey::BorrowDebtCeiling, &debt_ceiling);
     env.storage()
         .instance()
-        .set(&BorrowDataKey::BorrowMinAmount, &min_borrow_amount);
+        .set(&BorrowDataKey::BorrowMinAmountPerAsset(asset), &min_borrow_amount);
     Ok(())
 }
 

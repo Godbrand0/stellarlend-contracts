@@ -3,18 +3,7 @@ use soroban_sdk::{contracterror, contracttype, token, Address, Bytes, Env, IntoV
 use crate::constants::{BPS_SCALE, MAX_FLASH_LOAN_FEE_BPS};
 
 /// Errors that can occur during flash loan operations
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum FlashLoanError {
-    InvalidAmount = 1,
-    InsufficientRepayment = 2,
-    Unauthorized = 3,
-    InvalidFee = 4,
-    CallbackFailed = 5,
-    Reentrancy = 6,
-    ProtocolPaused = 7,
-}
+pub use crate::errors::FlashLoanError;
 
 /// Storage keys for flash loan data
 #[contracttype]
@@ -96,7 +85,23 @@ pub fn flash_loan(
     Ok(())
 }
 
-/// Calculate the fee for a flash loan
+/// Calculate the fee for a flash loan.
+///
+/// ## Rounding Semantics
+/// `fee = amount * fee_bps / BPS_SCALE` — integer division truncates toward zero.
+/// For small `amount` values the fee rounds down to zero.  The minimum amount
+/// that yields a non-zero fee at `f` bps is `ceil(BPS_SCALE / f)`.
+///
+/// ## Fee-Splitting Note (Security)
+/// Splitting one large loan into N smaller sub-threshold calls can reduce total
+/// fees to zero because each call rounds independently.  The reentrancy guard
+/// prevents this within a single transaction; operators should set
+/// `min_borrow_amount` ≥ `ceil(BPS_SCALE / fee_bps)` to block sub-threshold
+/// calls across separate transactions.
+///
+/// Overflow is handled by `saturating_mul` / `saturating_div`: if
+/// `amount * fee_bps` overflows `i128`, the result saturates to `i128::MAX`
+/// and then divides by `BPS_SCALE`, so the fee remains positive and bounded.
 fn calculate_fee(env: &Env, amount: i128) -> i128 {
     let fee_bps = get_flash_loan_fee_bps(env);
     amount.saturating_mul(fee_bps).saturating_div(BPS_SCALE)

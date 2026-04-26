@@ -109,7 +109,8 @@ fn test_borrow_cap_update_via_admin() {
     let (client, admin) = setup_protocol(&env);
 
     let usdc = Address::generate(&env);
-    let user = Address::generate(&env);
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
 
     client.initialize_asset(&None, &xlm_collateral_config(&env));
     client.initialize_asset(
@@ -118,11 +119,11 @@ fn test_borrow_cap_update_via_admin() {
     );
 
     client.cross_asset_deposit(&user, &None, &5000);
-
-    // Fill cap
     client.cross_asset_borrow(&user, &Some(usdc.clone()), &500);
 
-    // Admin raises cap to 1 000
+    let blocked = client.try_cross_asset_borrow(&user, &Some(usdc.clone()), &1);
+    assert!(blocked.is_err(), "borrow should fail when cap is reached");
+
     client.update_asset_config(
         &admin,
         &Some(usdc.clone()),
@@ -135,8 +136,13 @@ fn test_borrow_cap_update_via_admin() {
         &None,
     );
 
-    // Now user can borrow more
-    client.cross_asset_borrow(&user, &Some(usdc.clone()), &100);
+    let unblocked = client.try_cross_asset_borrow(&user, &Some(usdc.clone()), &200);
+    assert!(
+        unblocked.is_ok(),
+        "borrow should succeed after admin raises cap"
+    );
+
+    assert_eq!(client.get_total_borrow_for(&Some(usdc)), 700);
 }
 
 // ============================================================================
@@ -350,6 +356,46 @@ fn test_total_borrow_tracking() {
     assert_eq!(client.get_total_borrow_for(&Some(usdc.clone())), 400);
 }
 
+/// Total borrow on asset A is unaffected by borrow/repay activity on asset B.
+#[test]
+fn test_total_borrow_isolation_between_assets() {
+    let env = create_test_env();
+    let (client, _admin) = setup_protocol(&env);
+
+    let usdc = Address::generate(&env);
+    let dai = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    client.initialize_asset(&None, &xlm_collateral_config(&env));
+    client.initialize_asset(
+        &Some(usdc.clone()),
+        &token_borrow_config(&env, &usdc, 1_0000000, 5000),
+    );
+    client.initialize_asset(
+        &Some(dai.clone()),
+        &token_borrow_config(&env, &dai, 1_0000000, 5000),
+    );
+
+    client.cross_asset_deposit(&user, &None, &20_000);
+
+    // Initial state: borrow some of both
+    client.cross_asset_borrow(&user, &Some(usdc.clone()), &500);
+    client.cross_asset_borrow(&user, &Some(dai.clone()), &500);
+
+    // Repay DAI should not change USDC total
+    client.cross_asset_repay(&user, &Some(dai.clone()), &300);
+    assert_eq!(
+        client.get_total_borrow_for(&Some(usdc.clone())),
+        500,
+        "USDC total must not change when DAI is repaid"
+    );
+    assert_eq!(
+        client.get_total_borrow_for(&Some(dai.clone())),
+        200,
+        "DAI total must reflect repayment"
+    );
+}
+
 // ============================================================================
 // 4. Admin can lower cap below current outstanding debt (existing debt stands)
 // ============================================================================
@@ -383,8 +429,7 @@ fn test_borrow_cap_lowered_below_current_debt_blocks_new_borrows() {
         &Some(usdc.clone()),
         &None,      // cf
         &None,      // lt
-        &None,      // rf
-        &Some(500), // max_supply
+        &None,      // max_supply
         &Some(500), // max_borrow
         &None,      // can_collateralize
         &None,      // can_borrow
