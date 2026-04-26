@@ -1229,9 +1229,7 @@ fn test_comprehensive_pause_state_matrix() {
         (PauseType::Repay, "repay"),
         (PauseType::Withdraw, "withdraw"),
         (PauseType::Liquidation, "liquidation"),
-    ];
-
-    for (pause_type, operation) in pause_types {
+    ] {
         // Pause the specific operation
         client.set_pause(&admin, &pause_type, &true);
 
