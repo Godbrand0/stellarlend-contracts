@@ -607,6 +607,18 @@ fn get_price(_env: &Env, _price_feed: &Address) -> Result<i128, CrossAssetError>
 }
 
 pub fn initialize_admin(env: &Env, admin: Address) {
+    // Guard against re-initialization: once the cross-asset admin is set it
+    // cannot be overwritten through this path. An attacker calling this after
+    // deployment would otherwise be able to seize admin rights over cross-asset
+    // operations (privilege escalation via unguarded init).
+    if env
+        .storage()
+        .persistent()
+        .has(&CrossAssetDataKey::Admin)
+    {
+        panic!("cross-asset admin already initialized");
+    }
+    admin.require_auth();
     env.storage()
         .persistent()
         .set(&CrossAssetDataKey::Admin, &admin);

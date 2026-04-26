@@ -1366,3 +1366,4 @@ fn test_pause_during_emergency_states() {
         Err(Ok(WithdrawError::WithdrawPaused))
     );
 }
+
