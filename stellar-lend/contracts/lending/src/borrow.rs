@@ -48,16 +48,22 @@ pub enum BorrowDataKey {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DebtPosition {
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub borrowed_amount: i128,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub interest_accrued: i128,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub last_update: u64,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub asset: Address,
 }
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BorrowCollateral {
+    /// Schema `v1`: stable getter field for `get_user_collateral`.
     pub amount: i128,
+    /// Schema `v1`: stable getter field for `get_user_collateral`.
     pub asset: Address,
 }
 

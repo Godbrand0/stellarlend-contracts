@@ -116,6 +116,8 @@ mod multi_user_contention_test;
 mod multi_user_contention_test;
 #[cfg(test)]
 mod stress_test;
+#[cfg(test)]
+mod view_serialization_test;
 
 #[contract]
 pub struct LendingContract;
