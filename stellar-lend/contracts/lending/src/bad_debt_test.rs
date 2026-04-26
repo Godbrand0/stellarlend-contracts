@@ -19,6 +19,8 @@ mod test {
 
         // Initialize protocol
         client.initialize(&admin, &1_000_000, &10);
+        client.register_asset(&admin, &asset);
+        client.register_asset(&admin, &collateral_asset);
 
         // 1. Credit Insurance Fund with 50 units
         client.credit_insurance_fund(&admin, &asset, &50);
@@ -68,6 +70,8 @@ mod test {
 
         // Initialize protocol
         client.initialize(&admin, &1_000_000, &10);
+        client.register_asset(&admin, &asset);
+        client.register_asset(&admin, &collateral_asset);
 
         // 1. Credit Insurance Fund with 10 units
         client.credit_insurance_fund(&admin, &asset, &10);

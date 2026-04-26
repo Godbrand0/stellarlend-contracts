@@ -22,6 +22,8 @@ fn setup_contention_test(
     let collateral_asset = Address::generate(env);
 
     client.initialize(&admin, &10_000_000_000, &100);
+    client.register_asset(&admin, &asset);
+    client.register_asset(&admin, &collateral_asset);
     client.initialize_deposit_settings(&10_000_000_000, &100);
     client.initialize_withdraw_settings(&100);
 
@@ -55,7 +57,7 @@ fn test_contention_interleaved_deposits_borrows() {
         // Every user deposits collateral
         let deposit_amount = 50_000 + (i as i128 * 100);
         client.deposit(&user, &collateral_asset, &deposit_amount);
-        _expected_total_deposits += deposit_amount;
+        expected_total_deposits += deposit_amount;
 
         // Alternate users borrow
         if i % 2 == 0 {

@@ -230,6 +230,9 @@ pub fn deposit_collateral_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Deposit) {
@@ -288,6 +291,9 @@ pub fn borrow_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Borrow) {
@@ -368,6 +374,9 @@ pub fn repay_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Repay) {
@@ -432,6 +441,9 @@ pub fn withdraw_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Withdraw) {

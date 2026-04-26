@@ -39,6 +39,7 @@ pub enum WithdrawError {
     InsufficientCollateral = 4,
     InsufficientCollateralRatio = 5,
     Unauthorized = 6,
+    AssetNotSupported = 7,
 }
 
 /// Storage keys for withdraw-related data
@@ -89,6 +90,7 @@ fn map_borrow_to_withdraw(e: BorrowError) -> WithdrawError {
         BorrowError::InsufficientCollateral => WithdrawError::InsufficientCollateralRatio,
         BorrowError::Overflow => WithdrawError::Overflow,
         BorrowError::InvalidAmount => WithdrawError::InvalidAmount,
+        BorrowError::AssetNotSupported => WithdrawError::AssetNotSupported,
         _ => WithdrawError::InsufficientCollateralRatio,
     }
 }
@@ -117,6 +119,9 @@ pub fn withdraw(
     asset: Address,
     amount: i128,
 ) -> Result<i128, WithdrawError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| WithdrawError::AssetNotSupported)?;
+
     user.require_auth();
 
     ensure_withdraw_allowed(env)?;
