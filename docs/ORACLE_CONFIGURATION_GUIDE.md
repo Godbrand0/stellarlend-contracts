@@ -498,6 +498,101 @@ contract.health_check()
    - Configuration issues
    - Resolution actions
 
+## Oracle Failure Modes
+
+This section documents how the protocol behaves under adversarial oracle conditions, based on the adversarial test suite in `contracts/lending/src/oracle_adversarial_test.rs`.
+
+### Sudden Price Jumps and Crashes
+
+| Scenario | Protocol Response |
+|----------|-------------------|
+| 10× collateral price increase | Health factor improves proportionally; position remains healthy |
+| 10× collateral price crash | Health factor drops immediately; position becomes liquidatable when below threshold |
+| Debt asset price spike | Health factor worsens (debt value grows); position may become liquidatable |
+
+**Key invariant**: View functions (`get_health_factor`, `get_collateral_value`, `get_max_liquidatable_amount`) reflect price changes immediately with no lag. No state change is required from the user.
+
+### Stale Feed Handling
+
+| Scenario | Resolution Order | Result |
+|----------|-----------------|--------|
+| Primary feed fresh | Primary → (done) | Fresh primary price used |
+| Primary stale, fallback fresh | Primary stale → Fallback → (done) | Fallback price used transparently |
+| Primary missing, fallback fresh | No primary → Fallback → (done) | Fallback price used |
+| Primary stale, fallback stale | Both checked → error | `StalePrice` error returned |
+| No feed configured | No primary, no fallback | `NoPriceFeed` error returned |
+
+**Staleness definition**: A price is stale if `current_timestamp - last_updated > max_staleness_seconds` (default 3600s). Future timestamps (`last_updated > current_timestamp`) are **also treated as stale** as a clock-skew manipulation guard.
+
+### Behaviour When No Price Is Available
+
+When the oracle module cannot provide a fresh price, **all values default to 0** rather than reverting:
+
+- `get_collateral_value()` → `0`
+- `get_debt_value()` → `0`
+- `get_health_factor()` → `0` (when user has debt but no oracle; `HEALTH_FACTOR_NO_DEBT` when no debt)
+- `get_max_liquidatable_amount()` → `0` (position treated as non-liquidatable under missing oracle)
+
+This "fail-safe to zero" design prevents panics but means external monitors should treat `health_factor == 0` as an oracle outage signal rather than a healthy position.
+
+### Unauthorised Price Writes (Cache Poisoning)
+
+The oracle enforces three-tier slot isolation:
+
+1. **Admin** can write to the primary slot for any asset.
+2. **Registered primary oracle** can write to the primary slot for its registered asset only.
+3. **Registered fallback oracle** can write to the fallback slot only — it **cannot overwrite the primary slot**.
+4. **All other addresses** are rejected with `OracleError::Unauthorized`.
+
+An attacker injecting a far-future timestamp via storage cannot extend feed freshness: future timestamps are immediately treated as stale by `is_stale()`.
+
+Zero and negative prices are always rejected (`OracleError::InvalidPrice`) regardless of the caller's role.
+
+### Health Factor Boundary
+
+The liquidation threshold boundary is:
+
+```
+health_factor = (collateral_value × liquidation_threshold_bps / 10000) × 10000 / debt_value
+```
+
+| `health_factor` value | Meaning |
+|-----------------------|---------|
+| ≥ `HEALTH_FACTOR_SCALE` (10000) | Position is healthy; not liquidatable |
+| < `HEALTH_FACTOR_SCALE` | Position is liquidatable |
+| `HEALTH_FACTOR_NO_DEBT` (100_000_000) | No debt; trivially healthy |
+| `0` | Oracle unavailable with active debt; cannot compute |
+
+**Exact boundary**: A position with `health_factor == 10000` is **not** liquidatable (`get_max_liquidatable_amount` returns 0).
+
+### Oracle Pause Mode
+
+When `set_oracle_paused(admin, true)` is called:
+- **New price updates are blocked** (`OracleError::OraclePaused`)
+- **Existing prices remain readable** until they become stale under the normal staleness window
+- Pause is intended as a short-term emergency circuit-breaker; prolonged pause causes all feeds to go stale and views to return 0
+
+### Cross-Asset Independence
+
+Oracle state for each asset is completely independent:
+
+- Staleness of Asset A's feed has **no effect** on Asset B's price reads
+- A stale collateral oracle causes `collateral_value → 0`; the debt value is still correctly computed from a fresh debt oracle (and vice versa)
+- Price manipulation of one asset in a cross-asset position affects only the relevant value, not all positions
+
+### Attack Resistance Summary
+
+| Attack Vector | Mitigation |
+|---------------|------------|
+| Non-authorized price write | `require_auth()` + role check on every `update_price_feed` call |
+| Fallback oracle overwrites primary | Slot routing: fallback oracle can only write to `FallbackFeed` key |
+| Far-future timestamp injection | `is_stale()` treats `now < last_updated` as stale |
+| Zero/negative price injection | `validate_price()` rejects `price ≤ 0` before any storage write |
+| Price feed poisoning via protocol pause | Oracle pause blocks writes; existing prices expire naturally |
+| Self-referential oracle registration | `set_primary_oracle` / `set_fallback_oracle` reject `oracle == contract_address` |
+
+---
+
 ## Conclusion
 
 Effective oracle configuration management is critical for the security and reliability of the StellarLend protocol. This guide provides the procedures and considerations necessary for maintaining a robust oracle system while ensuring proper role separation and security controls.
