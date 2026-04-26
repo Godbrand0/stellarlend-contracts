@@ -15,9 +15,13 @@
 //!    query the close factor themselves.
 //!
 //! 3. The collateral seized by the liquidator is:
-//!    `collateral_seized = repay_amount * (10_000 + incentive_bps) / 10_000`.
-//!    It is further capped to the borrower's available collateral, preventing a
-//!    protocol-level panic even when the position is deeply insolvent.
+//!    `uncapped = repay_amount * (10_000 + incentive_bps) / 10_000`, then
+//!    **`collateral_seized = min(uncapped, collateral_balance)`** (enforced in
+//!    this module before debiting the borrower). The min-bound prevents
+//!    over-seizure when the incentive-scaled amount would otherwise exceed
+//!    on-chain collateral, e.g. after large oracle-denominated repricing or
+//!    when close-factor and maximum incentive combine to make `uncapped` large
+//!    relative to raw collateral.
 //!
 //! 4. After state changes a `PostLiquidationHealthEvent` is emitted carrying the
 //!    borrower's updated health factor. Off-chain monitors use this to detect

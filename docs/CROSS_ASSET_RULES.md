@@ -319,29 +319,49 @@ Result:
 
 ## View Guarantees
 
-`get_cross_position_summary` and related read-only view methods satisfy the following guarantees.
-These are verified by the invariant test suite in `cross_asset_view_invariants_test.rs`.
+Read-only methods that surface position state — `get_user_position`,
+`get_collateral_balance`, `get_debt_balance`, `get_collateral_value`,
+`get_debt_value`, `get_health_factor`, `get_max_liquidatable_amount`, and
+`get_liquidation_incentive_amount` — are pinned by the invariant test suite
+in `stellar-lend/contracts/lending/src/views_test.rs`. The properties below
+hold for every user, asset configuration, and ordering of view calls.
 
-| ID   | Guarantee                                                                                         |
-|------|---------------------------------------------------------------------------------------------------|
-| G-1  | **Read-only**: calling the view never mutates ledger state. Balances before and after are equal. |
-| G-2  | **Idempotency**: calling the view N times in a row returns identical values every time.           |
-| G-3  | **Collateral accuracy**: `total_collateral_usd` equals the sum of each asset's amount × price.   |
-| G-4  | **Debt accuracy**: `total_debt_usd` equals the sum of each asset's current debt × price.         |
-| G-5  | **Health factor formula**: `health_factor = weighted_collateral × BPS_SCALE / total_debt_usd` when debt > 0, and `HF_NO_DEBT` (1 000 000) when debt = 0. |
-| G-6  | **Monotonicity**: adding collateral never decreases `health_factor`; adding debt never increases it. |
-| G-7  | **User isolation**: operations on user B's position have no effect on user A's summary.          |
-| G-8  | **Order invariance**: depositing assets in any order produces the same summary totals.           |
-| G-9  | **Conservative rounding**: weighted-collateral arithmetic truncates toward zero (floor division), so the view never overestimates borrowing capacity. |
-| G-10 | **No view exploitation**: a view call cannot be used as a side channel to bypass access controls or alter protocol state. |
+### Consistency
 
-### Sentinel values
+- The unified `get_user_position(user)` summary returns field-for-field exactly
+  what the individual getters return for the same `user` at the same ledger
+  height.
+- View output is a pure function of `(storage, oracle, ledger height)`.
+  Repeated calls must yield bit-identical results, and the order of view
+  calls must not change any answer.
 
-| Condition                     | `health_factor` value |
-|-------------------------------|-----------------------|
-| No debt (fresh or fully repaid) | `1_000_000`          |
-| Debt > 0                      | `weighted_collateral × 10_000 / total_debt_usd` |
-| Collateral = 0, debt > 0      | `0`                   |
+### Risk-parameter isolation
+
+Adjusting `liquidation_threshold_bps` may move `health_factor` but must not
+move `collateral_balance`, `collateral_value`, `debt_balance`, or `debt_value`.
+The first four are functions of raw state and oracle output only.
+
+### Missing-asset and missing-oracle handling
+
+- A user with no recorded position returns a default summary: zero balances,
+  zero values, and `health_factor == HEALTH_FACTOR_NO_DEBT`.
+- When the oracle is unconfigured, every value-bearing field reads as `0`
+  consistently and `get_max_liquidatable_amount` returns `0` so callers
+  cannot liquidate without price data.
+
+### Rounding and ordering
+
+- Health-factor division truncates toward zero. `health_factor ==
+  HEALTH_FACTOR_SCALE` (exactly 1.0) is treated as healthy.
+- `get_liquidation_incentive_amount(repay)` is monotonic non-decreasing in
+  `repay`. Negative or zero amounts return `0`.
+
+### Security: no view-based exploitation
+
+Views never mutate state, never charge fees, and trigger only the read-only
+oracle lookup. Integrators MUST NOT rely on a view's value beyond the ledger
+height at which it was observed — oracle prices and risk parameters can
+change.
 
 ## Conclusion
 
