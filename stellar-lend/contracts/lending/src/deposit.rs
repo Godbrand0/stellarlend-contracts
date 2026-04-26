@@ -130,7 +130,7 @@ fn save_deposit_position(env: &Env, user: &Address, position: &DepositCollateral
         .set(&DepositDataKey::UserCollateral(user.clone()), position);
 }
 
-fn get_total_deposits(env: &Env) -> i128 {
+pub(crate) fn get_total_deposits(env: &Env) -> i128 {
     env.storage()
         .persistent()
         .get(&DepositDataKey::TotalAmount)

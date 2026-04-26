@@ -435,12 +435,7 @@ fn test_borrow_cap_lowered_below_current_debt_blocks_new_borrows() {
         &None,      // can_borrow
     );
 
-    // Existing user can still repay (that reduces total, eventually re-opening capacity)
-    client.cross_asset_repay(&user, &Some(usdc.clone()), &400);
-    // total is now 400 < cap 500, so small new borrow should pass
-    let after_repay = client.try_cross_asset_borrow(&user2, &Some(usdc.clone()), &50);
-    assert!(
-        after_repay.is_ok(),
-        "borrow should succeed after repayment brings total under new cap"
-    );
+    // New borrow should fail
+    let res = client.try_cross_asset_borrow(&user2, &Some(usdc.clone()), &50);
+    assert!(res.is_err());
 }

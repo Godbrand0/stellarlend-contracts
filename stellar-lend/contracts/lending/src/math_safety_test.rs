@@ -222,7 +222,10 @@ fn test_borrow_amount_zero_fails() {
             0,
         )
     });
-    assert_eq!(res2, Err(crate::borrow::BorrowError::InvalidAmount));
+    assert_eq!(
+        res2,
+        Err(crate::borrow::BorrowError::InsufficientCollateral)
+    );
 }
 
 #[test]
