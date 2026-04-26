@@ -168,7 +168,7 @@ pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AdminError> {
 /// Only the super admin is authorized to manage roles.
 pub fn grant_role(
     env: &Env,
-    caller: Address,
+    claimant: &Address,
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {
@@ -210,7 +210,7 @@ pub fn grant_role(
 /// Only the super admin is authorized to manage roles.
 pub fn revoke_role(
     env: &Env,
-    caller: Address,
+    claimant: &Address,
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {
