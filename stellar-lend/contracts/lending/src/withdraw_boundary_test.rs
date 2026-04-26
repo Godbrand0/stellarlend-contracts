@@ -5,9 +5,9 @@
 //! positions under various market conditions (price moves, multi-asset portfolios).
 
 extern crate std;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env, Symbol};
-use crate::cross_asset::{AssetParams, CrossAssetError, PositionSummary};
-use crate::oracle::{OracleConfig, OracleKey};
+use soroban_sdk::{testutils::Address as _, Address, Env};
+use crate::cross_asset::AssetParams;
+use crate::oracle::OracleConfig;
 use crate::constants::HEALTH_FACTOR_SCALE;
 use crate::{LendingContract, LendingContractClient};
 

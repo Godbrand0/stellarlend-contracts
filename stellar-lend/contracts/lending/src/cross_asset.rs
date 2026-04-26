@@ -570,7 +570,7 @@ fn calculate_position_summary(
     }
 
     for (asset, amount) in debt_balances.iter() {
-        let params = get_asset_params(env, &asset)?;
+        let _params = get_asset_params(env, &asset)?;
         let price = get_price(env, &asset)?;
         let value_usd = amount
             .checked_mul(price)
