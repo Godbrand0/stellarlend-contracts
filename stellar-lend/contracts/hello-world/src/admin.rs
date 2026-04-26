@@ -1,5 +1,18 @@
-use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Symbol, Val, Vec};
+//! # Admin and Access Control Module
+//!
+//! Provides a production-grade role-based access control (RBAC) and two-step
+//! administrative transfer mechanism for the protocol.
+//!
+//! ## Features
+//! - **Two-Step Admin Transfer**: Prevents accidental loss of super-admin authority
+//!   via a `transfer_admin` → `accept_admin` workflow.
+//! - **Role Registry**: Modular role-based authorization (e.g., `oracle_admin`, `risk_admin`).
+//! - **Hardened Security**: Explicit `require_auth()` enforcement and storage-efficient
+//!   state management.
+//! - **Event Auditing**: Detailed event emission for all role and admin lifecycle changes.
+
 use crate::prelude::*;
+use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Symbol, Val, Vec};
 
 /// Errors that can occur during admin operations
 #[contracterror]
@@ -50,11 +63,28 @@ pub fn get_pending_admin(env: &Env) -> Option<Address> {
     env.storage().persistent().get(&AdminDataKey::PendingAdmin)
 }
 
-/// Initialize the super admin. Can only be called once when no admin exists.
-/// Used during contract bootstrap.
-pub fn set_admin(env: &Env, new_admin: Address) -> Result<(), AdminError> {
-    if has_admin(env) {
-        return Err(AdminError::AdminAlreadySet);
+/// Initialize super admin. Can only be called once or by existing admin.
+///
+/// # Authorization
+///
+/// - If no admin exists: Any caller can initialize (bootstrap mode)
+/// - If admin exists: Only existing admin can modify (must pass caller parameter)
+/// - Uses address comparison for verification, not require_auth() (bootstrap scenario)
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `new_admin` - The new admin address
+/// * `caller` - The caller address (must be the current admin if one exists)
+pub fn set_admin(env: &Env, new_admin: Address, caller: Option<Address>) -> Result<(), AdminError> {
+    if let Some(current_admin) = get_admin(env) {
+        if let Some(ref c) = caller {
+            if *c != current_admin {
+                return Err(AdminError::Unauthorized);
+            }
+            c.require_auth();
+        } else {
+            return Err(AdminError::Unauthorized);
+        }
     }
 
     env.storage()
@@ -124,24 +154,25 @@ pub fn accept_admin(env: &Env, claimant: &Address) -> Result<(), AdminError> {
 ///
 /// Uses both explicit address check and Soroban `require_auth()`.
 /// This ensures security in production and correctness in mock tests.
-pub fn require_admin(env: &Env, claimant: &Address) -> Result<(), AdminError> {
+pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AdminError> {
     let admin = get_admin(env).ok_or(AdminError::Unauthorized)?;
-    if admin != *claimant {
+    if admin != *caller {
         return Err(AdminError::Unauthorized);
     }
-    admin.require_auth();
+    caller.require_auth();
     Ok(())
 }
-
-// ============================================================================
-// Role Registry & Management
-// ============================================================================
 
 /// Grant a specific role to an address.
 ///
 /// Only the super admin is authorized to manage roles.
-pub fn grant_role(env: &Env, claimant: &Address, role: Symbol, account: Address) -> Result<(), AdminError> {
-    require_admin(env, claimant)?;
+pub fn grant_role(
+    env: &Env,
+    caller: Address,
+    role: Symbol,
+    account: Address,
+) -> Result<(), AdminError> {
+    require_admin(env, &caller)?;
 
     let key = AdminDataKey::Role(role.clone(), account.clone());
     env.storage().persistent().set(&key, &true);
@@ -152,7 +183,7 @@ pub fn grant_role(env: &Env, claimant: &Address, role: Symbol, account: Address)
         .persistent()
         .get(&AdminDataKey::RoleRegistry)
         .unwrap_or_else(|| Vec::new(env));
-    
+
     let mut exists = false;
     for r in registry.iter() {
         if r == role {
@@ -177,8 +208,13 @@ pub fn grant_role(env: &Env, claimant: &Address, role: Symbol, account: Address)
 /// Revoke a specific role from an address.
 ///
 /// Only the super admin is authorized to manage roles.
-pub fn revoke_role(env: &Env, claimant: &Address, role: Symbol, account: Address) -> Result<(), AdminError> {
-    require_admin(env, claimant)?;
+pub fn revoke_role(
+    env: &Env,
+    caller: Address,
+    role: Symbol,
+    account: Address,
+) -> Result<(), AdminError> {
+    require_admin(env, &caller)?;
 
     let key = AdminDataKey::Role(role.clone(), account.clone());
     env.storage().persistent().remove(&key);
@@ -205,7 +241,11 @@ pub fn get_role_registry(env: &Env) -> Vec<Symbol> {
 }
 
 /// Require that the caller is either the super admin or has the required role.
-pub fn require_role_or_admin(env: &Env, caller: Address, required_role: Symbol) -> Result<(), AdminError> {
+pub fn require_role_or_admin(
+    env: &Env,
+    caller: Address,
+    required_role: Symbol,
+) -> Result<(), AdminError> {
     // Check for super admin first
     if let Some(admin) = get_admin(env) {
         if admin == caller {

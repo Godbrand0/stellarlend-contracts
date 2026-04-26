@@ -24,7 +24,6 @@
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env};
 
 use crate::borrow::{validate_collateral_ratio, BorrowDataKey, BorrowError, DebtPosition};
-use crate::constants::BPS_SCALE;
 use crate::deposit::{DepositCollateral, DepositDataKey};
 use crate::pause::{self, PauseType};
 
@@ -175,7 +174,8 @@ fn validate_collateral_ratio_after_withdraw(
             .ok_or(WithdrawError::Overflow)?;
 
         if total_debt > 0 {
-            validate_collateral_ratio(remaining_collateral, total_debt).map_err(map_borrow_to_withdraw)?;
+            validate_collateral_ratio(remaining_collateral, total_debt)
+                .map_err(map_borrow_to_withdraw)?;
         }
     }
 
