@@ -6,8 +6,20 @@ use crate::oracle::OracleError;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{
     testutils::{Address as _, Events},
-    Address, Env, Symbol, TryFromVal, Vec, vec,
+    vec, Address, Env, Symbol, TryFromVal,
 };
+
+fn last_event_topic(env: &Env) -> Symbol {
+    let all = env.events().all();
+    let last = all.events().last().expect("no events emitted");
+    match &last.body {
+        xdr::ContractEventBody::V0(body) => {
+            let val: Val = Val::try_from_val(env, &body.topics[0]).unwrap();
+            Symbol::try_from_val(env, &val).unwrap()
+        }
+        _ => panic!("unexpected event body variant"),
+    }
+}
 
 #[test]
 fn test_pause_borrow_granular() {
@@ -170,8 +182,8 @@ fn test_pause_events() {
 
     client.set_pause(&admin, &PauseType::Borrow, &true);
 
-    // let events = env.events().all();
-    // let last_event = events.last().unwrap();
+    let events = env.events().all();
+    let last_event = events.get(events.len() - 1).unwrap();
 
     // assert_eq!(last_event.0, contract_id);
     // let topic: Symbol = Symbol::try_from_val(&env, &last_event.1.get(0).unwrap()).unwrap();
@@ -478,10 +490,10 @@ fn test_set_deposit_paused_emits_event() {
 
     client.set_deposit_paused(&true);
 
-    // let events = env.events().all();
-    // let last = events.last().unwrap();
-    // let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    // assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+    assert_eq!(topic, Symbol::new(&env, "pause_event"));
 
     // get_pause_state must reflect the change.
     assert!(client.get_pause_state(&PauseType::Deposit));
@@ -499,10 +511,10 @@ fn test_set_withdraw_paused_emits_event() {
 
     client.set_withdraw_paused(&true);
 
-    // let events = env.events().all();
-    // let last = events.last().unwrap();
-    // let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    // assert_eq!(topic, Symbol::new(&env, "pause_event"));
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+    assert_eq!(topic, Symbol::new(&env, "pause_event"));
 
     assert!(client.get_pause_state(&PauseType::Withdraw));
 }
@@ -655,10 +667,10 @@ fn test_set_guardian_emits_event() {
 
     client.set_guardian(&admin, &guardian);
 
-    // let events = env.events().all();
-    // let last = events.last().unwrap();
-    // let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    // assert_eq!(topic, Symbol::new(&env, "guardian_set_event"));
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+    assert_eq!(topic, Symbol::new(&env, "guardian_set_event"));
 }
 
 /// A non-admin address cannot configure the guardian.
@@ -783,10 +795,10 @@ fn test_emergency_shutdown_emits_event() {
 
     client.emergency_shutdown(&admin);
 
-    // let events = env.events().all();
-    // let last = events.last().unwrap();
-    // let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-    // assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+    assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
 }
 
 /// Full lifecycle: Normal → Shutdown → Recovery → Normal.
@@ -802,31 +814,30 @@ fn test_full_emergency_lifecycle_events() {
     client.initialize(&admin, &1_000_000_000, &1000);
 
     // Step 1: Shutdown
-    // Read events immediately – no other client call may intervene.
     client.emergency_shutdown(&admin);
     {
-        // let events = env.events().all();
-        // let last = events.last().unwrap();
-        // let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        // assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        let events = env.events().all();
+        let last = events.get(events.len() - 1).unwrap();
+        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
     }
 
     // Step 2: Recovery
     client.start_recovery(&admin);
     {
-        // let events = env.events().all();
-        // let last = events.last().unwrap();
-        // let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        // assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        let events = env.events().all();
+        let last = events.get(events.len() - 1).unwrap();
+        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
     }
 
     // Step 3: Normal
     client.complete_recovery(&admin);
     {
-        // let events = env.events().all();
-        // let last = events.last().unwrap();
-        // let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
-        // assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+        let events = env.events().all();
+        let last = events.get(events.len() - 1).unwrap();
+        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
     }
 
     // Final state verification (separate read call is fine here).
@@ -1092,7 +1103,7 @@ fn test_oracle_pause_independence() {
 
     // Pause all core operations but not oracle
     client.set_pause(&admin, &PauseType::All, &true);
-    
+
     // Oracle should still work if not paused
     client.update_price_feed(&oracle, &asset, &100_000);
 
@@ -1157,7 +1168,7 @@ fn test_unauthorized_pause_bypass_attempts() {
     let admin = Address::generate(&env);
     let attacker = Address::generate(&env);
     let user = Address::generate(&env);
-    let asset = Address::generate(&env);
+    let _asset = Address::generate(&env);
     let guardian = Address::generate(&env);
 
     client.initialize(&admin, &1_000_000_000, &1000);
@@ -1212,15 +1223,13 @@ fn test_comprehensive_pause_state_matrix() {
     client.initialize_withdraw_settings(&100);
 
     // Matrix: Test each pause flag individually
-    let pause_types = [
+    let pause_types: [(PauseType, &str); 5] = [
         (PauseType::Deposit, "deposit"),
         (PauseType::Borrow, "borrow"),
         (PauseType::Repay, "repay"),
         (PauseType::Withdraw, "withdraw"),
         (PauseType::Liquidation, "liquidation"),
-    ];
-
-    for (pause_type, operation) in pause_types {
+    ] {
         // Pause the specific operation
         client.set_pause(&admin, &pause_type, &true);
 
