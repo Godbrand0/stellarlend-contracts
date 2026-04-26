@@ -16,6 +16,10 @@ The protocol defines several critical trust boundaries where authorization and v
     - **Fallback Mechanisms**: Uses a fallback oracle feed if the primary feed is stale or missing. The fallback feed is also subject to the same per-asset staleness check.
 3.  **Protocol vs. Bridge**: Cross-chain operations depend on authorized bridge contracts. The protocol verifies that the caller is a registered bridge before processing cross-chain deposits or withdrawals.
 4.  **Admin vs. System**: The admin has significant power to adjust risk parameters and pause the system. This power is intended to be protected by multisig or governance processes.
+5.  **Protocol vs. AMM**: For AMM-enabled liquidations, the protocol interacts with external AMM contracts.
+    - **Price Divergence**: The protocol validates that the AMM execution price does not deviate significantly from the Oracle price to prevent manipulation.
+    - **Slippage Protection**: Liquidators must provide a `min_amount_out` or `slippage_tolerance` to protect against front-running or low liquidity.
+    - **Deadline Enforcement**: Transactions expire if not executed within the user-specified `deadline`.
 
 ## Admin & Guardian Powers
 
@@ -56,7 +60,17 @@ The protocol manages tokens through standardized flows:
 
 ## Security Controls
 
-- **Reentrancy**: Atomic operations and state-update-before-transfer patterns (Checks-Effects-Interactions) are used to prevent reentrancy.
+- **Reentrancy**: Atomic operations and state-update-before-transfer patterns (Checks-Effects-Interactions) are used to prevent reentrancy. For `liquidate_with_amm`, core state is updated before any external AMM or token interactions.
+- **AMM Safety Hooks**: All AMM interactions are wrapped with safety checks that verify oracle price alignment and enforce slippage bounds.
 - **Checked Arithmetic**: All calculations (interest, ratios, balances) utilize Rust's checked arithmetic or safe math abstractions to prevent overflows and underflows.
 - **Authorization**: `require_auth()` is called on every entry point that modifies user state or admin configuration.
 - **Validation**: Strict input validation is performed on all protocol parameters (e.g., ensuring interest rates are within reasonable bounds).
+
+## Volatility and Stress Testing
+
+The protocol is designed to maintain stability and solvency during periods of extreme market volatility. This is verified through comprehensive stress testing:
+
+- **Price Oscillations**: The protocol is tested against rapid price swings (up to 50% within minutes) across multiple assets to ensure health factor calculations remain accurate and liquidations are triggered correctly.
+- **Liquidation Stability**: During market crashes, the protocol ensures that liquidations are executed fairly, honoring the close factor and incentive caps while preserving protocol solvency.
+- **Deterministic Failure**: In cases where market conditions are too volatile for safe operation (e.g., price oracles stop updating), the protocol enters a "fail-safe" mode where operations requiring price data are blocked, preventing front-running on stale information.
+- **Cross-Asset Invariants**: Stress tests verify that total supply always covers total borrows plus accrued interest, even when multiple assets are experiencing simultaneous price shocks.

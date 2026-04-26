@@ -168,11 +168,11 @@ pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AdminError> {
 /// Only the super admin is authorized to manage roles.
 pub fn grant_role(
     env: &Env,
-    claimant: &Address,
+    caller: &Address,
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {
-    require_admin(env, &caller)?;
+    require_admin(env, caller)?;
 
     let key = AdminDataKey::Role(role.clone(), account.clone());
     env.storage().persistent().set(&key, &true);
@@ -210,11 +210,11 @@ pub fn grant_role(
 /// Only the super admin is authorized to manage roles.
 pub fn revoke_role(
     env: &Env,
-    claimant: &Address,
+    caller: &Address,
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {
-    require_admin(env, &caller)?;
+    require_admin(env, caller)?;
 
     let key = AdminDataKey::Role(role.clone(), account.clone());
     env.storage().persistent().remove(&key);
