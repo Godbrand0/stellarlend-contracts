@@ -4,11 +4,9 @@ use rounding_strategy::{
     calculate_interest_with_rounding, RoundingMode, SECONDS_PER_YEAR, 
     BASIS_POINTS_SCALE, InterestCalcResult,
 };
-
 // ════════════════════════════════════════════════════════════════
 // UPDATED: Interest Calculation with Rounding Strategy
 // ════════════════════════════════════════════════════════════════
-
 /// Calculate interest with rounding drift protection
 ///
 /// # Security
@@ -22,11 +20,9 @@ pub fn calculate_interest(env: &Env, debt_position: &DebtPosition) -> Result<i12
     } else {
         return Ok(0); // No time has passed
     };
-
     if debt_position.borrowed_amount == 0 || elapsed == 0 {
         return Ok(0);
     }
-
     // Use banker's rounding for better long-horizon behavior
     let result = calculate_interest_with_rounding(
         debt_position.borrowed_amount,
@@ -40,10 +36,8 @@ pub fn calculate_interest(env: &Env, debt_position: &DebtPosition) -> Result<i12
     if result.interest < 0 {
         return Err(BorrowError::Overflow);
     }
-
     Ok(result.interest)
 }
-
 /// Get user's debt with interest accrual (view function)
 ///
 /// # Security
@@ -60,7 +54,6 @@ pub fn get_user_debt(env: &Env, user: &Address) -> DebtPosition {
             last_update: env.ledger().timestamp(),
             asset: Address::generate(env),
         });
-
     // Accrue interest
     match calculate_interest(env, &position) {
         Ok(accrued) => {
@@ -72,6 +65,5 @@ pub fn get_user_debt(env: &Env, user: &Address) -> DebtPosition {
             position.interest_accrued = i128::MAX;
         }
     }
-
     position
 }

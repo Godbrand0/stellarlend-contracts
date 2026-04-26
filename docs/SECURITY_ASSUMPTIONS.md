@@ -12,7 +12,7 @@ The protocol defines several critical trust boundaries where authorization and v
 2.  **Protocol vs. Oracle**: The protocol trusts designated Oracle contracts to provide price feeds. However, it implements safeguards:
     - **Price Validation**: Checks for stale or outlier prices.
     - **Fallback Mechanisms**: Uses cached prices if the primary feed is unavailable.
-3.  **Protocol vs. Bridge**: Cross-chain operations depend on authorized bridge contracts. The protocol verifies that the caller is a registered bridge before processing cross-chain deposits or withdrawals.
+3.  **Protocol vs. Bridge**: Cross-chain operations depend on authorized bridge contracts. The protocol verifies that the caller is a registered bridge before processing cross-chain deposits or withdrawals. For the dedicated bridge registry, outbound withdrawals are replay-resistant only when relayers submit the canonical 32-byte `message_id` derived from the source-chain event. The contract rejects reused message IDs on-chain, but operators still trust relayers to derive IDs and validate `network_id` correctly.
 4.  **Admin vs. System**: The admin has significant power to adjust risk parameters and pause the system. This power is intended to be protected by multisig or governance processes.
 
 ## Admin & Guardian Powers
