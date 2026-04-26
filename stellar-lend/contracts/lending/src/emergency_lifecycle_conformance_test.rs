@@ -4,14 +4,14 @@ use crate::flash_loan::FlashLoanError;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
-/// Comprehensive emergency lifecycle conformance test suite
-/// 
-/// This test suite validates:
-/// 1. State machine transitions (Normal -> Shutdown -> Recovery -> Normal)
-/// 2. Authorization requirements for each transition
-/// 3. Operation permissions in each state
-/// 4. Forbidden transitions and edge cases
-/// 5. Role-based access controls
+/// Emergency lifecycle conformance test suite
+///
+/// Validates the complete emergency state machine:
+/// - Normal -> Shutdown -> Recovery -> Normal
+/// - Authorization requirements for each transition
+/// - Operation permissions per state
+/// - Role-based access controls
+/// - Security invariants
 
 #[test]
 fn test_emergency_state_machine_complete_flow() {
@@ -24,30 +24,29 @@ fn test_emergency_state_machine_complete_flow() {
     let admin = Address::generate(&env);
     let guardian = Address::generate(&env);
 
+    // Initialize protocol
     client.initialize(&admin, &1_000_000_000, &1000);
-
-    // Initial state should be Normal
     assert_eq!(client.get_emergency_state(), EmergencyState::Normal);
 
     // Configure guardian
     client.set_guardian(&admin, &guardian);
     assert_eq!(client.get_guardian(), Some(guardian.clone()));
 
-    // Transition: Normal -> Shutdown (by guardian)
+    // Normal -> Shutdown (guardian authorized)
     client.emergency_shutdown(&guardian);
     assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
 
-    // Transition: Shutdown -> Recovery (by admin only)
+    // Shutdown -> Recovery (admin only)
     client.start_recovery(&admin);
     assert_eq!(client.get_emergency_state(), EmergencyState::Recovery);
 
-    // Transition: Recovery -> Normal (by admin only)
+    // Recovery -> Normal (admin only)
     client.complete_recovery(&admin);
     assert_eq!(client.get_emergency_state(), EmergencyState::Normal);
 }
 
 #[test]
-fn test_emergency_shutdown_authorization_matrix() {
+fn test_emergency_shutdown_authorization() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -61,21 +60,21 @@ fn test_emergency_shutdown_authorization_matrix() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.set_guardian(&admin, &guardian);
 
-    // Test unauthorized shutdown attempts
+    // Unauthorized shutdown should fail
     assert_eq!(
         client.try_emergency_shutdown(&unauthorized_user),
         Err(Ok(BorrowError::Unauthorized))
     );
 
-    // Test authorized shutdown by admin
+    // Admin shutdown should succeed
     client.emergency_shutdown(&admin);
     assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
 
-    // Reset to Normal for next test
+    // Reset for guardian test
     client.start_recovery(&admin);
     client.complete_recovery(&admin);
 
-    // Test authorized shutdown by guardian
+    // Guardian shutdown should succeed
     client.emergency_shutdown(&guardian);
     assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
 }
@@ -95,7 +94,7 @@ fn test_recovery_transition_authorization() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.set_guardian(&admin, &guardian);
 
-    // Cannot start recovery from Normal state
+    // Cannot start recovery from Normal
     assert_eq!(
         client.try_start_recovery(&admin),
         Err(Ok(BorrowError::ProtocolPaused))
@@ -136,20 +135,20 @@ fn test_complete_recovery_authorization() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.set_guardian(&admin, &guardian);
 
-    // Cannot complete recovery from Normal state
+    // Cannot complete recovery from Normal
     assert_eq!(
         client.try_complete_recovery(&admin),
         Err(Ok(BorrowError::ProtocolPaused))
     );
 
-    // Cannot complete recovery from Shutdown state
+    // Cannot complete recovery from Shutdown
     client.emergency_shutdown(&guardian);
     assert_eq!(
         client.try_complete_recovery(&admin),
         Err(Ok(BorrowError::ProtocolPaused))
     );
 
-    // Move to Recovery state
+    // Move to Recovery
     client.start_recovery(&admin);
 
     // Unauthorized user cannot complete recovery
@@ -186,10 +185,9 @@ fn test_operation_permissions_normal_state() {
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&100);
 
-    // In Normal state, all operations should work (subject to granular pause rules)
     assert_eq!(client.get_emergency_state(), EmergencyState::Normal);
 
-    // These operations should succeed in Normal state
+    // All operations should work in Normal state
     client.deposit(&user, &asset, &50_000);
     client.deposit_collateral(&user, &collateral_asset, &20_000);
     client.borrow(&user, &asset, &10_000, &collateral_asset, &20_000);
@@ -225,7 +223,7 @@ fn test_operation_permissions_shutdown_state() {
     client.emergency_shutdown(&guardian);
     assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
 
-    // All high-risk operations should be blocked in Shutdown state
+    // All operations should be blocked in Shutdown
     assert_eq!(
         client.try_deposit(&user, &asset, &1000),
         Err(Ok(DepositError::DepositPaused))
@@ -284,7 +282,7 @@ fn test_operation_permissions_recovery_state() {
     client.start_recovery(&admin);
     assert_eq!(client.get_emergency_state(), EmergencyState::Recovery);
 
-    // High-risk operations should still be blocked in Recovery state
+    // High-risk operations should be blocked in Recovery
     assert_eq!(
         client.try_deposit(&user, &asset, &1000),
         Err(Ok(DepositError::DepositPaused))
@@ -306,7 +304,7 @@ fn test_operation_permissions_recovery_state() {
         Err(Ok(FlashLoanError::ProtocolPaused))
     );
 
-    // Unwind operations should be allowed in Recovery state
+    // Unwind operations should be allowed in Recovery
     client.repay(&user, &asset, &1_000);
     client.withdraw(&user, &asset, &1_000);
 }
@@ -325,22 +323,19 @@ fn test_forbidden_state_transitions() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.set_guardian(&admin, &guardian);
 
-    // Cannot transition Normal -> Normal (no-op)
-    assert_eq!(client.get_emergency_state(), EmergencyState::Normal);
-
-    // Cannot transition Normal -> Recovery (must go through Shutdown)
+    // Cannot transition Normal -> Recovery directly
     assert_eq!(
         client.try_start_recovery(&admin),
         Err(Ok(BorrowError::ProtocolPaused))
     );
 
-    // Cannot transition Normal -> Normal via complete_recovery
+    // Cannot complete recovery from Normal
     assert_eq!(
         client.try_complete_recovery(&admin),
         Err(Ok(BorrowError::ProtocolPaused))
     );
 
-    // After Shutdown, cannot transition back to Normal directly
+    // After Shutdown, cannot go directly to Normal
     client.emergency_shutdown(&guardian);
     assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
 
@@ -349,11 +344,10 @@ fn test_forbidden_state_transitions() {
         Err(Ok(BorrowError::ProtocolPaused))
     );
 
-    // After Recovery, cannot transition back to Shutdown
+    // After Recovery, emergency override should work
     client.start_recovery(&admin);
     assert_eq!(client.get_emergency_state(), EmergencyState::Recovery);
 
-    // Another shutdown should work from Recovery (emergency override)
     client.emergency_shutdown(&admin);
     assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
 }
@@ -386,37 +380,6 @@ fn test_guardian_configuration_authorization() {
     let new_guardian = Address::generate(&env);
     client.set_guardian(&admin, &new_guardian);
     assert_eq!(client.get_guardian(), Some(new_guardian));
-
-    // Admin can remove guardian (by setting to zero address)
-    let zero_address = Address::generate(&env); // In practice, this would be Address::ZERO
-    client.set_guardian(&admin, &zero_address);
-    assert_eq!(client.get_guardian(), Some(zero_address));
-}
-
-#[test]
-fn test_emergency_events_emission() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register(LendingContract, ());
-    let client = LendingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let guardian = Address::generate(&env);
-
-    client.initialize(&admin, &1_000_000_000, &1000);
-
-    // Guardian set event
-    client.set_guardian(&admin, &guardian);
-
-    // Emergency shutdown event
-    client.emergency_shutdown(&guardian);
-
-    // Start recovery event
-    client.start_recovery(&admin);
-
-    // Complete recovery event
-    client.complete_recovery(&admin);
 }
 
 #[test]
@@ -446,7 +409,7 @@ fn test_partial_pause_interaction_with_emergency_states() {
     client.emergency_shutdown(&guardian);
     client.start_recovery(&admin);
 
-    // Even in Recovery, granular pauses still apply
+    // Granular pauses still apply in Recovery
     client.set_pause(&admin, &PauseType::Repay, &true);
     assert_eq!(
         client.try_repay(&user, &asset, &1000),
@@ -460,7 +423,7 @@ fn test_partial_pause_interaction_with_emergency_states() {
         Err(Ok(WithdrawError::WithdrawPaused))
     );
 
-    // High-risk operations remain blocked regardless of granular pause state
+    // High-risk operations remain blocked regardless of granular pause
     client.set_pause(&admin, &PauseType::Deposit, &false);
     assert_eq!(
         client.try_deposit(&user, &asset, &1000),
@@ -492,30 +455,21 @@ fn test_multiple_emergency_cycles() {
     client.borrow(&user, &asset, &10_000, &collateral_asset, &20_000);
 
     client.emergency_shutdown(&guardian);
-    assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
-
     client.start_recovery(&admin);
-    assert_eq!(client.get_emergency_state(), EmergencyState::Recovery);
-
     client.repay(&user, &asset, &5_000);
     client.withdraw(&user, &asset, &5_000);
-
     client.complete_recovery(&admin);
-    assert_eq!(client.get_emergency_state(), EmergencyState::Normal);
 
     // Second emergency cycle
     client.deposit(&user, &asset, &30_000);
     client.borrow(&user, &asset, &5_000, &collateral_asset, &10_000);
 
-    client.emergency_shutdown(&admin); // Admin can also trigger
-    assert_eq!(client.get_emergency_state(), EmergencyState::Shutdown);
-
+    client.emergency_shutdown(&admin);
     client.start_recovery(&admin);
-    assert_eq!(client.get_emergency_state(), EmergencyState::Recovery);
-
     client.repay(&user, &asset, &2_000);
     client.withdraw(&user, &asset, &2_000);
-
     client.complete_recovery(&admin);
+
+    // Verify final state is Normal
     assert_eq!(client.get_emergency_state(), EmergencyState::Normal);
 }

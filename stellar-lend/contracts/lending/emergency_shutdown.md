@@ -67,43 +67,29 @@ This document describes the contracts-only emergency lifecycle implemented in th
 | Shutdown → Normal | None | Forbidden |
 | Recovery → Shutdown | Admin, Guardian | Emergency override |
 
-## Test Coverage Added
+## Test Coverage
 
-`src/emergency_shutdown_test.rs` covers:
-- unauthorized shutdown attempts,
-- guardian and admin authorized transitions,
-- shutdown blocking of high-risk operations,
-- controlled recovery allowing unwind only,
-- transition edge cases,
-- partial shutdown controls during recovery.
+`src/emergency_shutdown_test.rs` covers basic emergency functionality:
+- Authorization validation for shutdown triggers
+- State transition flow testing
+- Operation blocking in emergency states
+- Recovery mode unwind operations
+- Edge cases and partial pause interactions
 
-`src/emergency_lifecycle_conformance_test.rs` provides comprehensive conformance testing:
-- Complete state machine flow validation
-- Authorization matrix enforcement
-- Operation permission verification per state
+`src/emergency_lifecycle_conformance_test.rs` provides comprehensive conformance validation:
+- Complete state machine flow (Normal → Shutdown → Recovery → Normal)
+- Authorization matrix enforcement (admin vs guardian roles)
+- Operation permission validation per state
 - Forbidden transition testing
 - Role-based access control validation
-- Event emission verification
 - Multiple emergency cycle testing
-- Granular pause interaction testing
+- Granular pause interaction with emergency states
 
 ## Security Invariants
 
-1. **State Machine Integrity**: Emergency state transitions follow strict order and authorization
-2. **Operation Boundaries**: High-risk operations are blocked in both Shutdown and Recovery states
-3. **Role Separation**: Guardian can trigger shutdown but only admin can manage recovery
-4. **Recovery Safety**: Recovery mode only allows position unwinding, not new risk creation
-5. **Pause Layering**: Granular pause controls remain effective during emergency states
-6. **Event Auditing**: All state transitions emit events for off-chain monitoring
-
-## Conformance Test Results
-
-The emergency lifecycle conformance test suite validates:
-- ✅ All state transitions work as specified
-- ✅ Authorization requirements are enforced
-- ✅ Operation permissions match the policy matrix
-- ✅ Forbidden transitions are properly rejected
-- ✅ Role-based access controls are enforced
-- ✅ Events are emitted for all transitions
-- ✅ Multiple emergency cycles work correctly
-- ✅ Granular pauses interact properly with emergency states
+1. **State Machine Integrity**: Emergency transitions follow strict order and authorization
+2. **Operation Boundaries**: High-risk operations blocked in Shutdown and Recovery states
+3. **Role Separation**: Guardian can shutdown, only admin can manage recovery
+4. **Recovery Safety**: Recovery mode allows unwind operations only
+5. **Pause Layering**: Granular controls remain effective during emergency states
+6. **Event Auditing**: All state transitions emit events for monitoring
