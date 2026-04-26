@@ -9,6 +9,18 @@ use soroban_sdk::{
     vec, Address, Env, Symbol, TryFromVal,
 };
 
+fn last_event_topic(env: &Env) -> Symbol {
+    let all = env.events().all();
+    let last = all.events().last().expect("no events emitted");
+    match &last.body {
+        xdr::ContractEventBody::V0(body) => {
+            let val: Val = Val::try_from_val(env, &body.topics[0]).unwrap();
+            Symbol::try_from_val(env, &val).unwrap()
+        }
+        _ => panic!("unexpected event body variant"),
+    }
+}
+
 #[test]
 fn test_pause_borrow_granular() {
     let env = Env::default();
@@ -802,7 +814,6 @@ fn test_full_emergency_lifecycle_events() {
     client.initialize(&admin, &1_000_000_000, &1000);
 
     // Step 1: Shutdown
-    // Read events immediately – no other client call may intervene.
     client.emergency_shutdown(&admin);
     {
         let events = env.events().all();
@@ -1212,7 +1223,7 @@ fn test_comprehensive_pause_state_matrix() {
     client.initialize_withdraw_settings(&100);
 
     // Matrix: Test each pause flag individually
-    let pause_types = vec![
+    let pause_types: [(PauseType, &str); 5] = [
         (PauseType::Deposit, "deposit"),
         (PauseType::Borrow, "borrow"),
         (PauseType::Repay, "repay"),

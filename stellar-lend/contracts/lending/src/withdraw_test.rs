@@ -2,8 +2,20 @@ use super::*;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
-    Address, Env, FromVal, Symbol,
+    xdr, Address, Env, Symbol, TryFromVal, Val,
 };
+
+fn last_event_topic(env: &Env) -> Symbol {
+    let all = env.events().all();
+    let last = all.events().last().expect("no events emitted");
+    match &last.body {
+        xdr::ContractEventBody::V0(body) => {
+            let val: Val = Val::try_from_val(env, &body.topics[0]).unwrap();
+            Symbol::try_from_val(env, &val).unwrap()
+        }
+        _ => panic!("unexpected event body variant"),
+    }
+}
 
 /// Helper: register contract and return client
 fn setup_env() -> (Env, LendingContractClient<'static>) {
