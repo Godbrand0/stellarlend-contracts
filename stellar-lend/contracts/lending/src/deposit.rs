@@ -2,17 +2,7 @@ use crate::pause::{self, PauseType};
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env};
 
 /// Errors that can occur during deposit operations
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum DepositError {
-    InvalidAmount = 1,
-    DepositPaused = 2,
-    Overflow = 3,
-    AssetNotSupported = 4,
-    ExceedsDepositCap = 5,
-    Unauthorized = 6,
-}
+pub use crate::errors::DepositError;
 
 /// Storage keys for deposit-related data
 #[contracttype]
