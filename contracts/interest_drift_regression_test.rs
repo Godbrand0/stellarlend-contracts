@@ -203,7 +203,6 @@ mod interest_drift_regression_tests {
         // 1 * 0.05 = 0.05, rounds to 0
         assert_eq!(result.interest, 0);
     }
-
     /// ✅ Test: High interest rates don't cause unexpected drift
     #[test]
     fn test_high_rate_long_horizon() {
