@@ -5,6 +5,42 @@
 
 ---
 
+## Liquidation Invariant Guarantees (Issue: Add explicit invariant tests for liquidation close-factor and incentive bounds)
+
+The following invariants are now proven by the `liquidation_invariant_test` suite (29 tests).
+
+### Liquidation Engine Fixes
+
+**Facade routing fix (`lib.rs`)**: `LendingContract::liquidate` previously called `borrow::liquidate_position` (a simplified implementation with no close-factor cap, no incentive bonus, and no health factor check). It now calls `liquidate::liquidate_position` — the full implementation that enforces all protocol invariants.
+
+**Bad debt accounting added to `liquidate::liquidate_position`**: The full liquidation path now records shortfalls as bad debt and auto-offsets from the insurance fund, matching the behavior previously only available in the simplified path.
+
+### Proven Invariants
+
+| # | Invariant | Test(s) |
+|---|-----------|---------|
+| I1 | `actual_repaid ≤ total_debt * close_factor_bps / 10_000` | `inv_i1_repaid_clamped_to_close_factor`, `inv_i1_close_factor_sweep` |
+| I2 | `actual_repaid ≤ total_debt` (no over-repayment) | `inv_i2_repaid_never_exceeds_total_debt`, `inv_i2_repaid_never_exceeds_debt_with_interest` |
+| I3 | `seized = repaid * (10_000 + incentive_bps) / 10_000` | `inv_i3_seized_equals_incentive_formula`, `inv_i3_incentive_sweep_linear` |
+| I4 | `seized ≤ collateral_before` (no negative balance) | `inv_i4_collateral_never_negative_high_incentive`, `inv_i4_collateral_non_negative_across_incentive_levels` |
+| I5 | Each liquidation call strictly reduces outstanding debt | `inv_i5_debt_strictly_decreases_each_call`, `inv_i5_debt_monotone_varying_repay_amounts` |
+| I6 | `collateral_after + seized = collateral_before` (conservation) | `inv_i6_collateral_conservation`, `inv_i6_conservation_when_seizure_capped` |
+| I7 | HF ≥ 10_000 → liquidation always rejected | `inv_i7_exactly_healthy_position_rejected`, `inv_i7_healthy_position_rejected_across_param_combinations`, `inv_i7_position_healthy_after_partial_liquidation_rejected` |
+| I8 | Parameter changes correctly gate eligibility | `inv_i8_threshold_change_makes_position_liquidatable`, `inv_i8_threshold_restore_restores_immunity` |
+| I9 | close_factor=100% + repay≥debt → debt=0 | `inv_i9_full_close_clears_debt_exactly`, `inv_i9_full_close_clears_debt_including_interest` |
+| I10 | Seized amount is monotone non-decreasing with incentive_bps | `inv_i10_seized_monotone_with_incentive` |
+| I11 | max_liq = total_debt * close_factor_bps / 10_000 (linear) | `inv_i11_max_liq_linear_with_close_factor`, `inv_i11_max_liq_monotone_with_close_factor` |
+| I12 | Sequential partial liquidations converge to zero debt | `inv_i12_sequential_liquidations_converge_to_zero`, `inv_i12_full_close_factor_single_step_convergence` |
+
+### Security Significance
+
+- **I1 (close-factor cap)**: Prevents a liquidator from extracting more collateral than the protocol allows in a single call. Without this, a liquidator could drain a borrower's entire collateral in one transaction, even when the close factor is set to 50%.
+- **I4 (no free collateral)**: Ensures the contract never transfers collateral it does not hold. Even with a 100% incentive bonus, the seizure is capped at the borrower's available balance.
+- **I7 (healthy position immunity)**: Closes the phantom liquidation attack where a healthy position is liquidated by passing a large `amount` parameter. The health factor gate is enforced before any state change.
+- **I6 (conservation)**: Proves protocol solvency — no collateral is created or destroyed during liquidation. The sum of what the borrower retains and what is seized always equals the pre-liquidation balance.
+
+---
+
 ## Auth Boundary Hardening (Issue: Harden lending entrypoint auth boundaries)
 
 The following changes were made to harden authorization boundaries across all lending entrypoints:

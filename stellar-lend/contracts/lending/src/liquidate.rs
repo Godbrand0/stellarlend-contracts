@@ -245,6 +245,26 @@ pub fn liquidate_position(
         .amount
         .saturating_sub(collateral_to_seize);
 
+    // ── 9b. Bad debt accounting ────────────────────────────────────────────
+    // If collateral_to_seize < repay_amount, the shortfall is bad debt.
+    // Attempt to auto-offset from the insurance fund.
+    if collateral_to_seize < repay_amount {
+        let shortfall = repay_amount - collateral_to_seize;
+        let current_bad_debt = crate::borrow::get_total_bad_debt(env, &debt_asset);
+        let new_bad_debt = current_bad_debt.saturating_add(shortfall);
+
+        let fund_balance = crate::borrow::get_insurance_fund_balance(env, &debt_asset);
+        let (final_bad_debt, final_fund) = if fund_balance > 0 {
+            let offset = fund_balance.min(new_bad_debt);
+            (new_bad_debt - offset, fund_balance - offset)
+        } else {
+            (new_bad_debt, fund_balance)
+        };
+
+        crate::borrow::set_total_bad_debt(env, &debt_asset, final_bad_debt);
+        crate::borrow::set_insurance_fund_balance(env, &debt_asset, final_fund);
+    }
+
     // ── 10. Update global total debt ───────────────────────────────────────
     let current_total = get_total_debt(env);
     let new_total = current_total.saturating_sub(repay_amount);
