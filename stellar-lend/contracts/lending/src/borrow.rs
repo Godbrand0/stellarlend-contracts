@@ -8,7 +8,7 @@
 
 use crate::constants::{
     BPS_SCALE, DEFAULT_CLOSE_FACTOR_BPS, DEFAULT_LIQUIDATION_INCENTIVE_BPS,
-    DEFAULT_LIQUIDATION_THRESHOLD_BPS, MIN_COLLATERAL_RATIO_BPS,
+    DEFAULT_LIQUIDATION_THRESHOLD_BPS,
 };
 use crate::pause::{self, blocks_high_risk_ops, PauseType};
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env, I256};
@@ -36,7 +36,7 @@ pub enum BorrowDataKey {
     BorrowUserCollateral(Address),
     BorrowTotalDebt,
     BorrowDebtCeiling,
-    BorrowMinAmount,
+    BorrowMinAmountPerAsset(Address),
     OracleAddress,
     LiquidationThresholdBps,
     CloseFactor,
@@ -48,16 +48,22 @@ pub enum BorrowDataKey {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DebtPosition {
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub borrowed_amount: i128,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub interest_accrued: i128,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub last_update: u64,
+    /// Schema `v1`: stable getter field for `get_user_debt`.
     pub asset: Address,
 }
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BorrowCollateral {
+    /// Schema `v1`: stable getter field for `get_user_collateral`.
     pub amount: i128,
+    /// Schema `v1`: stable getter field for `get_user_collateral`.
     pub asset: Address,
 }
 
@@ -124,7 +130,7 @@ pub fn borrow(
     }
 
     // Instance storage read (Cheap)
-    let min_borrow = get_min_borrow_amount(env);
+    let min_borrow = get_min_borrow_amount(env, &asset);
     if amount < min_borrow {
         return Err(BorrowError::BelowMinimumBorrow);
     }
@@ -395,7 +401,7 @@ pub fn initialize_borrow_settings(
         .set(&BorrowDataKey::BorrowDebtCeiling, &debt_ceiling);
     env.storage()
         .instance()
-        .set(&BorrowDataKey::BorrowMinAmount, &min_borrow_amount);
+        .set(&BorrowDataKey::BorrowMinAmountPerAsset(asset), &min_borrow_amount);
     Ok(())
 }
 
@@ -425,7 +431,7 @@ pub(crate) fn validate_collateral_ratio(collateral: i128, borrow: i128) -> Resul
 pub fn get_user_debt(env: &Env, user: &Address) -> DebtPosition {
     let mut position = get_debt_position(env, user);
     let accrued = calculate_interest(env, &position);
-    // Intentional saturating add: We use saturating math here instead of checked_add to prevent 
+    // Intentional saturating add: We use saturating math here instead of checked_add to prevent
     // view queries from trapping in extreme edge cases (like a ledger extremely far into the future).
     // Trapping on view functions breaks frontend queries and node telemetry.
     position.interest_accrued = position.interest_accrued.saturating_add(accrued);

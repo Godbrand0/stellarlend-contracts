@@ -299,6 +299,7 @@ For a complete list of entrypoints including AMM, flash loans, bridge, governanc
 
 ## Documentation
 
+- **[Developer Glossary](docs/glossary.md)**: Key protocol terms, numeric scales (BPS, Health Factor), and common pitfalls for integrators
 - **[Protocol Documentation](docs/README.md)**: Comprehensive protocol documentation including modules, admin operations, monitoring, analytics, and upgrade procedures
 - **[Upgrade Authorization](docs/UPGRADE_AUTHORIZATION.md)**: Strict upgrade authorization boundaries, key rotation workflow, and security assumptions
 - **[Storage Layout and Migration](docs/storage.md)**: Detailed documentation of the contract's persistent storage structure, keys, types, and upgrade/migration strategies

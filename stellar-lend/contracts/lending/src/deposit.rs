@@ -29,8 +29,11 @@ pub enum DepositDataKey {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DepositCollateral {
+    /// Schema `v1`: stable getter field for `get_user_collateral_deposit`.
     pub amount: i128,
+    /// Schema `v1`: stable getter field for `get_user_collateral_deposit`.
     pub asset: Address,
+    /// Schema `v1`: stable getter field for `get_user_collateral_deposit`.
     pub last_deposit_time: u64,
 }
 

@@ -6,7 +6,7 @@ use crate::oracle::OracleError;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{
     testutils::{Address as _, Events},
-    xdr, Address, Env, Symbol, TryFromVal, Val, Vec,
+    vec, Address, Env, Symbol, TryFromVal,
 };
 
 fn last_event_topic(env: &Env) -> Symbol {
@@ -182,7 +182,11 @@ fn test_pause_events() {
 
     client.set_pause(&admin, &PauseType::Borrow, &true);
 
-    let topic = last_event_topic(&env);
+    let events = env.events().all();
+    let last_event = events.get(events.len() - 1).unwrap();
+
+    assert_eq!(last_event.0, contract_id);
+    let topic: Symbol = Symbol::try_from_val(&env, &last_event.1.get(0).unwrap()).unwrap();
     assert_eq!(topic, Symbol::new(&env, "pause_event"));
 }
 
@@ -486,7 +490,9 @@ fn test_set_deposit_paused_emits_event() {
 
     client.set_deposit_paused(&true);
 
-    let topic = last_event_topic(&env);
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
     assert_eq!(topic, Symbol::new(&env, "pause_event"));
 
     // get_pause_state must reflect the change.
@@ -505,7 +511,9 @@ fn test_set_withdraw_paused_emits_event() {
 
     client.set_withdraw_paused(&true);
 
-    let topic = last_event_topic(&env);
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
     assert_eq!(topic, Symbol::new(&env, "pause_event"));
 
     assert!(client.get_pause_state(&PauseType::Withdraw));
@@ -659,7 +667,9 @@ fn test_set_guardian_emits_event() {
 
     client.set_guardian(&admin, &guardian);
 
-    let topic = last_event_topic(&env);
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
     assert_eq!(topic, Symbol::new(&env, "guardian_set_event"));
 }
 
@@ -785,7 +795,9 @@ fn test_emergency_shutdown_emits_event() {
 
     client.emergency_shutdown(&admin);
 
-    let topic = last_event_topic(&env);
+    let events = env.events().all();
+    let last = events.get(events.len() - 1).unwrap();
+    let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
     assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
 }
 
@@ -803,15 +815,30 @@ fn test_full_emergency_lifecycle_events() {
 
     // Step 1: Shutdown
     client.emergency_shutdown(&admin);
-    assert_eq!(last_event_topic(&env), Symbol::new(&env, "emergency_state_event"));
+    {
+        let events = env.events().all();
+        let last = events.get(events.len() - 1).unwrap();
+        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+    }
 
     // Step 2: Recovery
     client.start_recovery(&admin);
-    assert_eq!(last_event_topic(&env), Symbol::new(&env, "emergency_state_event"));
+    {
+        let events = env.events().all();
+        let last = events.get(events.len() - 1).unwrap();
+        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+    }
 
     // Step 3: Normal
     client.complete_recovery(&admin);
-    assert_eq!(last_event_topic(&env), Symbol::new(&env, "emergency_state_event"));
+    {
+        let events = env.events().all();
+        let last = events.get(events.len() - 1).unwrap();
+        let topic: Symbol = Symbol::try_from_val(&env, &last.1.get(0).unwrap()).unwrap();
+        assert_eq!(topic, Symbol::new(&env, "emergency_state_event"));
+    }
 
     // Final state verification (separate read call is fine here).
     assert_eq!(client.get_emergency_state(), EmergencyState::Normal);
@@ -1076,7 +1103,7 @@ fn test_oracle_pause_independence() {
 
     // Pause all core operations but not oracle
     client.set_pause(&admin, &PauseType::All, &true);
-    
+
     // Oracle should still work if not paused
     client.update_price_feed(&oracle, &asset, &100_000);
 
@@ -1141,7 +1168,7 @@ fn test_unauthorized_pause_bypass_attempts() {
     let admin = Address::generate(&env);
     let attacker = Address::generate(&env);
     let user = Address::generate(&env);
-    let asset = Address::generate(&env);
+    let _asset = Address::generate(&env);
     let guardian = Address::generate(&env);
 
     client.initialize(&admin, &1_000_000_000, &1000);
