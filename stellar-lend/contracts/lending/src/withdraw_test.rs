@@ -2,14 +2,12 @@ use super::*;
 use crate::withdraw::WithdrawError;
 use soroban_sdk::{
     testutils::{Address as _, Events, Ledger},
-    xdr, Address, Env, FromVal, Symbol, TryFromVal, Val,
+    xdr, Address, Env, Symbol, TryFromVal, Val,
 };
 
-fn last_event_topic(
-    env: &Env,
-    events: &soroban_sdk::testutils::ContractEvents,
-) -> Symbol {
-    let last = events.events().last().expect("no events emitted");
+fn last_event_topic(env: &Env) -> Symbol {
+    let all = env.events().all();
+    let last = all.events().last().expect("no events emitted");
     match &last.body {
         xdr::ContractEventBody::V0(body) => {
             let val: Val = Val::try_from_val(env, &body.topics[0]).unwrap();
@@ -406,7 +404,9 @@ fn test_withdraw_emits_event() {
     client.withdraw(&user, &asset, &20_000);
 
     let events = env.events().all();
-    let topic = last_event_topic(&env, &events);
+    let last_event = events.get(events.len() - 1).unwrap();
+
+    let topic: Symbol = Symbol::from_val(&env, &last_event.1.get(0).unwrap());
     assert_eq!(topic, Symbol::new(&env, "withdraw_event"));
 }
 
