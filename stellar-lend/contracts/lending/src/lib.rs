@@ -120,6 +120,7 @@ mod upgrade_migration_safety_test;
 // mod stress_test;
 #[cfg(test)]
 mod storage_collision_test;
+mod withdraw_boundary_test;
 
 #[contract]
 pub struct LendingContract;

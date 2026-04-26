@@ -188,6 +188,45 @@ Example:
 - **Result**: Transaction fails
 - **Reason**: Remaining collateral ($15k) × 0.75 = $11.25k < $14k debt
 
+### Withdrawal Boundary Constraints
+
+The protocol enforces deterministic withdrawal limits precisely at the collateral ratio boundaries. These boundaries ensure that no withdrawal can leave a position undercollateralized or liquidatable.
+
+#### Deterministic Edge Cases
+
+1. **Exact Capacity Withdrawal**
+   - **Position**: $100 Collateral (80% LTV), $80 Debt.
+   - **Boundary**: Weighted Collateral ($80) == Debt ($80).
+   - **Constraint**: Any withdrawal of > 0 units will fail.
+   - **Rounding**: Even a withdrawal of 1 atomic unit (10^-7) is rejected if it drops the weighted value below the debt.
+
+2. **Multi-Asset Weighted Boundary**
+   - **Position**: $50 Asset A (80% LTV) + $50 Asset B (60% LTV). Total Weighted = $40 + $30 = $70.
+   - **Debt**: $70.
+   - **Constraint**: Withdrawal from Asset A is blocked. Withdrawal from Asset B is blocked.
+   - **Buffer**: Repaying $1 of debt allows withdrawing up to $1 / 0.8 = $1.25 of Asset A.
+
+3. **Price Move Boundary**
+   - **Position**: 1 ETH @ $2000 (80% LTV). Weighted = $1600. Debt = $1500.
+   - **Event**: ETH price drops to $1875.
+   - **New Weighted**: $1875 * 0.8 = $1500.
+   - **Result**: Position hits the withdrawal boundary. All further withdrawals are blocked until debt is repaid or price recovers.
+
+### Security Notes
+
+1. **Prevention of Undercollateralized Withdrawals**
+   - Every withdrawal operation triggers a full `health_factor` re-calculation using real-time oracle prices.
+   - The operation is atomic: if the post-withdrawal `health_factor` is < 1.0 (10000), the entire transaction reverts.
+   - This prevents users from "gaming" rounding errors or price lags to extract more value than their collateral supports.
+
+2. **Oracle Reliability**
+   - Withdrawal constraints are only as strong as the price feed.
+   - If an oracle update is stale or missing, the protocol enters a fail-safe mode where withdrawals (and borrows) are blocked to prevent state corruption.
+
+3. **Rounding Direction**
+   - To maintain protocol safety, the system always rounds **down** for collateral value and **up** for debt value.
+   - This conservative rounding ensures that at the boundary, the protocol always errs on the side of over-collateralization.
+
 ## Invariants
 
 ### System-Wide Invariants

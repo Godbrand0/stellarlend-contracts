@@ -11,7 +11,7 @@
 //! - Read-only queries
 
 use crate::cross_asset::{AssetParams, CrossAssetError};
-use crate::{HelloContract, HelloContractClient};
+use crate::{LendingContract, LendingContractClient};
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
 
 // ============================================================================
@@ -54,11 +54,11 @@ fn token_config(env: &Env, addr: &Address) -> AssetParams {
 }
 
 /// Set up env + contract + admin, initialize both modules.
-fn setup() -> (Env, HelloContractClient<'static>, Address) {
+fn setup() -> (Env, LendingContractClient<'static>, Address) {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register(HelloContract, ());
-    let client = HelloContractClient::new(&env, &contract_id);
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
     client.initialize(&admin);
     client.initialize_ca(&admin);
@@ -73,8 +73,8 @@ fn setup() -> (Env, HelloContractClient<'static>, Address) {
 fn test_initialize_ca_success() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register(HelloContract, ());
-    let client = HelloContractClient::new(&env, &contract_id);
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
     client.initialize(&admin);
     // Should succeed first time
