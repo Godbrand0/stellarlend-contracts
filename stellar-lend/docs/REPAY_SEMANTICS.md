@@ -98,14 +98,14 @@ Each asset key is independent in the `debt_balances` map.
 
 ## 3. Comparison table
 
-| Dimension               | `borrow::repay`              | `cross_asset::repay_asset`    |
-|-------------------------|------------------------------|-------------------------------|
-| Overpay handling        | Error (`RepayAmountTooHigh`) | Silent clamp to balance       |
-| Interest accrual        | Yes (ceiling-rounded)        | No                            |
-| Repay ordering          | Interest first, then principal | N/A                          |
-| Dust risk               | None (ceiling rounding)      | None (clamp floors at 0)      |
-| Recovery-mode repay     | Allowed                      | Allowed                       |
-| Asset isolation         | Single asset per position    | Per-asset in a shared map     |
+| Dimension               | `borrow::repay`           | `cross_asset::repay_asset`    |
+|-------------------------|---------------------------|-------------------------------|
+| Overpay handling        | Error (`RepayAmountTooHigh`) | Silent clamp to balance     |
+| Interest accrual        | Yes (ceiling-rounded)     | No                            |
+| Repay ordering          | Interest first, then principal | N/A                      |
+| Dust risk               | None (ceiling rounding)   | None (clamp floors at 0)      |
+| Recovery-mode repay     | Allowed                   | Allowed                       |
+| Asset isolation         | Single asset per position | Per-asset in a shared map     |
 
 ---
 

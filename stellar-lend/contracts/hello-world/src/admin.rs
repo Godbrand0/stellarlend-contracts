@@ -63,11 +63,28 @@ pub fn get_pending_admin(env: &Env) -> Option<Address> {
     env.storage().persistent().get(&AdminDataKey::PendingAdmin)
 }
 
-/// Initialize the super admin. Can only be called once when no admin exists.
-/// Used during contract bootstrap.
-pub fn set_admin(env: &Env, new_admin: Address) -> Result<(), AdminError> {
-    if has_admin(env) {
-        return Err(AdminError::AdminAlreadySet);
+/// Initialize super admin. Can only be called once or by existing admin.
+///
+/// # Authorization
+///
+/// - If no admin exists: Any caller can initialize (bootstrap mode)
+/// - If admin exists: Only existing admin can modify (must pass caller parameter)
+/// - Uses address comparison for verification, not require_auth() (bootstrap scenario)
+///
+/// # Arguments
+/// * `env` - The Soroban environment
+/// * `new_admin` - The new admin address
+/// * `caller` - The caller address (must be the current admin if one exists)
+pub fn set_admin(env: &Env, new_admin: Address, caller: Option<Address>) -> Result<(), AdminError> {
+    if let Some(current_admin) = get_admin(env) {
+        if let Some(ref c) = caller {
+            if *c != current_admin {
+                return Err(AdminError::Unauthorized);
+            }
+            c.require_auth();
+        } else {
+            return Err(AdminError::Unauthorized);
+        }
     }
 
     env.storage()
@@ -137,18 +154,14 @@ pub fn accept_admin(env: &Env, claimant: &Address) -> Result<(), AdminError> {
 ///
 /// Uses both explicit address check and Soroban `require_auth()`.
 /// This ensures security in production and correctness in mock tests.
-pub fn require_admin(env: &Env, claimant: &Address) -> Result<(), AdminError> {
+pub fn require_admin(env: &Env, caller: &Address) -> Result<(), AdminError> {
     let admin = get_admin(env).ok_or(AdminError::Unauthorized)?;
-    if admin != *claimant {
+    if admin != *caller {
         return Err(AdminError::Unauthorized);
     }
-    admin.require_auth();
+    caller.require_auth();
     Ok(())
 }
-
-// ============================================================================
-// Role Registry & Management
-// ============================================================================
 
 /// Grant a specific role to an address.
 ///
@@ -159,7 +172,7 @@ pub fn grant_role(
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {
-    require_admin(env, claimant)?;
+    require_admin(env, &caller)?;
 
     let key = AdminDataKey::Role(role.clone(), account.clone());
     env.storage().persistent().set(&key, &true);
@@ -201,7 +214,7 @@ pub fn revoke_role(
     role: Symbol,
     account: Address,
 ) -> Result<(), AdminError> {
-    require_admin(env, claimant)?;
+    require_admin(env, &caller)?;
 
     let key = AdminDataKey::Role(role.clone(), account.clone());
     env.storage().persistent().remove(&key);
