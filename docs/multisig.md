@@ -55,6 +55,15 @@ Replaces the multisig admin set and threshold atomically.
 
 **Errors:** `Unauthorized`, `InvalidMultisigConfig`
 
+Rotation guidance:
+
+- Use `ms_set_admins(...)` to replace the full signer set in one governance action when rotating
+  the humans or devices behind a multisig-controlled admin role.
+- Avoid "remove one signer now, add the replacement later" workflows for governance signers. The
+  multisig contract already supports atomic replacement, which is safer and easier to audit.
+- If this multisig is the stored upgrade `admin`, finish multisig signer rotation here before
+  rotating any separate upgrade approver keys in `docs/UPGRADE_AUTHORIZATION.md`.
+
 ---
 
 ### `ms_propose_set_min_cr(env, proposer, new_ratio)`
