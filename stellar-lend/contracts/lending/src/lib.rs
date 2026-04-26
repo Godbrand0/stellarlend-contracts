@@ -111,6 +111,8 @@ mod math_safety_test;
 #[cfg(test)]
 mod race_tests;
 #[cfg(test)]
+mod proposal_race_test;
+#[cfg(test)]
 mod upgrade_migration_safety_test;
 #[cfg(test)]
 mod upgrade_test;
