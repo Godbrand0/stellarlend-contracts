@@ -117,6 +117,8 @@ mod multi_user_contention_test;
 #[cfg(test)]
 mod multi_user_contention_test;
 #[cfg(test)]
+mod health_factor_monotonicity_test;
+#[cfg(test)]
 mod stress_test;
 #[cfg(test)]
 mod view_serialization_test;
