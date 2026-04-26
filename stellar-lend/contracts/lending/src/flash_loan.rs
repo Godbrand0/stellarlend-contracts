@@ -3,18 +3,7 @@ use soroban_sdk::{contracterror, contracttype, token, Address, Bytes, Env, IntoV
 use crate::constants::{BPS_SCALE, MAX_FLASH_LOAN_FEE_BPS};
 
 /// Errors that can occur during flash loan operations
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum FlashLoanError {
-    InvalidAmount = 1,
-    InsufficientRepayment = 2,
-    Unauthorized = 3,
-    InvalidFee = 4,
-    CallbackFailed = 5,
-    Reentrancy = 6,
-    ProtocolPaused = 7,
-}
+pub use crate::errors::FlashLoanError;
 
 /// Storage keys for flash loan data
 #[contracttype]

@@ -50,23 +50,7 @@ use crate::borrow::get_admin;
 ///
 /// # Security
 /// All error variants are non-sensitive; they do not leak internal state.
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum OracleError {
-    /// Price is zero or negative.
-    InvalidPrice = 1,
-    /// Price feed is older than `max_staleness_seconds`.
-    StalePrice = 2,
-    /// Caller is not the admin or the registered oracle for this slot.
-    Unauthorized = 3,
-    /// No price feed available (primary missing and no fallback configured).
-    NoPriceFeed = 4,
-    /// Oracle address is invalid (e.g. zero or self-referential).
-    InvalidOracle = 5,
-    /// Oracle updates are paused.
-    OraclePaused = 6,
-}
+pub use crate::errors::OracleError;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Storage types
@@ -332,7 +316,9 @@ pub fn update_price_feed(
             .set(&OracleKey::FallbackFeed(asset), &feed);
     } else {
         // Admin or primary oracle writes to primary slot
-        env.storage().persistent().set(&OracleKey::PrimaryFeed(asset), &feed);
+        env.storage()
+            .persistent()
+            .set(&OracleKey::PrimaryFeed(asset), &feed);
     }
 
     Ok(())
