@@ -122,6 +122,8 @@ mod upgrade_test;
 #[cfg(test)]
 mod bad_debt_test;
 #[cfg(test)]
+mod liquidate_test;
+#[cfg(test)]
 mod liquidation_boundary_test;
 #[cfg(test)]
 mod multi_user_contention_test;
@@ -300,8 +302,10 @@ impl LendingContract {
             return Err(BorrowError::ProtocolPaused);
         }
 
-        // Point to the internal liquidation logic in the borrow module
-        borrow::liquidate_position(
+        // Delegate to the full liquidation implementation which enforces
+        // close-factor capping, incentive-based collateral seizure, health
+        // factor eligibility checks, and post-liquidation event emission.
+        liquidate::liquidate_position(
             &env,
             liquidator,
             borrower,
