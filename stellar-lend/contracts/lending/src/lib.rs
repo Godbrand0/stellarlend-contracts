@@ -679,6 +679,18 @@ impl LendingContract {
     ) -> DepositCollateral {
         get_deposit_collateral_impl(&env, &user, &asset)
     }
+    /// Set protocol admin (admin only)
+    pub fn set_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), BorrowError> {
+        ensure_admin(&env, &current_admin)?;
+        set_protocol_admin(&env, &new_admin);
+        
+        // Log governance action
+        let payload = payload_address(&env, new_admin);
+        log_governance_action(&env, GovernanceAction::SetAdmin, current_admin, payload);
+        
+        Ok(())
+    }
+
     /// Get protocol admin
     #[cfg(not(tarpaulin_include))]
     pub fn get_admin(env: Env) -> Option<Address> {
