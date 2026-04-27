@@ -100,6 +100,8 @@ mod flash_adversarial_test;
 mod flash_loan_test;
 // mod pause_test; // temporarily disabled - pre-existing ContractEvents API mismatch
 #[cfg(test)]
+mod pause_matrix_test;
+#[cfg(test)]
 mod read_only_test;
 #[cfg(test)]
 mod token_receiver_test;
