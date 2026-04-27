@@ -87,6 +87,7 @@ Key admin entrypoints (see contract for full list):
 
 ## Cross-Chain Bridge
 - Register networks and fees, and use `bridge_deposit/bridge_withdraw` to move balances with transparent fees
+- `bridge_withdraw` is replay-resistant via a required unique `message_id`; relayers must derive it from canonical source-chain event data and verify the emitted `network_id` before moving funds
 
 ## Social Recovery & Multisig
 - Set guardians per-user and execute timelocked recoveries

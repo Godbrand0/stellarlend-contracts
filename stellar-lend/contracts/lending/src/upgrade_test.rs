@@ -1,4 +1,7 @@
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, Error, InvokeError};
+use soroban_sdk::{
+    testutils::{Address as _, Events as _},
+    Address, BytesN, Env, Error, InvokeError, Symbol, TryFromVal,
+};
 
 use crate::{LendingContract, LendingContractClient, UpgradeError, UpgradeStage};
 
@@ -67,6 +70,22 @@ fn test_add_approver_admin_only() {
     assert_contract_error(denied, UpgradeError::NotAuthorized);
 
     client.upgrade_add_approver(&admin, &approver);
+}
+
+#[test]
+fn test_remove_approver_admin_only() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 1);
+    let approver = Address::generate(&env);
+    let stranger = Address::generate(&env);
+
+    client.upgrade_add_approver(&admin, &approver);
+
+    assert_contract_error(
+        client.try_upgrade_remove_approver(&stranger, &approver),
+        UpgradeError::NotAuthorized,
+    );
 }
 
 #[test]
@@ -248,6 +267,93 @@ fn test_upgrade_rotation_revokes_old_approver() {
     );
     client.upgrade_execute(&new_approver, &second_upgrade);
     assert_eq!(client.current_version(), 2);
+}
+
+/// Rotating only part of an approval set must not weaken the threshold or leave
+/// removed signers with residual upgrade power.
+///
+/// # Security
+/// A safe rotation may span multiple transactions. During that window the
+/// contract must preserve the configured threshold exactly and require the
+/// remaining active signer set to satisfy it.
+#[test]
+fn test_partial_rotation_preserves_threshold_and_revokes_removed_signer() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, admin) = setup(&env, 3);
+    let old_approver_a = Address::generate(&env);
+    let old_approver_b = Address::generate(&env);
+    let new_approver_a = Address::generate(&env);
+
+    client.upgrade_add_approver(&admin, &old_approver_a);
+    client.upgrade_add_approver(&admin, &old_approver_b);
+    client.upgrade_add_approver(&admin, &new_approver_a);
+    client.upgrade_remove_approver(&admin, &old_approver_a);
+
+    let proposal_id = client.upgrade_propose(&admin, &hash(&env, 4), &1);
+
+    let count_after_new = client.upgrade_approve(&new_approver_a, &proposal_id);
+    assert_eq!(count_after_new, 2);
+    assert_eq!(
+        client.upgrade_status(&proposal_id).stage,
+        UpgradeStage::Proposed
+    );
+
+    assert_contract_error(
+        client.try_upgrade_approve(&old_approver_a, &proposal_id),
+        UpgradeError::NotAuthorized,
+    );
+    assert_contract_error(
+        client.try_upgrade_execute(&admin, &proposal_id),
+        UpgradeError::InvalidStatus,
+    );
+
+    let count_after_old_b = client.upgrade_approve(&old_approver_b, &proposal_id);
+    assert_eq!(count_after_old_b, 3);
+    assert_eq!(
+        client.upgrade_status(&proposal_id).stage,
+        UpgradeStage::Approved
+    );
+}
+
+#[test]
+fn test_rotation_events_capture_add_and_remove() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let approver = Address::generate(&env);
+
+    client.upgrade_init(&admin, &hash(&env, 1), &1);
+    client.upgrade_add_approver(&admin, &approver);
+    client.upgrade_remove_approver(&admin, &approver);
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 3);
+
+    let add_event = &events[1];
+    assert_eq!(add_event.0, contract_id);
+    let add_topic: Symbol = Symbol::try_from_val(&env, &add_event.1.get(0).unwrap()).unwrap();
+    let add_caller: Address = Address::try_from_val(&env, &add_event.1.get(1).unwrap()).unwrap();
+    let add_approver: Address =
+        Address::try_from_val(&env, &add_event.1.get(2).unwrap()).unwrap();
+    assert_eq!(add_topic, Symbol::new(&env, "up_apadd"));
+    assert_eq!(add_caller, admin);
+    assert_eq!(add_approver, approver);
+
+    let remove_event = &events[2];
+    assert_eq!(remove_event.0, contract_id);
+    let remove_topic: Symbol =
+        Symbol::try_from_val(&env, &remove_event.1.get(0).unwrap()).unwrap();
+    let remove_caller: Address =
+        Address::try_from_val(&env, &remove_event.1.get(1).unwrap()).unwrap();
+    let remove_approver: Address =
+        Address::try_from_val(&env, &remove_event.1.get(2).unwrap()).unwrap();
+    assert_eq!(remove_topic, Symbol::new(&env, "up_aprm"));
+    assert_eq!(remove_caller, admin);
+    assert_eq!(remove_approver, approver);
 }
 
 #[test]
