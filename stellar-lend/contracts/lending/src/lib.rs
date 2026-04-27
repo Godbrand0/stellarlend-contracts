@@ -22,6 +22,11 @@ mod errors;
 mod errors_test;
 
 use errors::{BorrowError, CrossAssetError, DepositError, FlashLoanError, OracleError, WithdrawError};
+use governance_audit::{
+    get_audit_count, get_recent_audit_entries, log_governance_action, GovernanceAction,
+    payload_address, payload_address_bool, payload_address_i128, payload_address_u64,
+    payload_empty, payload_i128, payload_string, payload_two_addresses, payload_two_u64,
+};
 
 use borrow::{
     borrow as borrow_impl, credit_insurance_fund as credit_insurance_impl,
@@ -101,6 +106,8 @@ mod deposit_test;
 #[cfg(test)]
 mod emergency_shutdown_test;
 #[cfg(test)]
+mod governance_audit_test;
+#[cfg(test)]
 mod emergency_lifecycle_conformance_test;
 #[cfg(test)]
 mod flash_adversarial_test;
@@ -156,16 +163,9 @@ mod upgrade_test;
 #[cfg(test)]
 mod zero_amount_semantics_test;
 #[cfg(test)]
-<<<<<<< HEAD
-mod governance_audit_test;
-#[cfg(test)]
-mod liquidation_boundary_test;#[cfg(test)]
-mod multi_user_contention_test;
-=======
 mod guardian_scope_test;
 #[cfg(test)]
 mod liquidation_boundary_test;
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
 #[cfg(test)]
 mod multi_user_contention_test;
 #[cfg(test)]
@@ -203,13 +203,25 @@ impl LendingContract {
     /// Register an asset in the allowlist (admin only).
     pub fn register_asset(env: Env, admin: Address, asset: Address) -> Result<(), BorrowError> {
         ensure_admin(&env, &admin)?;
-        asset_registry::register(&env, &asset)
+        let result = asset_registry::register(&env, &asset);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_address(&env, asset);
+            log_governance_action(&env, GovernanceAction::SetAssetParams, admin, payload);
+        }
+        result
     }
 
     /// Remove an asset from the allowlist (admin only).
     pub fn deregister_asset(env: Env, admin: Address, asset: Address) -> Result<(), BorrowError> {
         ensure_admin(&env, &admin)?;
-        asset_registry::deregister(&env, &asset)
+        let result = asset_registry::deregister(&env, &asset);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_address(&env, asset);
+            log_governance_action(&env, GovernanceAction::SetAssetParams, admin, payload);
+        }
+        result
     }
 
     /// Query whether an asset is registered (read-only).
@@ -462,16 +474,6 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), BorrowError> {
-<<<<<<< HEAD
-        ensure_admin(&env, &caller)?;
-        let result = credit_insurance_impl(&env, &asset, amount);
-        if result.is_ok() {
-            // Log governance action
-            let payload = payload_address_asset_i128(&env, caller, asset, amount);
-            log_governance_action(&env, GovernanceAction::CreditInsuranceFund, caller, payload);
-        }
-        result
-=======
         caller.require_auth();
         let admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
         if caller != admin {
@@ -481,7 +483,6 @@ impl LendingContract {
             return Err(BorrowError::ProtocolPaused);
         }
         credit_insurance_impl(&env, &asset, amount)
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
     }
 
     /// Manually offsets bad debt using the insurance fund (Admin only).
@@ -491,16 +492,6 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), BorrowError> {
-<<<<<<< HEAD
-        ensure_admin(&env, &caller)?;
-        let result = offset_bad_debt_impl(&env, &asset, amount);
-        if result.is_ok() {
-            // Log governance action
-            let payload = payload_address_asset_i128(&env, caller, asset, amount);
-            log_governance_action(&env, GovernanceAction::OffsetBadDebt, caller, payload);
-        }
-        result
-=======
         caller.require_auth();
         let admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
         if caller != admin {
@@ -510,7 +501,6 @@ impl LendingContract {
             return Err(BorrowError::ProtocolPaused);
         }
         offset_bad_debt_impl(&env, &asset, amount)
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
     }
 
     /// Returns gas/performance stats for the current transaction (Issue #391)
@@ -605,20 +595,10 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
 
     /// Set oracle address for price feeds (admin only).
     pub fn set_oracle(env: Env, admin: Address, oracle: Address) -> Result<(), BorrowError> {
-<<<<<<< HEAD
-        let result = set_oracle_impl(&env, &admin, oracle);
-        if result.is_ok() {
-            // Log governance action
-            let payload = payload_address(&env, oracle);
-            log_governance_action(&env, GovernanceAction::SetOracle, admin, payload);
-        }
-        result
-=======
         if is_read_only_logic(&env) {
             return Err(BorrowError::ProtocolPaused);
         }
         set_oracle_impl(&env, &admin, oracle)
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
     }
 
     /// Configure oracle staleness parameters (admin only).
@@ -631,22 +611,10 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         caller: Address,
         config: OracleConfig,
     ) -> Result<(), OracleError> {
-<<<<<<< HEAD
-        let result = oracle::configure_oracle(&env, caller, config);
-        if result.is_ok() {
-            // Log governance action
-            let mut payload_data = Vec::new(&env);
-            payload_data.push_back(config.max_staleness_seconds.into_val(&env));
-            let payload = governance_audit::GovernancePayload { data: payload_data };
-            log_governance_action(&env, GovernanceAction::ConfigureOracle, caller, payload);
-        }
-        result
-=======
         if is_read_only_logic(&env) {
             return Err(OracleError::OraclePaused);
         }
         oracle::configure_oracle(&env, caller, config)
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
     }
 
     /// Register the primary oracle address for `asset` (admin only).
@@ -660,20 +628,10 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         asset: Address,
         primary_oracle: Address,
     ) -> Result<(), OracleError> {
-<<<<<<< HEAD
-        let result = oracle::set_primary_oracle(&env, caller, asset, primary_oracle);
-        if result.is_ok() {
-            // Log governance action
-            let payload = payload_two_addresses(&env, asset, primary_oracle);
-            log_governance_action(&env, GovernanceAction::SetPrimaryOracle, caller, payload);
-        }
-        result
-=======
         if is_read_only_logic(&env) {
             return Err(OracleError::OraclePaused);
         }
         oracle::set_primary_oracle(&env, caller, asset, primary_oracle)
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
     }
 
     /// Register the fallback oracle address for `asset` (admin only).
@@ -1214,18 +1172,8 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
 
     /// Initialize admin for cross-asset operations
     pub fn initialize_admin(env: Env, admin: Address) -> Result<(), CrossAssetError> {
-<<<<<<< HEAD
-        let result = cross_init_admin(&env, admin);
-        if result.is_ok() {
-            // Log governance action
-            let payload = payload_address(&env, admin);
-            log_governance_action(&env, GovernanceAction::InitializeCrossAssetAdmin, admin, payload);
-        }
-        result
-=======
         cross_init_admin(&env, admin);
         Ok(())
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
     }
 
     /// Set parameters for a specific asset (admin only)
@@ -1234,24 +1182,10 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         asset: Address,
         params: AssetParams,
     ) -> Result<(), CrossAssetError> {
-<<<<<<< HEAD
-        let result = cross_set_asset_params(&env, asset, params);
-        if result.is_ok() {
-            // Log governance action
-            let mut payload_data = Vec::new(&env);
-            payload_data.push_back(asset.into_val(&env));
-            // Note: AssetParams would need to be serialized to Val for proper logging
-            // For now, we'll log the asset address
-            let payload = governance_audit::GovernancePayload { data: payload_data };
-            log_governance_action(&env, GovernanceAction::SetAssetParams, get_protocol_admin(&env).unwrap(), payload);
-        }
-        result
-=======
         if is_read_only_logic(&env) {
             return Err(CrossAssetError::ProtocolPaused);
         }
         cross_set_asset_params(&env, asset, params)
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
     }
 
     /// Deposit collateral for a specific asset
