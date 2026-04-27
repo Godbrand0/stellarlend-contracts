@@ -3,7 +3,7 @@
 use crate::vesting::{
     VestingContract, VestingContractClient, VestingDataKey, VestingError, VestingSchedule,
 };
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, testutils::Ledger as _, Address, Env};
 
 #[contract]
 pub struct TestToken;
@@ -39,7 +39,7 @@ fn setup_vesting_test() -> (Env, Address, VestingContractClient<'static>, Addres
 
 fn advance_time(env: &Env, seconds: u64) {
     let current = env.ledger().timestamp();
-    env.ledger().set_timestamp(current + seconds);
+    env.ledger().with_mut(|li| li.timestamp = current + seconds);
 }
 
 // ---------------------------------------------------------------------------

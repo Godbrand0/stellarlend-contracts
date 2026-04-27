@@ -324,7 +324,7 @@ pub fn initialize(env: &Env, admin: Address) -> Result<(), CrossAssetError> {
     }
 
     admin.require_auth();
-    crate::admin::set_admin(env, admin).unwrap();
+    crate::admin::set_admin(env, admin, None).unwrap();
 
     Ok(())
 }

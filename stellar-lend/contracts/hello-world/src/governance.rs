@@ -192,7 +192,8 @@ pub fn initialize(
     // ── persist ──
     // Admin is already set in the centralized module; we just ensure it exists here.
     if !crate::admin::has_admin(env) {
-        crate::admin::set_admin(env, admin.clone()).map_err(|_| GovernanceError::Unauthorized)?;
+        crate::admin::set_admin(env, admin.clone(), None)
+            .map_err(|_| GovernanceError::Unauthorized)?;
     }
     env.storage()
         .instance()
@@ -766,13 +767,15 @@ pub(crate) fn execute_proposal_action(
 ) -> Result<(), GovernanceError> {
     match proposal_type {
         ProposalType::MinCollateralRatio(val) => {
-            crate::risk_params::set_risk_params(env, executor, Some(*val), None, None, None)
+            let admin = crate::admin::get_admin(env).ok_or(GovernanceError::ExecutionFailed)?;
+            crate::risk_params::set_risk_params(env, &admin, Some(*val), None, None, None)
                 .map_err(|_| GovernanceError::ExecutionFailed)?;
         }
         ProposalType::RiskParams(min_cr, liq_threshold, close_factor, liq_incentive) => {
+            let admin = crate::admin::get_admin(env).ok_or(GovernanceError::ExecutionFailed)?;
             crate::risk_params::set_risk_params(
                 env,
-                executor,
+                &admin,
                 *min_cr,
                 *liq_threshold,
                 *close_factor,
@@ -1059,6 +1062,55 @@ pub fn emit_approval_event(env: &Env, proposal_id: &u64, approver: &Address) {
 // Guardian Management
 // ========================================================================
 
+/// Set the guardian set and threshold (admin-only).
+pub fn set_guardians(
+    env: &Env,
+    caller: Address,
+    guardians: Vec<Address>,
+    threshold: u32,
+) -> Result<(), GovernanceError> {
+    caller.require_auth();
+
+    let admin: Address = crate::admin::get_admin(env).ok_or(GovernanceError::NotInitialized)?;
+
+    if caller != admin {
+        return Err(GovernanceError::Unauthorized);
+    }
+
+    // Check if recovery is in progress
+    if env
+        .storage()
+        .persistent()
+        .has(&GovernanceDataKey::RecoveryRequest)
+    {
+        return Err(GovernanceError::RecoveryInProgress);
+    }
+
+    if guardians.is_empty() || threshold == 0 || threshold > guardians.len() {
+        return Err(GovernanceError::InvalidGuardianConfig);
+    }
+
+    // Check for duplicates
+    for i in 0..guardians.len() {
+        for j in (i + 1)..guardians.len() {
+            if guardians.get(i).unwrap() == guardians.get(j).unwrap() {
+                return Err(GovernanceError::InvalidGuardianConfig);
+            }
+        }
+    }
+
+    let guardian_config = GuardianConfig {
+        guardians,
+        threshold,
+    };
+
+    env.storage()
+        .instance()
+        .set(&GovernanceDataKey::GuardianConfig, &guardian_config);
+
+    Ok(())
+}
+
 /// Add a guardian (admin-only).
 ///
 /// Guardians can initiate social recovery to rotate the admin key.
@@ -1185,7 +1237,7 @@ pub fn remove_guardian(
     // Count how many current guardians have approved (excluding the one being removed)
     let mut current_guardian_approvals = 0;
     for approval in current_approvals.iter() {
-        if guardian_config.guardians.contains(approval) && approval != &guardian {
+        if guardian_config.guardians.contains(approval) && approval != guardian {
             current_guardian_approvals += 1;
         }
     }
@@ -1701,7 +1753,7 @@ pub fn execute_multisig_proposal(
         .persistent()
         .set(&GovernanceDataKey::Proposal(proposal_id), &proposal);
 
-    let exec_result = execute_proposal_type(env, &proposal.proposal_type);
+    let exec_result = execute_proposal(env, executor.clone(), proposal_id);
     if exec_result.is_err() {
         // Rollback status
         proposal.status = pre_exec_status;
@@ -1950,7 +2002,7 @@ mod tests {
 
         // Advance time so proposal becomes Active
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 1);
+        env.ledger().with_mut(|li| li.timestamp = t + 1);
 
         client.gov_vote(&voter1, &id, &VoteType::For);
         client.gov_vote(&voter2, &id, &VoteType::Against);
@@ -1979,7 +2031,7 @@ mod tests {
         );
 
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 1);
+        env.ledger().with_mut(|li| li.timestamp = t + 1);
         client.gov_vote(&voter, &id, &VoteType::For);
 
         let result = client.try_gov_vote(&voter, &id, &VoteType::For);
@@ -2005,7 +2057,7 @@ mod tests {
 
         // Jump past end_time (start + 259200 voting period)
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 300_000);
+        env.ledger().with_mut(|li| li.timestamp = t + 300_000);
 
         let result = client.try_gov_vote(&voter, &id, &VoteType::For);
         assert!(result.is_err());
@@ -2028,7 +2080,7 @@ mod tests {
         );
 
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 1);
+        env.ledger().with_mut(|li| li.timestamp = t + 1);
 
         let result = client.try_gov_vote(&voter, &id, &VoteType::For);
         assert!(result.is_err());
@@ -2066,12 +2118,12 @@ mod tests {
         );
 
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 1);
+        env.ledger().with_mut(|li| li.timestamp = t + 1);
         // Vote against
         client.gov_vote(&voter, &id, &VoteType::Against);
 
         // Advance past voting period
-        env.ledger().set_timestamp(t + 260_000);
+        env.ledger().with_mut(|li| li.timestamp = t + 260_000);
 
         let outcome = client.gov_queue_proposal(&admin, &id);
         assert!(!outcome.succeeded);
@@ -2122,11 +2174,11 @@ mod tests {
         );
 
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 1);
+        env.ledger().with_mut(|li| li.timestamp = t + 1);
         client.gov_vote(&voter, &id, &VoteType::For);
 
         // Past voting period
-        env.ledger().set_timestamp(t + 260_000);
+        env.ledger().with_mut(|li| li.timestamp = t + 260_000);
         let outcome = client.gov_queue_proposal(&admin, &id);
         assert!(outcome.succeeded);
 
@@ -2175,15 +2227,16 @@ mod tests {
         );
 
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 1);
+        env.ledger().with_mut(|li| li.timestamp = t + 1);
         client.gov_vote(&voter, &id, &VoteType::For);
 
         // Queue
-        env.ledger().set_timestamp(t + 260_000);
+        env.ledger().with_mut(|li| li.timestamp = t + 260_000);
         client.gov_queue_proposal(&admin, &id);
 
         // Execute after delay
-        env.ledger().set_timestamp(t + 260_000 + 86_401);
+        env.ledger()
+            .with_mut(|li| li.timestamp = t + 260_000 + 86_401);
         client.gov_execute_proposal(&admin, &id);
 
         // Second execution must fail (NotQueued — already Executed)
@@ -2277,10 +2330,10 @@ mod tests {
         );
 
         let t = env.ledger().timestamp();
-        env.ledger().set_timestamp(t + 1);
+        env.ledger().with_mut(|li| li.timestamp = t + 1);
         client.gov_vote(&voter, &id, &VoteType::For);
 
-        env.ledger().set_timestamp(t + 260_000);
+        env.ledger().with_mut(|li| li.timestamp = t + 260_000);
         client.gov_queue_proposal(&admin, &id);
 
         let result = client.try_gov_cancel_proposal(&admin, &id);

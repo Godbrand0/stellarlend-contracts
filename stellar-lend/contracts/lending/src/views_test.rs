@@ -36,6 +36,8 @@ fn setup(
     let asset = Address::generate(env);
     let collateral_asset = Address::generate(env);
     client.initialize(&admin, &1_000_000_000, &1000);
+    client.register_asset(&admin, &asset);
+    client.register_asset(&admin, &collateral_asset);
     (client, admin, user, asset, collateral_asset)
 }
 

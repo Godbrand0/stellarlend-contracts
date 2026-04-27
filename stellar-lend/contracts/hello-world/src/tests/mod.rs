@@ -38,8 +38,12 @@ pub mod multisig_governance_execution_test;
 pub mod multisig_test;
 pub mod multisig_threshold_safety_test;
 pub mod oracle_staleness_fallback_test;
+pub mod read_only_test;
 pub mod recovery_test;
 // pub mod fuzz_test;
 // pub mod fees_test;
 
 pub mod snapshot_test;
+pub mod liquidate_hardened_test;
+pub mod liquidate_amm_test;
+pub mod price_oscillation_stress_test;
