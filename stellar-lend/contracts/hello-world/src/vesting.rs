@@ -21,6 +21,7 @@
 use soroban_sdk::{contract, contracterror, contractimpl, Address, Env, Symbol};
 
 /// Vesting schedule data structure
+#[soroban_sdk::contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VestingSchedule {
     /// Beneficiary address

@@ -25,6 +25,8 @@ fn setup_contention_test(
     let collateral_asset = Address::generate(env);
 
     client.initialize(&admin, &10_000_000_000, &100);
+    client.register_asset(&admin, &asset);
+    client.register_asset(&admin, &collateral_asset);
     client.initialize_deposit_settings(&10_000_000_000, &100);
     client.initialize_withdraw_settings(&100);
 
@@ -131,7 +133,7 @@ fn test_contention_paused_operations() {
     client.deposit(&user1, &collateral_asset, &50_000);
 
     // Pause deposits
-    client.set_deposit_paused(&true);
+    client.set_deposit_paused(&admin, &true);
 
     // Trying to deposit while paused under contention scenario
     let deposit_res = client.try_deposit(&user2, &collateral_asset, &50_000);

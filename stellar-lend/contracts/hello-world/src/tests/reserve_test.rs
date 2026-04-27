@@ -26,9 +26,9 @@ use crate::analytics;
 use crate::deposit::{DepositDataKey, ProtocolAnalytics};
 use crate::reserve::{
     accrue_reserve, get_protocol_revenue, get_reserve_balance, get_reserve_factor,
-    get_reserve_stats, get_total_reserves, get_treasury_address, initialize_reserve_config,
-    set_reserve_factor, set_treasury_address, withdraw_reserve_funds, ReserveError,
-    BASIS_POINTS_SCALE, DEFAULT_RESERVE_FACTOR_BPS, MAX_RESERVE_FACTOR_BPS,
+    get_total_reserves, get_treasury_address, initialize_reserve_config, set_reserve_factor,
+    set_treasury_address, withdraw_reserve_funds, ReserveError, BASIS_POINTS_SCALE,
+    DEFAULT_RESERVE_FACTOR_BPS, MAX_RESERVE_FACTOR_BPS,
 };
 use soroban_sdk::{testutils::Address as _, Address, Env, Vec};
 
@@ -127,7 +127,12 @@ fn test_get_reserve_stats(
     contract_id: &Address,
     asset: Option<Address>,
 ) -> (i128, i128, Option<Address>) {
-    env.as_contract(contract_id, || get_reserve_stats(env, asset))
+    env.as_contract(contract_id, || {
+        let balance = get_reserve_balance(env, asset.clone());
+        let factor = get_reserve_factor(env, asset.clone());
+        let treasury = get_treasury_address(env);
+        (balance, factor, treasury)
+    })
 }
 
 // ============================================================================
@@ -516,7 +521,7 @@ fn test_set_treasury_address_by_non_admin() {
     let (env, contract_id, _admin, user, treasury) = setup_test_env();
 
     // Non-admin tries to set treasury address - should fail
-    let _ = test_set_treasury_address(&env, &contract_id, user, _treasury);
+    let _ = test_set_treasury_address(&env, &contract_id, user, treasury);
 }
 
 #[test]
@@ -739,7 +744,7 @@ fn test_withdraw_reserve_from_zero_balance() {
 /// 5. All calculations use checked arithmetic to prevent overflow
 ///
 /// Structure to track interest distribution at different points in time
-#[contracttype]
+#[soroban_sdk::contracttype]
 #[derive(Debug, Clone)]
 struct InterestDistribution {
     period: u32,
@@ -1403,7 +1408,7 @@ fn test_reserve_factor_formula_precision() {
             factor, interest, expected_reserve
         );
         assert_eq!(
-            _l,
+            l,
             *interest - *expected_reserve,
             "Lender amount should be interest - reserve"
         );
