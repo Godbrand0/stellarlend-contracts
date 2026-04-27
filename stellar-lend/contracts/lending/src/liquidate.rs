@@ -1,40 +1,92 @@
-// src/liquidate.rs
-//
-// Liquidation Engine
-// ══════════════════
-// Handles both full and partial liquidations.  When collateral is insufficient
-// to cover the entire debt the residual is routed to `bad_debt_accounting`.
-//
-// Two liquidation paths
-// ─────────────────────
-// 1. **Normal liquidation** — liquidator repays up to `close_factor` of the
-//    debt and receives collateral plus a bonus.  The position remains open if
-//    partially liquidated.
-//
-// 2. **Emergency / full liquidation** — protocol governance can trigger a full
-//    liquidation ignoring the close factor.  Used during emergency shutdown.
-//    Any shortfall is written off immediately.
-//
-// Close factor
-// ────────────
-// By default, a liquidator may repay at most 50% of the outstanding borrow in
-// a single call (CLOSE_FACTOR_BPS = 5_000).  This protects borrowers from
-// being fully liquidated unnecessarily when only partially under-water.
+//! # Liquidation Module — Issue #523
+//!
+//! Implements `liquidate_position`, the single entry point for partial or full
+//! liquidation of an under-collateralised borrow position.
+//!
+//! ## Invariants
+//!
+//! 1. Only positions with a health factor strictly below `HEALTH_FACTOR_SCALE`
+//!    (i.e. `< 10 000`) can be liquidated. An oracle must be configured; without
+//!    fresh price data the health factor cannot be computed and the call reverts.
+//!
+//! 2. The repayment amount is capped by the *close factor*:
+//!    `max_repay = total_debt * close_factor_bps / 10_000`.
+//!    Amounts above this cap are silently clamped so callers do not need to
+//!    query the close factor themselves.
+//!
+//! 3. The collateral seized by the liquidator is:
+//!    `uncapped = repay_amount * (10_000 + incentive_bps) / 10_000`, then
+//!    **`collateral_seized = min(uncapped, collateral_balance)`** (enforced in
+//!    this module before debiting the borrower). The min-bound prevents
+//!    over-seizure when the incentive-scaled amount would otherwise exceed
+//!    on-chain collateral, e.g. after large oracle-denominated repricing or
+//!    when close-factor and maximum incentive combine to make `uncapped` large
+//!    relative to raw collateral.
+//!
+//! 4. After state changes a `PostLiquidationHealthEvent` is emitted carrying the
+//!    borrower's updated health factor. Off-chain monitors use this to detect
+//!    positions that remain liquidatable after a partial close.
+//!
+//! ## Trust Boundaries
+//!
+//! - **Liquidator**: any address that calls `liquidate` and supplies `require_auth`.
+//!   No special privilege is granted; the liquidator does not hold admin power.
+//! - **Admin/Guardian**: cannot bypass pause checks; emergency shutdown blocks
+//!   liquidations while `blocks_high_risk_ops` is true.
+//! - **Oracle**: the protocol's configured oracle is trusted. Price-staleness
+//!   semantics are enforced by the oracle module before the health factor is used.
+//!
+//! ## Reentrancy
+//!
+//! Soroban's single-transaction model means that no external contract can re-enter
+//! this function mid-execution. All state writes happen after all reads are
+//! complete (checks-effects-events pattern).
+//!
+//! ## Arithmetic Safety
+//!
+//! Arithmetic operations that could overflow are implemented using checked or
+//! saturating variants where appropriate. Additions and subtractions use
+//! `checked_add` / `checked_sub` / `saturating_sub` as annotated.
 
-use soroban_sdk::{Address, Env};
+#![allow(unexpected_cfgs)]
 
-use crate::bad_debt_accounting;
-use crate::oracle;
-use crate::storage;
-use crate::types::{BadDebtEvent, LendingError};
+use soroban_sdk::{contractevent, Address, Env};
 
-/// Maximum fraction of debt a liquidator may repay in one call (50%).
-pub const CLOSE_FACTOR_BPS: i128 = 5_000;
+use crate::borrow::{
+    get_collateral_position, get_debt_position, get_total_debt, save_collateral_position,
+    save_debt_position, set_total_debt, BorrowError,
+};
+use crate::constants::HEALTH_FACTOR_SCALE;
+use crate::pause::{blocks_high_risk_ops, is_paused, PauseType};
+use crate::views::{
+    collateral_value, compute_health_factor, debt_value, get_liquidation_incentive_amount,
+    get_max_liquidatable_amount, HEALTH_FACTOR_NO_DEBT,
+};
 
-// ── Structs ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Events
+// ─────────────────────────────────────────────────────────────────────────────
 
-pub struct LiquidationResult {
-    /// Collateral tokens transferred to the liquidator.
+/// Emitted when a position is (partially or fully) liquidated.
+///
+/// `repaid_amount` is the debt token amount actually repaid (after close-factor
+/// clamping). `collateral_seized` is the gross collateral transferred to the
+/// liquidator including the incentive bonus.
+#[contractevent]
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct LiquidationEvent {
+    /// Liquidator address
+    pub liquidator: Address,
+    /// Borrower whose position was reduced
+    pub borrower: Address,
+    /// Debt asset token
+    pub debt_asset: Address,
+    /// Collateral asset token
+    pub collateral_asset: Address,
+    /// Debt amount repaid (after close-factor cap)
+    pub repaid_amount: i128,
+    /// Collateral seized by liquidator (includes incentive)
     pub collateral_seized: i128,
     /// Debt repaid by the liquidator.
     pub debt_repaid: i128,
@@ -42,14 +94,57 @@ pub struct LiquidationResult {
     pub bad_debt_event: Option<BadDebtEvent>,
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
+/// Emitted after every liquidation to surface updated position health.
+///
+/// A `health_factor` below `HEALTH_FACTOR_SCALE` (10 000) means the position
+/// is still liquidatable and another call may be needed. A value of
+/// `HEALTH_FACTOR_NO_DEBT` means the debt was fully cleared.
+#[contractevent]
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct PostLiquidationHealthEvent {
+    /// Borrower address
+    pub borrower: Address,
+    /// Health factor after this liquidation (scaled by 10 000)
+    pub health_factor: i128,
+    /// Remaining debt (principal + interest) after partial/full repay
+    pub remaining_debt: i128,
+    /// Remaining collateral after seizure
+    pub remaining_collateral: i128,
+    /// Ledger timestamp
+    pub timestamp: u64,
+}
 
 /// Executes a normal liquidation of `borrower`'s `borrow_asset` position.
 ///
-/// The liquidator specifies how much debt they wish to repay (`repay_amount`).
-/// The function caps this at `CLOSE_FACTOR_BPS` of the outstanding borrow and
-/// ensures the position is actually unhealthy before proceeding.
-pub fn liquidate(
+/// # Arguments
+/// * `env` — Soroban contract environment.
+/// * `liquidator` — Address supplying `require_auth`.
+/// * `borrower` — Under-collateralised borrower.
+/// * `debt_asset` — Token address of the debt to repay.
+/// * `collateral_asset` — Token address of the collateral to seize.
+/// * `amount` — Requested repayment amount (may be clamped by close factor).
+///
+/// # Errors
+/// * `BorrowError::InvalidAmount` — `amount` is zero or negative.
+/// * `BorrowError::ProtocolPaused` — Liquidations are paused or blocked.
+/// * `BorrowError::AssetNotSupported` — `debt_asset` or `collateral_asset`
+///   does not match the borrower's recorded position.
+/// * `BorrowError::InsufficientCollateral` — Position is healthy (HF ≥ 1.0);
+///   liquidation not permitted.
+///
+/// # Security
+/// - `liquidator.require_auth()` is called before any state change.
+/// - Pause state is checked before auth to fail fast on paused protocols.
+/// - Health factor is evaluated using the oracle module (staleness-checked).
+///   If no fresh price is available the function returns
+///   `BorrowError::InsufficientCollateral` so phantom liquidations are
+///   impossible.
+/// - All arithmetic uses `I256` or `checked_*` / `saturating_*` variants.
+/// - Collateral seizure is capped to the borrower's balance, preventing
+///   underflow even for deeply insolvent positions.
+#[allow(dead_code)]
+pub fn liquidate_position(
     env: &Env,
     _liquidator: &Address, // Would receive seized collateral in a production token-transfer impl.
     borrower: &Address,
@@ -162,33 +257,53 @@ pub fn emergency_liquidate(
             bad_debt_event: None,
         });
     }
+    // Remaining repayment reduces principal.
+    debt_position.borrowed_amount = debt_position.borrowed_amount.saturating_sub(remaining);
 
-    let user_collateral = storage::get_user_deposit(env, borrower, collateral_asset);
+    // ── 9. Update borrower collateral ──────────────────────────────────────
+    collateral_position.amount = collateral_position
+        .amount
+        .saturating_sub(collateral_to_seize);
 
-    // Seize all collateral.
-    storage::set_user_deposit(env, borrower, collateral_asset, 0);
-    // NOTE: do NOT zero user_borrow here — record_bad_debt reads it to
-    // correctly decrement total_borrows.  It will zero it as part of I-6.
+    // ── 9b. Bad debt accounting ────────────────────────────────────────────
+    // If collateral_to_seize < repay_amount, the shortfall is bad debt.
+    // Attempt to auto-offset from the insurance fund.
+    if collateral_to_seize < repay_amount {
+        let shortfall = repay_amount - collateral_to_seize;
+        let current_bad_debt = crate::borrow::get_total_bad_debt(env, &debt_asset);
+        let new_bad_debt = current_bad_debt.saturating_add(shortfall);
 
-    let mut col_mkt = storage::get_market(env, collateral_asset)?;
-    col_mkt.total_deposits = (col_mkt.total_deposits - user_collateral).max(0);
-    storage::set_market(env, collateral_asset, &col_mkt);
+        let fund_balance = crate::borrow::get_insurance_fund_balance(env, &debt_asset);
+        let (final_bad_debt, final_fund) = if fund_balance > 0 {
+            let offset = fund_balance.min(new_bad_debt);
+            (new_bad_debt - offset, fund_balance - offset)
+        } else {
+            (new_bad_debt, fund_balance)
+        };
 
-    // Compute residual in USD terms.
-    let collateral_usd = oracle::usd_value(env, collateral_asset, user_collateral)?;
-    let borrow_usd = oracle::usd_value(env, borrow_asset, user_borrow)?;
-    let residual = (borrow_usd - collateral_usd).max(0);
+        crate::borrow::set_total_bad_debt(env, &debt_asset, final_bad_debt);
+        crate::borrow::set_insurance_fund_balance(env, &debt_asset, final_fund);
+    }
 
-    // record_bad_debt zeros the user borrow, decrements total_borrows,
-    // and writes off the residual against reserves / bad_debt.
-    let bad_debt_event = if residual > 0 {
-        Some(bad_debt_accounting::record_bad_debt(
-            env,
-            borrower,
-            borrow_asset,
-            residual,
-            user_collateral,
-        )?)
+    // ── 10. Update global total debt ───────────────────────────────────────
+    let current_total = get_total_debt(env);
+    let new_total = current_total.saturating_sub(repay_amount);
+    set_total_debt(env, new_total);
+
+    // ── 11. Persist state ──────────────────────────────────────────────────
+    save_debt_position(env, &borrower, &debt_position);
+    save_collateral_position(env, &borrower, &collateral_position);
+
+    // ── 12. Compute post-liquidation health factor ─────────────────────────
+    let remaining_debt = debt_position
+        .borrowed_amount
+        .checked_add(debt_position.interest_accrued)
+        .unwrap_or(0);
+
+    let post_cv = collateral_value(env, &collateral_position);
+    let post_dv = debt_value(env, &debt_position);
+    let hf_after = if remaining_debt == 0 {
+        HEALTH_FACTOR_NO_DEBT
     } else {
         // No shortfall: manually zero the position and decrement totals.
         let user_borrow_remaining = storage::get_user_borrow(env, borrower, borrow_asset);

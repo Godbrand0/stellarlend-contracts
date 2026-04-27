@@ -97,7 +97,7 @@ fn test_deposit_paused() {
     let admin = Address::generate(&env);
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
-    client.set_deposit_paused(&true);
+    client.set_deposit_paused(&admin, &true);
 
     let result = client.try_deposit(&user, &asset, &10_000);
     assert_eq!(result, Err(Ok(DepositError::DepositPaused)));
@@ -162,11 +162,11 @@ fn test_deposit_pause_unpause() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
 
-    client.set_deposit_paused(&true);
+    client.set_deposit_paused(&admin, &true);
     let result = client.try_deposit(&user, &asset, &10_000);
     assert_eq!(result, Err(Ok(DepositError::DepositPaused)));
 
-    client.set_deposit_paused(&false);
+    client.set_deposit_paused(&admin, &false);
     let balance = client.deposit(&user, &asset, &10_000);
     assert_eq!(balance, 10_000);
 }

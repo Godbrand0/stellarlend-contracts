@@ -24,22 +24,11 @@
 use soroban_sdk::{contracterror, contractevent, contracttype, Address, Env};
 
 use crate::borrow::{validate_collateral_ratio, BorrowDataKey, BorrowError, DebtPosition};
-use crate::constants::BPS_SCALE;
 use crate::deposit::{DepositCollateral, DepositDataKey};
 use crate::pause::{self, PauseType};
 
 /// Errors that can occur during withdraw operations
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum WithdrawError {
-    InvalidAmount = 1,
-    WithdrawPaused = 2,
-    Overflow = 3,
-    InsufficientCollateral = 4,
-    InsufficientCollateralRatio = 5,
-    Unauthorized = 6,
-}
+pub use crate::errors::WithdrawError;
 
 /// Storage keys for withdraw-related data
 #[contracttype]
@@ -64,6 +53,9 @@ pub struct WithdrawEvent {
 /// facade layer: granular withdraw pause, global `All`, legacy flag, and shutdown (but not
 /// recovery) blocking.
 fn ensure_withdraw_allowed(env: &Env) -> Result<(), WithdrawError> {
+    if pause::is_read_only(env) {
+        return Err(WithdrawError::WithdrawPaused);
+    }
     if legacy_withdraw_paused(env) {
         return Err(WithdrawError::WithdrawPaused);
     }
@@ -185,7 +177,8 @@ fn validate_collateral_ratio_after_withdraw(
             .ok_or(WithdrawError::Overflow)?;
 
         if total_debt > 0 {
-            validate_collateral_ratio(remaining_collateral, total_debt).map_err(map_borrow_to_withdraw)?;
+            validate_collateral_ratio(remaining_collateral, total_debt)
+                .map_err(map_borrow_to_withdraw)?;
         }
     }
 
@@ -197,6 +190,9 @@ pub fn initialize_withdraw_settings(
     env: &Env,
     min_withdraw_amount: i128,
 ) -> Result<(), WithdrawError> {
+    if pause::is_read_only(env) {
+        return Err(WithdrawError::WithdrawPaused);
+    }
     env.storage()
         .persistent()
         .set(&WithdrawDataKey::MinWithdrawAmount, &min_withdraw_amount);
