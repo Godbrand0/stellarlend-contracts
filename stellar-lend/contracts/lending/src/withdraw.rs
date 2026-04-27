@@ -6,7 +6,7 @@
 //! ## Pause & emergency alignment
 //!
 //! Withdraw respects:
-//! - Legacy `WithdrawDataKey::Paused` (storage compatibility),
+//! - Legacy `WithdrawDataKey::WithdrawPaused` (storage compatibility),
 //! - Granular [`crate::pause::PauseType::Withdraw`] and global [`crate::pause::PauseType::All`]
 //!   via [`crate::pause::is_paused`],
 //! - Emergency lifecycle: **shutdown** blocks unwind; **recovery** allows `withdraw` and `repay`
@@ -34,7 +34,7 @@ pub use crate::errors::WithdrawError;
 #[contracttype]
 #[derive(Clone)]
 pub enum WithdrawDataKey {
-    Paused,
+    WithdrawPaused,
     MinWithdrawAmount,
 }
 
@@ -72,7 +72,7 @@ fn ensure_withdraw_allowed(env: &Env) -> Result<(), WithdrawError> {
 fn legacy_withdraw_paused(env: &Env) -> bool {
     env.storage()
         .persistent()
-        .get(&WithdrawDataKey::Paused)
+        .get(&WithdrawDataKey::WithdrawPaused)
         .unwrap_or(false)
 }
 
@@ -81,6 +81,7 @@ fn map_borrow_to_withdraw(e: BorrowError) -> WithdrawError {
         BorrowError::InsufficientCollateral => WithdrawError::InsufficientCollateralRatio,
         BorrowError::Overflow => WithdrawError::Overflow,
         BorrowError::InvalidAmount => WithdrawError::InvalidAmount,
+        BorrowError::AssetNotSupported => WithdrawError::AssetNotSupported,
         _ => WithdrawError::InsufficientCollateralRatio,
     }
 }
@@ -109,6 +110,9 @@ pub fn withdraw(
     asset: Address,
     amount: i128,
 ) -> Result<i128, WithdrawError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| WithdrawError::AssetNotSupported)?;
+
     user.require_auth();
 
     ensure_withdraw_allowed(env)?;
@@ -198,7 +202,7 @@ pub fn initialize_withdraw_settings(
         .set(&WithdrawDataKey::MinWithdrawAmount, &min_withdraw_amount);
     env.storage()
         .persistent()
-        .set(&WithdrawDataKey::Paused, &false);
+        .set(&WithdrawDataKey::WithdrawPaused, &false);
     Ok(())
 }
 
@@ -212,7 +216,7 @@ pub fn initialize_withdraw_settings(
 pub fn set_withdraw_paused(env: &Env, paused: bool) -> Result<(), WithdrawError> {
     env.storage()
         .persistent()
-        .set(&WithdrawDataKey::Paused, &paused);
+        .set(&WithdrawDataKey::WithdrawPaused, &paused);
     Ok(())
 }
 

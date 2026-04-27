@@ -30,6 +30,7 @@ pub enum BorrowDataKey {
     LiquidationIncentiveBps,
     InsuranceFundBalance(Address),
     TotalBadDebt(Address),
+    BorrowMinAmount,
 }
 
 #[contracttype]
@@ -84,6 +85,14 @@ pub struct BadDebtEvent {
 
 #[contractevent]
 #[derive(Clone, Debug)]
+pub struct OracleSetEvent {
+    pub admin: Address,
+    pub oracle: Address,
+    pub timestamp: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
 pub struct InsuranceFundEvent {
     pub asset: Address,
     pub amount: i128,
@@ -106,6 +115,9 @@ pub fn borrow(
     collateral_asset: Address,
     collateral_amount: i128,
 ) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &asset)?;
+    crate::asset_registry::require_registered_asset(env, &collateral_asset)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Borrow) || blocks_high_risk_ops(env) {
@@ -193,7 +205,10 @@ pub fn borrow(
     Ok(())
 }
 
-fn get_min_borrow_amount(env: &Env) -> i128 {
+fn get_min_borrow_amount(env: &Env, asset: &Address) -> i128 {
+    if let Some(min) = env.storage().instance().get(&BorrowDataKey::BorrowMinAmountPerAsset(asset.clone())) {
+        return min;
+    }
     env.storage()
         .instance()
         .get(&BorrowDataKey::BorrowMinAmount)
@@ -243,6 +258,14 @@ pub fn set_oracle(env: &Env, admin: &Address, oracle: Address) -> Result<(), Bor
     env.storage()
         .instance()
         .set(&BorrowDataKey::OracleAddress, &oracle);
+
+    OracleSetEvent {
+        admin: admin.clone(),
+        oracle,
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
+
     Ok(())
 }
 
@@ -401,7 +424,7 @@ pub fn initialize_borrow_settings(
         .set(&BorrowDataKey::BorrowDebtCeiling, &debt_ceiling);
     env.storage()
         .instance()
-        .set(&BorrowDataKey::BorrowMinAmountPerAsset(asset), &min_borrow_amount);
+        .set(&BorrowDataKey::BorrowMinAmount, &min_borrow_amount);
     Ok(())
 }
 
@@ -443,6 +466,8 @@ pub fn get_user_collateral(env: &Env, user: &Address) -> BorrowCollateral {
 }
 
 pub fn deposit(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &asset)?;
+
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }
@@ -480,6 +505,8 @@ pub fn deposit(env: &Env, user: Address, asset: Address, amount: i128) -> Result
 }
 
 pub fn repay(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &asset)?;
+
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }
@@ -625,6 +652,9 @@ pub fn liquidate_position(
     _collateral_asset: Address,
     amount: i128,
 ) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &debt_asset)?;
+    crate::asset_registry::require_registered_asset(env, &_collateral_asset)?;
+
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }

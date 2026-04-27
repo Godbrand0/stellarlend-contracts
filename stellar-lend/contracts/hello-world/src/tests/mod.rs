@@ -44,3 +44,6 @@ pub mod recovery_test;
 // pub mod fees_test;
 
 pub mod snapshot_test;
+pub mod liquidate_hardened_test;
+pub mod liquidate_amm_test;
+pub mod price_oscillation_stress_test;

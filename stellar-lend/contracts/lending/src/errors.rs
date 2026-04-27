@@ -29,6 +29,7 @@ pub enum BorrowError {
     AssetNotSupported = 1007,
     BelowMinimumBorrow = 1008,
     RepayAmountTooHigh = 1009,
+    Reentrancy = 1010,
 }
 
 // ── Deposits (2000–2999) ──────────────────────────────────────────────
@@ -42,6 +43,7 @@ pub enum DepositError {
     AssetNotSupported = 2004,
     ExceedsDepositCap = 2005,
     Unauthorized = 2006,
+    Reentrancy = 2007,
 }
 
 // ── Withdrawals (3000–3999) ───────────────────────────────────────────
@@ -55,6 +57,7 @@ pub enum WithdrawError {
     InsufficientCollateral = 3004,
     InsufficientCollateralRatio = 3005,
     Unauthorized = 3006,
+    Reentrancy = 3007,
 }
 
 // ── Flash Loans (4000–4999) ───────────────────────────────────────────

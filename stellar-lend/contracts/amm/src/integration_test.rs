@@ -86,7 +86,7 @@ fn setup_initialized_contract(env: &Env) -> (AmmContractClient, Address, Address
     let contract = create_amm_contract(env);
     let admin = Address::generate(env);
     let user = Address::generate(env);
-    contract.initialize_amm_settings(&admin, &100, &1000, &10000);
+    contract.initialize_amm_settings(&admin, &100, &1000, &10000, &None, &None, &10000);
     (contract, admin, user)
 }
 
@@ -420,7 +420,7 @@ fn test_e2e_multi_user_interactions() {
     let user2 = Address::generate(&env);
     let user3 = Address::generate(&env);
 
-    contract.initialize_amm_settings(&admin, &100, &1000, &10000);
+    contract.initialize_amm_settings(&admin, &100, &1000, &10000, &None, &None, &10000);
 
     let protocol_config = create_protocol_config(&env, "MultiUserAMM", 30);
     let protocol_addr = protocol_config.protocol_address.clone();
@@ -929,7 +929,7 @@ fn test_e2e_callback_nonce_isolation() {
     let user1 = Address::generate(&env);
     let user2 = Address::generate(&env);
 
-    contract.initialize_amm_settings(&admin, &100, &1000, &10000);
+    contract.initialize_amm_settings(&admin, &100, &1000, &10000, &None, &None, &10000);
 
     let protocol_config = create_protocol_config(&env, "NonceAMM", 30);
     let protocol_addr = protocol_config.protocol_address.clone();

@@ -1,12 +1,14 @@
 # StellarLend Storage Layout and Migration Guide
 
-This document describes the persistent storage structure of the StellarLend protocol on Soroban. It serves as a reference for developers, auditors, and for planning contract upgrades.
+This document describes the persistent storage structure of the StellarLend protocol on Soroban.
 
 ## Overview
 
-StellarLend uses Soroban's `persistent()` storage for all long-term data. This ensures that user balances, protocol configurations, and risk parameters remain available across ledger boundaries. All keys are defined using `contracttype` enums or `Symbol` to ensure type safety and avoid collisions.
+StellarLend uses Soroban's `persistent()` storage for all long-term data.
+All keys are defined using `contracttype` enums.
 
----
+> [!IMPORTANT]
+> **Namespace Isolation**: To prevent collisions between modules, all storage key enum variants MUST be unique across the entire contract. Even different enum types will collide if their variants share the same name (as they serialize to the same `Symbol`).
 
 ## Storage Map
 

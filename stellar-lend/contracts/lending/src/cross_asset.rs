@@ -161,8 +161,8 @@ pub enum CrossAssetDataKey {
     UserPosition(Address),
     TotalAssetDebt(Address),
     MinBorrowAmount,
-    Paused,
-    Admin,
+    CrossAssetPaused,
+    CrossAssetAdmin,
 }
 
 #[contracttype]
@@ -221,6 +221,9 @@ pub fn deposit_collateral_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Deposit) {
@@ -279,6 +282,9 @@ pub fn borrow_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Borrow) {
@@ -359,6 +365,9 @@ pub fn repay_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Repay) {
@@ -423,6 +432,9 @@ pub fn withdraw_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Withdraw) {
@@ -486,7 +498,7 @@ fn check_admin(env: &Env) -> Result<(), CrossAssetError> {
     let admin: Address = env
         .storage()
         .persistent()
-        .get(&CrossAssetDataKey::Admin)
+        .get(&CrossAssetDataKey::CrossAssetAdmin)
         .ok_or(CrossAssetError::Unauthorized)?;
     admin.require_auth();
     Ok(())
@@ -540,7 +552,7 @@ fn calculate_position_summary(
 
     for (asset, amount) in collateral_balances.iter() {
         let params = get_asset_params(env, &asset)?;
-        let price = get_price(env, &params.price_feed)?;
+        let price = get_price(env, &asset)?;
         let value_usd = amount
             .checked_mul(price)
             .ok_or(CrossAssetError::Overflow)?
@@ -561,8 +573,8 @@ fn calculate_position_summary(
     }
 
     for (asset, amount) in debt_balances.iter() {
-        let params = get_asset_params(env, &asset)?;
-        let price = get_price(env, &params.price_feed)?;
+        let _params = get_asset_params(env, &asset)?;
+        let price = get_price(env, &asset)?;
         let value_usd = amount
             .checked_mul(price)
             .ok_or(CrossAssetError::Overflow)?
@@ -594,20 +606,15 @@ fn calculate_position_summary(
 ///
 /// # Arguments
 /// * `env` - The contract environment.
-/// * `price_feed` - The address of the oracle price feed.
+/// * `asset` - The address of the asset.
 ///
 /// # Returns
 /// The price of the asset (scaled by 10^7).
 ///
 /// # Errors
-/// * `PriceUnavailable`: If the oracle price is not available.
-///
-/// # Security
-/// * In a production implementation, this should call a trusted oracle contract.
-fn get_price(_env: &Env, _price_feed: &Address) -> Result<i128, CrossAssetError> {
-    // Mock price feed - in real app, call oracle contract
-    // Example: let oracle = oracle::Client::new(env, price_feed); oracle.get_price(...)
-    Ok(10000000) // $1.00 with 7 decimals
+/// * `PriceUnavailable`: If the oracle price is not available or stale.
+fn get_price(env: &Env, asset: &Address) -> Result<i128, CrossAssetError> {
+    crate::oracle::get_price(env, asset).map_err(|_| CrossAssetError::PriceUnavailable)
 }
 
 pub fn initialize_admin(env: &Env, admin: Address) {
@@ -625,5 +632,5 @@ pub fn initialize_admin(env: &Env, admin: Address) {
     admin.require_auth();
     env.storage()
         .persistent()
-        .set(&CrossAssetDataKey::Admin, &admin);
+        .set(&CrossAssetDataKey::CrossAssetAdmin, &admin);
 }
