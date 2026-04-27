@@ -38,9 +38,9 @@
 //! - Fallback oracle address cannot be the zero address or the contract itself.
 //! - Future timestamps in stored feeds are treated as stale (clock-skew guard).
 
-use soroban_sdk::{contracterror, contracttype, Address, Env};
+use soroban_sdk::{contracterror, contracttype, Address};
 
-use crate::borrow::get_admin;
+// ── Storage key namespace ────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Errors
@@ -50,23 +50,7 @@ use crate::borrow::get_admin;
 ///
 /// # Security
 /// All error variants are non-sensitive; they do not leak internal state.
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum OracleError {
-    /// Price is zero or negative.
-    InvalidPrice = 1,
-    /// Price feed is older than `max_staleness_seconds`.
-    StalePrice = 2,
-    /// Caller is not the admin or the registered oracle for this slot.
-    Unauthorized = 3,
-    /// No price feed available (primary missing and no fallback configured).
-    NoPriceFeed = 4,
-    /// Oracle address is invalid (e.g. zero or self-referential).
-    InvalidOracle = 5,
-    /// Oracle updates are paused.
-    OraclePaused = 6,
-}
+pub use crate::errors::OracleError;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Storage types
@@ -97,48 +81,26 @@ pub enum OracleKey {
     AssetStaleness(Address),
 }
 
-/// A price feed entry stored on-chain.
+// ── Core state structs ───────────────────────────────────────────────────────
+
+/// Snapshot of a user's position in a single asset market.
 #[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct PriceFeed {
-    /// Price with 8 decimals (e.g. 100_000_000 = 1.0 USD).
-    pub price: i128,
-    /// Ledger timestamp when this price was last written.
-    pub last_updated: u64,
-    /// Address of the oracle that submitted this price.
-    pub oracle: Address,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserPosition {
+    pub deposited: i128,
+    pub borrowed: i128,
 }
 
-/// Global oracle configuration.
+/// Protocol-level market state for one asset.
 #[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct OracleConfig {
-    /// Maximum age of a price feed in seconds before it is considered stale.
-    /// Default: 3600 (1 hour).
-    pub max_staleness_seconds: u64,
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Defaults
-// ─────────────────────────────────────────────────────────────────────────────
-
-const DEFAULT_MAX_STALENESS_SECONDS: u64 = 3600;
-
-fn default_config() -> OracleConfig {
-    OracleConfig {
-        max_staleness_seconds: DEFAULT_MAX_STALENESS_SECONDS,
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Internal helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-fn get_config(env: &Env) -> OracleConfig {
-    env.storage()
-        .persistent()
-        .get::<OracleKey, OracleConfig>(&OracleKey::Config)
-        .unwrap_or_else(default_config)
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MarketState {
+    pub total_deposits: i128,
+    pub total_borrows: i128,
+    pub reserves: i128,
+    pub bad_debt: i128,
+    pub is_active: bool,
+    pub is_frozen: bool, // frozen during emergency shutdown
 }
 
 /// Return the effective max-staleness for `asset`.
@@ -168,103 +130,35 @@ fn is_stale(env: &Env, asset: &Address, last_updated: u64) -> bool {
     age > effective_max_staleness(env, asset)
 }
 
-fn validate_price(price: i128) -> Result<(), OracleError> {
-    if price <= 0 {
-        return Err(OracleError::InvalidPrice);
+    /// Solvency invariant: net assets must never be negative.
+    /// net_assets = reserves + total_deposits - total_borrows - bad_debt
+    pub fn check_solvency_invariant(&self) -> bool {
+        let net = self.reserves + self.total_deposits - self.total_borrows - self.bad_debt;
+        net >= 0
     }
-    Ok(())
+
+    /// Bad-debt invariant: cumulative bad debt must never be negative.
+    pub fn check_bad_debt_non_negative(&self) -> bool {
+        self.bad_debt >= 0
+    }
+
+    /// Reserves invariant: reserves must never be negative.
+    pub fn check_reserves_non_negative(&self) -> bool {
+        self.reserves >= 0
+    }
 }
 
-fn require_admin_caller(env: &Env, caller: &Address) -> Result<(), OracleError> {
-    let admin = get_admin(env).ok_or(OracleError::Unauthorized)?;
-    if *caller != admin {
-        return Err(OracleError::Unauthorized);
-    }
-    Ok(())
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Configure global oracle parameters. Admin only.
-///
-/// # Errors
-/// - `Unauthorized` — caller is not the protocol admin.
-/// - `InvalidPrice` — `max_staleness_seconds` is zero.
-///
-/// # Security
-/// Requires `caller.require_auth()`. Only the admin may change staleness bounds.
-pub fn configure_oracle(
-    env: &Env,
-    caller: Address,
-    config: OracleConfig,
-) -> Result<(), OracleError> {
-    require_admin_caller(env, &caller)?;
-    caller.require_auth();
-
-    if config.max_staleness_seconds == 0 {
-        return Err(OracleError::InvalidPrice);
-    }
-
-    env.storage().persistent().set(&OracleKey::Config, &config);
-    Ok(())
-}
-
-/// Register the primary oracle address for `asset`. Admin only.
-///
-/// # Errors
-/// - `Unauthorized` — caller is not the protocol admin.
-/// - `InvalidOracle` — `primary_oracle` is the contract itself.
-///
-/// # Security
-/// Requires `caller.require_auth()`. The registered address is the only non-admin
-/// address permitted to submit primary price updates for this asset.
-pub fn set_primary_oracle(
-    env: &Env,
-    caller: Address,
-    asset: Address,
-    primary_oracle: Address,
-) -> Result<(), OracleError> {
-    require_admin_caller(env, &caller)?;
-    caller.require_auth();
-
-    if primary_oracle == env.current_contract_address() {
-        return Err(OracleError::InvalidOracle);
-    }
-
-    env.storage()
-        .persistent()
-        .set(&OracleKey::PrimaryOracle(asset), &primary_oracle);
-    Ok(())
-}
-
-/// Register the fallback oracle address for `asset`. Admin only.
-///
-/// # Errors
-/// - `Unauthorized` — caller is not the protocol admin.
-/// - `InvalidOracle` — `fallback_oracle` is the contract itself.
-///
-/// # Security
-/// Requires `caller.require_auth()`. The fallback oracle is only consulted when
-/// the primary feed is stale or missing.
-pub fn set_fallback_oracle(
-    env: &Env,
-    caller: Address,
-    asset: Address,
-    fallback_oracle: Address,
-) -> Result<(), OracleError> {
-    require_admin_caller(env, &caller)?;
-    caller.require_auth();
-
-    if fallback_oracle == env.current_contract_address() {
-        return Err(OracleError::InvalidOracle);
-    }
-
-    env.storage()
-        .persistent()
-        .set(&OracleKey::FallbackOracle(asset), &fallback_oracle);
-    Ok(())
+/// Result returned by view functions for off-chain consumption.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProtocolReport {
+    pub asset: Address,
+    pub total_deposits: i128,
+    pub total_borrows: i128,
+    pub reserves: i128,
+    pub bad_debt: i128,
+    pub utilisation_bps: i128, // borrows / deposits * 10_000
+    pub is_solvent: bool,
 }
 
 /// Submit a price update for `asset`.
@@ -332,7 +226,9 @@ pub fn update_price_feed(
             .set(&OracleKey::FallbackFeed(asset), &feed);
     } else {
         // Admin or primary oracle writes to primary slot
-        env.storage().persistent().set(&OracleKey::PrimaryFeed(asset), &feed);
+        env.storage()
+            .persistent()
+            .set(&OracleKey::PrimaryFeed(asset), &feed);
     }
 
     Ok(())

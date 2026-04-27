@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 
-use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 use crate::prelude::*;
+use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 
 use crate::types::{AssetStatus, ProposalType, VoteType};
 
@@ -124,6 +124,29 @@ pub struct FlashLoanRepaidEvent {
 pub struct AdminActionEvent {
     pub actor: Address,
     pub action: Symbol,
+    pub timestamp: u64,
+}
+
+#[soroban_sdk::contracttype]
+#[derive(Clone, Debug)]
+pub struct InterestRateConfigUpdatedEvent {
+    pub actor: Address,
+    pub base_rate_bps: i128,
+    pub kink_utilization_bps: i128,
+    pub multiplier_bps: i128,
+    pub jump_multiplier_bps: i128,
+    pub rate_floor_bps: i128,
+    pub rate_ceiling_bps: i128,
+    pub spread_bps: i128,
+    pub timestamp: u64,
+}
+
+#[soroban_sdk::contracttype]
+#[derive(Clone, Debug)]
+pub struct EmergencyRateAdjustmentEvent {
+    pub actor: Address,
+    pub old_adjustment_bps: i128,
+    pub new_adjustment_bps: i128,
     pub timestamp: u64,
 }
 
@@ -474,6 +497,26 @@ pub fn emit_flash_loan_repaid(e: &Env, event: FlashLoanRepaidEvent) {
 
 pub fn emit_admin_action(e: &Env, event: AdminActionEvent) {
     event.publish(e);
+}
+
+pub fn emit_interest_rate_config_updated(e: &Env, event: InterestRateConfigUpdatedEvent) {
+    e.events().publish(
+        (
+            Symbol::new(e, "interest_rate_config_updated"),
+            event.actor.clone(),
+        ),
+        event,
+    );
+}
+
+pub fn emit_emergency_rate_adjustment(e: &Env, event: EmergencyRateAdjustmentEvent) {
+    e.events().publish(
+        (
+            Symbol::new(e, "emergency_rate_adjustment"),
+            event.actor.clone(),
+        ),
+        event,
+    );
 }
 
 pub fn emit_price_updated(e: &Env, event: PriceUpdatedEvent) {

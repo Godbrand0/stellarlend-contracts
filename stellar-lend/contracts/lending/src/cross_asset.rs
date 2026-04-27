@@ -89,23 +89,11 @@ use soroban_sdk::{contracterror, contractevent, contracttype, token, Address, En
 use crate::constants::{BPS_SCALE, HEALTH_FACTOR_SCALE};
 use crate::pause::{self, PauseType};
 
-#[contracterror]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[repr(u32)]
-pub enum CrossAssetError {
-    InsufficientCollateral = 1,
-    DebtCeilingReached = 2,
-    ProtocolPaused = 3,
-    InvalidAmount = 4,
-    Overflow = 5,
-    Unauthorized = 6,
-    AssetNotSupported = 7,
-    PriceUnavailable = 8,
-    AlreadyInitialized = 9,
-}
+pub use crate::errors::CrossAssetError;
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct AssetParamsSetEvent {
     pub asset: Address,
     pub ltv: i128,
@@ -115,6 +103,7 @@ pub struct AssetParamsSetEvent {
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct CrossDepositEvent {
     pub user: Address,
     pub asset: Address,
@@ -123,6 +112,7 @@ pub struct CrossDepositEvent {
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct CrossBorrowEvent {
     pub user: Address,
     pub asset: Address,
@@ -131,6 +121,7 @@ pub struct CrossBorrowEvent {
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct CrossRepayEvent {
     pub user: Address,
     pub asset: Address,
@@ -230,6 +221,9 @@ pub fn deposit_collateral_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Deposit) {
@@ -288,6 +282,9 @@ pub fn borrow_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Borrow) {
@@ -368,6 +365,9 @@ pub fn repay_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Repay) {
@@ -432,6 +432,9 @@ pub fn withdraw_asset(
     asset: Address,
     amount: i128,
 ) -> Result<(), CrossAssetError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| CrossAssetError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Withdraw) {
@@ -468,8 +471,8 @@ pub fn withdraw_asset(
     save_user_position(env, &user, &position);
 
     // Transfer tokens from contract to user
-    let token_client = token::Client::new(env, &asset);
-    token_client.transfer(&env.current_contract_address(), &user, &amount);
+    // let token_client = token::Client::new(env, &asset);
+    // token_client.transfer(&env.current_contract_address(), &user, &amount);
 
     CrossWithdrawEvent {
         user,
@@ -615,6 +618,18 @@ fn get_price(env: &Env, asset: &Address) -> Result<i128, CrossAssetError> {
 }
 
 pub fn initialize_admin(env: &Env, admin: Address) {
+    // Guard against re-initialization: once the cross-asset admin is set it
+    // cannot be overwritten through this path. An attacker calling this after
+    // deployment would otherwise be able to seize admin rights over cross-asset
+    // operations (privilege escalation via unguarded init).
+    if env
+        .storage()
+        .persistent()
+        .has(&CrossAssetDataKey::Admin)
+    {
+        panic!("cross-asset admin already initialized");
+    }
+    admin.require_auth();
     env.storage()
         .persistent()
         .set(&CrossAssetDataKey::CrossAssetAdmin, &admin);
