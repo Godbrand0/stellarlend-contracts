@@ -88,6 +88,7 @@ use soroban_sdk::{contracterror, contractevent, contracttype, token, Address, En
 
 use crate::constants::{BPS_SCALE, HEALTH_FACTOR_SCALE};
 use crate::pause::{self, PauseType};
+use crate::validation;
 
 pub use crate::errors::CrossAssetError;
 
@@ -192,6 +193,12 @@ pub fn set_asset_params(
     params: AssetParams,
 ) -> Result<(), CrossAssetError> {
     check_admin(env)?;
+    
+    validation::assert_bps_range(params.ltv)?;
+    validation::assert_bps_range(params.liquidation_threshold)?;
+    validation::assert_ltv_threshold(params.ltv, params.liquidation_threshold)?;
+    validation::assert_positive(params.debt_ceiling)?;
+
     env.storage()
         .persistent()
         .set(&CrossAssetDataKey::AssetParams(asset), &params);

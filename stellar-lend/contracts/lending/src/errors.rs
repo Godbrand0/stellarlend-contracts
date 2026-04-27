@@ -30,6 +30,7 @@ pub enum BorrowError {
     BelowMinimumBorrow = 1008,
     RepayAmountTooHigh = 1009,
     Reentrancy = 1010,
+    InvalidParameterRange = 1011,
 }
 
 // ── Deposits (2000–2999) ──────────────────────────────────────────────
