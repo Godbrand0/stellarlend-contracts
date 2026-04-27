@@ -30,6 +30,8 @@ mod test {
 
         // Initialize protocol
         client.initialize(&admin, &1_000_000, &10);
+        client.register_asset(&admin, &asset);
+        client.register_asset(&admin, &collateral_asset);
 
         // Set oracle so health factor can be computed
         let oracle_id = env.register(BadDebtMockOracle, ());
@@ -90,6 +92,8 @@ mod test {
 
         // Initialize protocol
         client.initialize(&admin, &1_000_000, &10);
+        client.register_asset(&admin, &asset);
+        client.register_asset(&admin, &collateral_asset);
 
         // Set oracle and threshold so position is under-water
         let oracle_id = env.register(BadDebtMockOracle, ());

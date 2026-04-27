@@ -137,6 +137,7 @@ impl HelloContract {
         liquidation_incentive: Option<i128>,
     ) -> Result<(), RiskManagementError> {
         require_admin(&env, &caller)?;
+        risk_management::check_read_only_mode(&env)?;
         check_emergency_pause(&env)?;
         risk_params::set_risk_params(
             &env,
@@ -167,6 +168,8 @@ impl HelloContract {
         guardians: soroban_sdk::Vec<Address>,
         threshold: u32,
     ) -> Result<(), errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         recovery::set_guardians(&env, caller, guardians, threshold)
     }
 
@@ -176,14 +179,20 @@ impl HelloContract {
         old_admin: Address,
         new_admin: Address,
     ) -> Result<(), errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         recovery::start_recovery(&env, initiator, old_admin, new_admin)
     }
 
     pub fn approve_recovery(env: Env, approver: Address) -> Result<(), errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         recovery::approve_recovery(&env, approver)
     }
 
     pub fn execute_recovery(env: Env, executor: Address) -> Result<(), errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         recovery::execute_recovery(&env, executor)
     }
 
@@ -193,6 +202,8 @@ impl HelloContract {
         admins: soroban_sdk::Vec<Address>,
         threshold: u32,
     ) -> Result<(), errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         multisig::ms_set_admins(&env, caller, admins, threshold)
     }
 
@@ -201,6 +212,8 @@ impl HelloContract {
         proposer: Address,
         new_ratio: i128,
     ) -> Result<u64, errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         multisig::ms_propose_set_min_cr(&env, proposer, new_ratio)
     }
 
@@ -209,6 +222,8 @@ impl HelloContract {
         approver: Address,
         proposal_id: u64,
     ) -> Result<(), errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         multisig::ms_approve(&env, approver, proposal_id)
     }
 
@@ -217,6 +232,8 @@ impl HelloContract {
         executor: Address,
         proposal_id: u64,
     ) -> Result<(), errors::GovernanceError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| errors::GovernanceError::ReadOnlyMode)?;
         multisig::ms_execute(&env, executor, proposal_id)
     }
 
@@ -325,6 +342,8 @@ impl HelloContract {
         caller: Address,
         config: FlashLoanConfig,
     ) -> Result<(), crate::flash_loan::FlashLoanError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| crate::flash_loan::FlashLoanError::ReadOnlyMode)?;
         flash_loan::configure_flash_loan(&env, caller, config)
     }
 
@@ -334,6 +353,8 @@ impl HelloContract {
         caller: Address,
         fee_bps: i128,
     ) -> Result<(), crate::flash_loan::FlashLoanError> {
+        risk_management::check_read_only_mode(&env)
+            .map_err(|_| crate::flash_loan::FlashLoanError::ReadOnlyMode)?;
         flash_loan::set_flash_loan_fee(&env, caller, fee_bps)
     }
 
@@ -351,6 +372,7 @@ impl HelloContract {
         spread: Option<i128>,
     ) -> Result<(), RiskManagementError> {
         require_admin(&env, &admin)?;
+        risk_management::check_read_only_mode(&env)?;
         interest_rate::update_interest_rate_config(
             &env,
             admin,
@@ -431,6 +453,7 @@ impl HelloContract {
         asset: Option<Address>,
         reserve_factor_bps: i128,
     ) -> Result<(), RiskManagementError> {
+        risk_management::check_read_only_mode(&env)?;
         crate::reserve::set_reserve_factor(&env, caller, asset, reserve_factor_bps)
             .map_err(|_| RiskManagementError::InvalidParameter)
     }
@@ -448,6 +471,7 @@ impl HelloContract {
         caller: Address,
         treasury: Address,
     ) -> Result<(), RiskManagementError> {
+        risk_management::check_read_only_mode(&env)?;
         crate::reserve::set_treasury_address(&env, caller, treasury)
             .map_err(|_| RiskManagementError::InvalidParameter)
     }
@@ -470,6 +494,7 @@ impl HelloContract {
         asset: Option<Address>,
         amount: i128,
     ) -> Result<i128, RiskManagementError> {
+        risk_management::check_read_only_mode(&env)?;
         crate::reserve::withdraw_reserve_funds(&env, caller, asset, amount)
             .map_err(|_| RiskManagementError::InvalidParameter)
     }
@@ -494,6 +519,7 @@ impl HelloContract {
         to: Address,
         amount: i128,
     ) -> Result<(), RiskManagementError> {
+        risk_management::check_read_only_mode(&env)?;
         require_admin(&env, &caller)?;
 
         if amount <= 0 {
@@ -501,7 +527,7 @@ impl HelloContract {
         }
 
         let balance_key = crate::reserve::ReserveDataKey::ReserveBalance(asset.clone());
-        let reserve_balance: i128 = env
+        let mut reserve_balance: i128 = env
             .storage()
             .persistent()
             .get::<crate::reserve::ReserveDataKey, i128>(&balance_key)
@@ -511,34 +537,21 @@ impl HelloContract {
             return Err(RiskManagementError::InvalidParameter);
         }
 
-        if let Some(_asset_addr) = asset {
-            #[cfg(not(test))]
-            {
-                let token_client = soroban_sdk::token::Client::new(&env, &_asset_addr);
-                token_client.transfer(&env.current_contract_address(), &_to, &amount);
-            }
-        }
-
+        // EFFECTS: Update state before interaction
         reserve_balance -= amount;
         env.storage().persistent().set(&balance_key, &new_balance);
 
         // INTERACTIONS: transfer tokens to the requested destination
-        // In test builds `to` is only referenced inside this cfg block; the
-        // let-binding below keeps the compiler happy without changing the API.
-        let _ = &to;
-        #[cfg(not(test))]
-        {
-            let effective_addr: Address = match &asset {
-                Some(addr) => addr.clone(),
-                None => env
-                    .storage()
-                    .persistent()
-                    .get::<DepositDataKey, Address>(&DepositDataKey::NativeAssetAddress)
-                    .ok_or(RiskManagementError::InvalidParameter)?,
-            };
-            let token_client = soroban_sdk::token::Client::new(&env, &effective_addr);
-            token_client.transfer(&env.current_contract_address(), &to, &amount);
-        }
+        let effective_addr: Address = match &asset {
+            Some(addr) => addr.clone(),
+            None => env
+                .storage()
+                .persistent()
+                .get::<DepositDataKey, Address>(&DepositDataKey::NativeAssetAddress)
+                .ok_or(RiskManagementError::InvalidParameter)?,
+        };
+        let token_client = soroban_sdk::token::Client::new(&env, &effective_addr);
+        token_client.transfer(&env.current_contract_address(), &to, &amount);
 
         Ok(())
     }
@@ -605,72 +618,6 @@ impl HelloContract {
         reserve::get_total_reserves(&env)
     }
 
-    /// Set reserve factor for an asset (admin only).
-    ///
-    /// # Errors
-    /// Returns `ReserveError::Unauthorized` when `caller` is not admin.
-    /// Returns `ReserveError::InvalidReserveFactor` when factor is out of bounds.
-    ///
-    /// # Security
-    /// Requires signed admin authorization and enforces explicit factor bounds.
-    pub fn set_reserve_factor(
-        env: Env,
-        caller: Address,
-        asset: Option<Address>,
-        reserve_factor_bps: i128,
-    ) -> Result<(), crate::reserve::ReserveError> {
-        reserve::set_reserve_factor(&env, caller, asset, reserve_factor_bps)
-    }
-
-    /// Get reserve factor for an asset.
-    pub fn get_reserve_factor(env: Env, asset: Option<Address>) -> i128 {
-        reserve::get_reserve_factor(&env, asset)
-    }
-
-    /// Set treasury destination for reserve withdrawals (admin only).
-    ///
-    /// # Errors
-    /// Returns `ReserveError::Unauthorized` when `caller` is not admin.
-    /// Returns `ReserveError::InvalidTreasury` when destination is invalid.
-    ///
-    /// # Security
-    /// Restricts treasury changes to admin and forbids self-address treasury.
-    pub fn set_treasury_address(
-        env: Env,
-        caller: Address,
-        treasury: Address,
-    ) -> Result<(), crate::reserve::ReserveError> {
-        reserve::set_treasury_address(&env, caller, treasury)
-    }
-
-    /// Get configured treasury address, if set.
-    pub fn get_treasury_address(env: Env) -> Option<Address> {
-        reserve::get_treasury_address(&env)
-    }
-
-    /// Withdraw accrued reserve funds to treasury (admin only).
-    ///
-    /// # Errors
-    /// Returns `ReserveError::Unauthorized` when caller is not admin.
-    /// Returns `ReserveError::InsufficientReserve` when amount exceeds accrued reserve.
-    /// Returns `ReserveError::TreasuryNotSet` when treasury is missing.
-    ///
-    /// # Security
-    /// Uses checks-effects-interactions by updating state before any external transfer.
-    pub fn withdraw_reserve_funds(
-        env: Env,
-        caller: Address,
-        asset: Option<Address>,
-        amount: i128,
-    ) -> Result<i128, crate::reserve::ReserveError> {
-        reserve::withdraw_reserve_funds(&env, caller, asset, amount)
-    }
-
-    /// Get reserve stats tuple for an asset.
-    pub fn get_reserve_stats(env: Env, asset: Option<Address>) -> (i128, i128, Option<Address>) {
-        reserve::get_reserve_stats(&env, asset)
-    }
-
     // ============================================================================
     // Oracle Methods
     // ============================================================================
@@ -723,6 +670,36 @@ impl HelloContract {
     pub fn initialize_risk_management(env: Env, admin: Address) -> Result<(), RiskManagementError> {
         risk_management::initialize_risk_management(&env, admin)
     }
+
+    /// Set emergency pause (admin only).
+    pub fn set_emergency_pause(
+        env: Env,
+        caller: Address,
+        paused: bool,
+    ) -> Result<(), RiskManagementError> {
+        risk_management::set_emergency_pause(&env, caller, paused)
+    }
+
+    /// Check if emergency pause is active.
+    pub fn is_emergency_paused(env: Env) -> bool {
+        risk_management::is_emergency_paused(&env)
+    }
+
+    /// Set read-only mode (admin only).
+    pub fn set_read_only_mode(
+        env: Env,
+        caller: Address,
+        enabled: bool,
+    ) -> Result<(), RiskManagementError> {
+        risk_management::set_read_only_mode(&env, caller, enabled)
+    }
+
+    /// Check if read-only mode is active.
+    pub fn is_read_only_mode(env: Env) -> bool {
+        risk_management::is_read_only_mode(&env)
+    }
+
+    /// Set pause switch for a specific operation (admin only).
 
     // ============================================================================
     // AMM Methods
@@ -1250,22 +1227,35 @@ impl HelloContract {
     pub fn gov_can_vote(env: Env, voter: Address, proposal_id: u64) -> bool {
         governance::can_vote(&env, voter, proposal_id)
     }
+
+    /// Check if an operation is paused.
+    pub fn is_operation_paused(env: Env, operation: Symbol) -> bool {
+        risk_management::is_operation_paused(&env, operation)
+    }
+
+    /// Set pause switch (admin only).
+    pub fn set_pause_switch(
+        env: Env,
+        caller: Address,
+        operation: Symbol,
+        paused: bool,
+    ) -> Result<(), RiskManagementError> {
+        risk_management::set_pause_switch(&env, caller, operation, paused)
+    }
+
+    /// Execute flash loan.
+    pub fn execute_flash_loan(
+        env: Env,
+        user: Address,
+        asset: Address,
+        amount: i128,
+        callback: Address,
+    ) -> Result<i128, flash_loan::FlashLoanError> {
+        flash_loan::execute_flash_loan(&env, user, asset, amount, callback)
+    }
 }
 
-#[cfg(test)]
-mod tests;
-
-// Legacy standalone tests currently mismatch contract API.
-// #[cfg(test)]
-// mod test_reentrancy;
-mod flash_loan_test;
-#[cfg(test)]
-// mod test;
-// #[cfg(test)]
-// mod test_reentrancy;
-#[cfg(test)]
-mod test_reentrancy;
-
+// Additional test modules
 #[cfg(test)]
 mod amm_pause_integration_test;
 

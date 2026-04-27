@@ -71,6 +71,8 @@ pub enum WithdrawError {
     Undercollateralized = 8,
     /// Caller is not the position owner.
     Unauthorized = 9,
+    /// Protocol is in read-only mode
+    ReadOnlyMode = 10,
 }
 
 // ---------------------------------------------------------------------------
@@ -275,12 +277,17 @@ pub fn withdraw_collateral(
     // 4. Pause checks — consult BOTH emergency pause and per-op flag
     // -----------------------------------------------------------------------
 
-    // 4a. Global emergency pause (risk_management module)
+    // 4a. Read-only mode (highest precedence)
+    if crate::risk_management::is_read_only_mode(env) {
+        return Err(WithdrawError::ReadOnlyMode);
+    }
+
+    // 4b. Global emergency pause (risk_management module)
     if crate::risk_management::is_emergency_paused(env) {
         return Err(WithdrawError::WithdrawPaused);
     }
 
-    // 4b. Per-operation pause switch (legacy PauseSwitches map)
+    // 4c. Per-operation pause switch (legacy PauseSwitches map)
     let pause_switches_key = DepositDataKey::PauseSwitches;
     if let Some(pause_map) = env
         .storage()

@@ -106,6 +106,9 @@ pub fn borrow(
     collateral_asset: Address,
     collateral_amount: i128,
 ) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &asset)?;
+    crate::asset_registry::require_registered_asset(env, &collateral_asset)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Borrow) || blocks_high_risk_ops(env) {
@@ -157,6 +160,19 @@ pub fn borrow(
     let debt_ceiling = get_debt_ceiling(env);
     if new_total > debt_ceiling {
         return Err(BorrowError::DebtCeilingReached);
+    }
+
+    // [Issue #492] Enforce deposit cap for new collateral
+    if collateral_amount > 0 {
+        let current_deposits = crate::deposit::get_total_deposits(env);
+        let cap = crate::deposit::get_deposit_cap(env);
+        let next_deposits = current_deposits
+            .checked_add(collateral_amount)
+            .ok_or(BorrowError::Overflow)?;
+        if next_deposits > cap {
+            return Err(BorrowError::ExceedsDepositCap);
+        }
+        crate::deposit::set_total_deposits(env, next_deposits);
     }
 
     debt_position.borrowed_amount = debt_position
@@ -430,9 +446,22 @@ pub fn get_user_collateral(env: &Env, user: &Address) -> BorrowCollateral {
 }
 
 pub fn deposit(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &asset)?;
+
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }
+    // [Issue #492] Enforce deposit cap
+    let current_deposits = crate::deposit::get_total_deposits(env);
+    let cap = crate::deposit::get_deposit_cap(env);
+    let next_deposits = current_deposits
+        .checked_add(amount)
+        .ok_or(BorrowError::Overflow)?;
+    if next_deposits > cap {
+        return Err(BorrowError::ExceedsDepositCap);
+    }
+    crate::deposit::set_total_deposits(env, next_deposits);
+
     let mut collateral_position = get_collateral_position(env, &user);
     if collateral_position.amount == 0 {
         collateral_position.asset = asset.clone();
@@ -456,6 +485,8 @@ pub fn deposit(env: &Env, user: Address, asset: Address, amount: i128) -> Result
 }
 
 pub fn repay(env: &Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &asset)?;
+
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }
@@ -601,6 +632,9 @@ pub fn liquidate_position(
     _collateral_asset: Address,
     amount: i128,
 ) -> Result<(), BorrowError> {
+    crate::asset_registry::require_registered_asset(env, &debt_asset)?;
+    crate::asset_registry::require_registered_asset(env, &_collateral_asset)?;
+
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }

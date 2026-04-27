@@ -1,7 +1,12 @@
 #![cfg(test)]
 
+use crate::borrow::BorrowError;
+use crate::deposit::{AssetParams, DepositDataKey, DepositError, Position};
+use crate::reentrancy::{is_locked, ReentrancyGuard};
+use crate::repay::RepayError;
+use crate::withdraw::WithdrawError;
 use crate::{HelloContract, HelloContractClient};
-use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, Env, Symbol};
+use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, Env, Map, Symbol};
 
 #[contract]
 pub struct MaliciousToken;
@@ -34,7 +39,7 @@ impl MaliciousToken {
             let token_opt = Some(env.current_contract_address());
 
             // Try deposit
-            let res = client.try_ca_deposit_collateral(user, &token_opt, &100);
+            let res = client.try_deposit_collateral(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on deposit, got {:?}",
@@ -42,7 +47,7 @@ impl MaliciousToken {
             );
 
             // Try withdraw
-            let res = client.try_ca_withdraw_collateral(user, &token_opt, &100);
+            let res = client.try_withdraw_collateral(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on withdraw, got {:?}",
@@ -50,7 +55,7 @@ impl MaliciousToken {
             );
 
             // Try borrow
-            let res = client.try_ca_borrow_asset(user, &token_opt, &100);
+            let res = client.try_borrow_asset(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on borrow, got {:?}",
@@ -58,7 +63,7 @@ impl MaliciousToken {
             );
 
             // Try repay
-            let res = client.try_ca_repay_debt(user, &token_opt, &100);
+            let res = client.try_repay_debt(user, &token_opt, &100);
             assert!(
                 res.is_err(),
                 "Expected Reentrancy error on repay, got {:?}",
@@ -103,11 +108,28 @@ fn setup_test(env: &Env) -> (Address, HelloContractClient<'static>, Address, Add
         );
     });
 
-    let static_client = unsafe {
-        core::mem::transmute::<HelloContractClient<'_>, HelloContractClient<'static>>(client)
-    };
+    let client_unbound = HelloContractClient::new(env, &contract_id);
 
-    (contract_id, static_client, malicious_token_id, user)
+    (contract_id, client_unbound, malicious_token_id, user)
+}
+
+fn seed_position(env: &Env, contract_id: &Address, user: &Address, collateral: i128, debt: i128) {
+    env.as_contract(contract_id, || {
+        use crate::deposit::{DepositDataKey, Position};
+        env.storage().persistent().set(
+            &DepositDataKey::CollateralBalance(user.clone()),
+            &collateral,
+        );
+        env.storage().persistent().set(
+            &DepositDataKey::Position(user.clone()),
+            &Position {
+                collateral,
+                debt,
+                borrow_interest: 0,
+                last_accrual_time: env.ledger().timestamp(),
+            },
+        );
+    });
 }
 
 #[test]
@@ -149,22 +171,10 @@ fn test_reentrancy_on_borrow() {
     let env = Env::default();
     let (contract_id, client, token_id, user) = setup_test(&env);
 
-    env.as_contract(&contract_id, || {
-        use crate::deposit::{DepositDataKey, Position};
-        env.storage().persistent().set(
-            &DepositDataKey::CollateralBalance(user.clone()),
-            &10000_i128,
-        );
-        env.storage().persistent().set(
-            &DepositDataKey::Position(user.clone()),
-            &Position {
-                collateral: 10000,
-                debt: 0,
-                borrow_interest: 0,
-                last_accrual_time: env.ledger().timestamp(),
-            },
-        );
+    seed_position(&env, &contract_id, &user, 10000, 0);
 
+    env.as_contract(&contract_id, || {
+        let guard = ReentrancyGuard::new(&env).unwrap();
         drop(guard);
 
         assert!(!is_locked(&env));
@@ -174,7 +184,8 @@ fn test_reentrancy_on_borrow() {
 
 #[test]
 fn deposit_rejects_callback_reentry_and_releases_lock() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
 
     client
         .deposit_collateral(&user, &Some(token_id), &1_000)
@@ -199,7 +210,8 @@ fn deposit_rejects_callback_reentry_and_releases_lock() {
 
 #[test]
 fn repay_reentrancy_with_zero_amount() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 10_000, 1_000);
 
     // Zero amount should fail before reentrancy check
@@ -214,7 +226,8 @@ fn repay_reentrancy_with_zero_amount() {
 
 #[test]
 fn repay_reentrancy_with_negative_amount() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 10_000, 1_000);
 
     // Negative amount should fail before reentrancy check
@@ -229,7 +242,8 @@ fn repay_reentrancy_with_negative_amount() {
 
 #[test]
 fn repay_reentrancy_when_no_debt() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     // Don't seed any debt
 
     // Should fail before reentrancy check due to no debt
@@ -244,7 +258,8 @@ fn repay_reentrancy_when_no_debt() {
 
 #[test]
 fn repay_reentrancy_with_max_amount() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 10_000, 1_000);
 
     // Use maximum possible amount
@@ -259,7 +274,8 @@ fn repay_reentrancy_with_max_amount() {
 
 #[test]
 fn withdraw_reentrancy_with_zero_amount() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 1_000, 0);
 
     // Zero amount should fail before reentrancy check
@@ -274,7 +290,8 @@ fn withdraw_reentrancy_with_zero_amount() {
 
 #[test]
 fn withdraw_reentrancy_with_negative_amount() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 1_000, 0);
 
     // Negative amount should fail before reentrancy check
@@ -289,7 +306,8 @@ fn withdraw_reentrancy_with_negative_amount() {
 
 #[test]
 fn withdraw_reentrancy_with_insufficient_collateral() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 500, 0);
 
     // Try to withdraw more than available
@@ -304,7 +322,8 @@ fn withdraw_reentrancy_with_insufficient_collateral() {
 
 #[test]
 fn withdraw_reentrancy_with_undercollateralized_position() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     // Create a position that would become undercollateralized
     seed_position(&env, &contract_id, &user, 1_000, 800); // High debt ratio
 
@@ -320,7 +339,8 @@ fn withdraw_reentrancy_with_undercollateralized_position() {
 
 #[test]
 fn withdraw_reentrancy_with_max_amount() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 10_000, 0);
 
     // Use maximum possible amount - should fail due to overflow or insufficient balance
@@ -425,7 +445,8 @@ fn withdraw_reentrancy_during_token_transfer_callback() {
 
 #[test]
 fn repay_reentrancy_with_paused_operation() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 10_000, 1_000);
 
     // Pause repay operations
@@ -449,7 +470,8 @@ fn repay_reentrancy_with_paused_operation() {
 
 #[test]
 fn withdraw_reentrancy_with_paused_operation() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 1_000, 0);
 
     // Pause withdraw operations
@@ -473,7 +495,8 @@ fn withdraw_reentrancy_with_paused_operation() {
 
 #[test]
 fn repay_reentrancy_multiple_concurrent_attempts() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 10_000, 1_000);
 
     // Start first repay operation
@@ -494,7 +517,8 @@ fn repay_reentrancy_multiple_concurrent_attempts() {
 
 #[test]
 fn withdraw_reentrancy_multiple_concurrent_attempts() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 1_000, 0);
 
     // Start first withdraw operation
@@ -515,7 +539,8 @@ fn withdraw_reentrancy_multiple_concurrent_attempts() {
 
 #[test]
 fn repay_reentrancy_cross_operation_blocking() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 10_000, 1_000);
 
     // Start repay operation
@@ -546,7 +571,8 @@ fn repay_reentrancy_cross_operation_blocking() {
 
 #[test]
 fn withdraw_reentrancy_cross_operation_blocking() {
-    let (env, contract_id, client, token_id, user) = setup_test();
+    let env = Env::default();
+    let (contract_id, client, token_id, user) = setup_test(&env);
     seed_position(&env, &contract_id, &user, 1_000, 0);
 
     // Start withdraw operation
