@@ -11,6 +11,8 @@ Contents:
 - Upgrade & Configuration
 - Cross-Chain Bridge
 - Social Recovery & Multisig
+- Documentation
+
 
 ## Overview
 StellarLend is a lending and borrowing protocol built on Soroban. It features cross-asset accounting, risk management, governance, AMM integration, flash loans, and more.
@@ -88,3 +90,7 @@ Key admin entrypoints (see contract for full list):
 ## Social Recovery & Multisig
 - Set guardians per-user and execute timelocked recoveries
 - Multisig supports proposing and executing admin changes with threshold
+
+## Documentation
+See the [Documentation Index](docs/INDEX.md) for a complete overview of project documentation.
+
