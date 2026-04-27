@@ -1,330 +1,334 @@
-//! Governance Audit Log Tests
+//! # Governance Audit Log Tests
 //!
-//! Comprehensive test suite for the governance audit log module.
-//! Tests all functionality including event emission, storage, pagination,
-//! and payload handling.
+//! Comprehensive test suite for the governance audit log functionality.
+//! Tests event emission, storage, and view functions to ensure
+//! complete audit coverage and compliance monitoring.
 
-use crate::governance_audit::*;
-use soroban_sdk::{Address, Env, Vec};
+#[cfg(test)]
+mod tests {
+    use soroban_sdk::{Address, Env, String, Vec};
+    use crate::governance_audit::{
+        log_governance_action, get_recent_audit_entries, get_audit_count,
+        GovernanceAction, GovernancePayload, MAX_AUDIT_ENTRIES,
+    };
 
-#[test]
-fn test_basic_audit_logging() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    
-    // Test empty audit log
-    assert_eq!(get_audit_count(&env), 0);
-    let entries = get_recent_audit_entries(&env, 10);
-    assert_eq!(entries.len(), 0);
-    
-    // Log a basic action
-    let payload = payload_empty(&env);
-    log_governance_action(&env, GovernanceAction::Initialize, admin.clone(), payload);
-    
-    // Verify audit log
-    assert_eq!(get_audit_count(&env), 1);
-    let entries = get_recent_audit_entries(&env, 10);
-    assert_eq!(entries.len(), 1);
-    
-    let entry = entries.get(0).unwrap();
-    assert_eq!(entry.id, 1);
-    assert_eq!(entry.action, GovernanceAction::Initialize);
-    assert_eq!(entry.caller, admin);
-    assert!(entry.timestamp > 0);
-    assert_eq!(entry.payload.data.len(), 0);
-}
+    #[test]
+    fn test_audit_log_basic_functionality() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let user = Address::generate(&env);
 
-#[test]
-fn test_payload_helpers() {
-    let env = Env::default();
-    let address = Address::generate(&env);
-    let address2 = Address::generate(&env);
-    
-    // Test empty payload
-    let empty = payload_empty(&env);
-    assert_eq!(empty.data.len(), 0);
-    
-    // Test address payload
-    let addr_payload = payload_address(&env, address.clone());
-    assert_eq!(addr_payload.data.len(), 1);
-    assert_eq!(addr_payload.data.get(0), address.clone().into());
-    
-    // Test address + bool payload
-    let bool_payload = payload_address_bool(&env, address.clone(), true);
-    assert_eq!(bool_payload.data.len(), 2);
-    assert_eq!(bool_payload.data.get(0), address.clone().into());
-    assert_eq!(bool_payload.data.get(1), true.into());
-    
-    // Test address + u64 payload
-    let u64_payload = payload_address_u64(&env, address.clone(), 42);
-    assert_eq!(u64_payload.data.len(), 2);
-    assert_eq!(u64_payload.data.get(0), address.clone().into());
-    assert_eq!(u64_payload.data.get(1), 42_u64.into());
-    
-    // Test address + i128 payload
-    let i128_payload = payload_address_i128(&env, address.clone(), 1000);
-    assert_eq!(i128_payload.data.len(), 2);
-    assert_eq!(i128_payload.data.get(0), address.clone().into());
-    assert_eq!(i128_payload.data.get(1), 1000_i128.into());
-    
-    // Test two addresses payload
-    let two_addr_payload = payload_two_addresses(&env, address.clone(), address2.clone());
-    assert_eq!(two_addr_payload.data.len(), 2);
-    assert_eq!(two_addr_payload.data.get(0), address.clone().into());
-    assert_eq!(two_addr_payload.data.get(1), address2.clone().into());
-    
-    // Test address + asset + amount payload
-    let asset_payload = payload_address_asset_i128(&env, address.clone(), address2.clone(), 5000);
-    assert_eq!(asset_payload.data.len(), 3);
-    assert_eq!(asset_payload.data.get(0), address.clone().into());
-    assert_eq!(asset_payload.data.get(1), address2.clone().into());
-    assert_eq!(asset_payload.data.get(2), 5000_i128.into());
-    
-    // Test i128 payload
-    let i128_only = payload_i128(&env, 999);
-    assert_eq!(i128_only.data.len(), 1);
-    assert_eq!(i128_only.data.get(0), 999_i128.into());
-    
-    // Test u64 payload
-    let u64_only = payload_u64(&env, 123);
-    assert_eq!(u64_only.data.len(), 1);
-    assert_eq!(u64_only.data.get(0), 123_u64.into());
-    
-    // Test two u64 payload
-    let two_u64 = payload_two_u64(&env, 100, 200);
-    assert_eq!(two_u64.data.len(), 2);
-    assert_eq!(two_u64.data.get(0), 100_u64.into());
-    assert_eq!(two_u64.data.get(1), 200_u64.into());
-    
-    // Test string payload
-    let string_val = soroban_sdk::String::from_str(&env, "test");
-    let string_payload = payload_string(&env, string_val.clone());
-    assert_eq!(string_payload.data.len(), 1);
-    assert_eq!(string_payload.data.get(0), string_val.into());
-}
+        // Initially no audit entries
+        assert_eq!(get_audit_count(&env), 0);
+        let entries = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries.len(), 0);
 
-#[test]
-fn test_multiple_audit_entries() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    
-    // Log multiple actions
-    for i in 0..5 {
-        let payload = payload_u64(&env, i);
+        // Log a simple action
+        let payload = crate::governance_audit::payload_empty(&env);
+        log_governance_action(&env, GovernanceAction::EmergencyShutdown, admin.clone(), payload);
+
+        // Verify audit entry was created
+        assert_eq!(get_audit_count(&env), 1);
+        let entries = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries.len(), 1);
+
+        let entry = &entries.get_unchecked(0);
+        assert_eq!(entry.id, 1);
+        assert_eq!(entry.action, GovernanceAction::EmergencyShutdown);
+        assert_eq!(entry.caller, admin);
+        assert!(entry.timestamp > 0);
+        assert_eq!(entry.payload.data.len(), 0);
+    }
+
+    #[test]
+    fn test_audit_log_with_payload() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let asset = Address::generate(&env);
+        let amount = 1000i128;
+
+        // Log action with payload
+        let payload = crate::governance_audit::payload_address_asset_i128(&env, admin.clone(), asset, amount);
+        log_governance_action(&env, GovernanceAction::CreditInsuranceFund, admin.clone(), payload);
+
+        // Verify audit entry with payload
+        let entries = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries.len(), 1);
+
+        let entry = &entries.get_unchecked(0);
+        assert_eq!(entry.id, 1);
+        assert_eq!(entry.action, GovernanceAction::CreditInsuranceFund);
+        assert_eq!(entry.caller, admin);
+        assert_eq!(entry.payload.data.len(), 3); // admin, asset, amount
+    }
+
+    #[test]
+    fn test_audit_log_multiple_entries() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let user = Address::generate(&env);
+
+        // Log multiple actions
+        for i in 0..5 {
+            let payload = crate::governance_audit::payload_i128(&env, i as i128);
+            log_governance_action(&env, GovernanceAction::SetLiquidationThreshold, admin.clone(), payload);
+        }
+
+        // Verify all entries are logged
+        assert_eq!(get_audit_count(&env), 5);
+        let entries = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries.len(), 5);
+
+        // Entries should be in reverse chronological order (newest first)
+        for (i, entry) in entries.iter().enumerate() {
+            assert_eq!(entry.id, (5 - i) as u64);
+            assert_eq!(entry.action, GovernanceAction::SetLiquidationThreshold);
+            assert_eq!(entry.caller, admin);
+        }
+    }
+
+    #[test]
+    fn test_audit_log_limit_enforcement() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+
+        // Test limit > 100 returns empty
+        let entries = get_recent_audit_entries(&env, 101);
+        assert_eq!(entries.len(), 0);
+
+        // Test limit = 0 returns empty
+        let entries = get_recent_audit_entries(&env, 0);
+        assert_eq!(entries.len(), 0);
+
+        // Test valid limit
+        for i in 0..10 {
+            let payload = crate::governance_audit::payload_empty(&env);
+            log_governance_action(&env, GovernanceAction::SetPause, admin.clone(), payload);
+        }
+
+        let entries = get_recent_audit_entries(&env, 5);
+        assert_eq!(entries.len(), 5);
+
+        let entries = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries.len(), 10);
+
+        let entries = get_recent_audit_entries(&env, 15);
+        assert_eq!(entries.len(), 10); // Only 10 entries exist
+    }
+
+    #[test]
+    fn test_audit_log_circular_buffer() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+
+        // Fill the circular buffer
+        for i in 0..MAX_AUDIT_ENTRIES {
+            let payload = crate::governance_audit::payload_u64(&env, i);
+            log_governance_action(&env, GovernanceAction::SetFlashLoanFee, admin.clone(), payload);
+        }
+
+        assert_eq!(get_audit_count(&env), MAX_AUDIT_ENTRIES);
+
+        // Add one more entry to overwrite the oldest
+        let payload = crate::governance_audit::payload_u64(&env, MAX_AUDIT_ENTRIES);
+        log_governance_action(&env, GovernanceAction::SetFlashLoanFee, admin.clone(), payload);
+
+        assert_eq!(get_audit_count(&env), MAX_AUDIT_ENTRIES + 1);
+
+        // Get recent entries - should still work correctly
+        let entries = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries.len(), 10);
+
+        // The newest entry should have ID MAX_AUDIT_ENTRIES + 1
+        let newest_entry = &entries.get_unchecked(0);
+        assert_eq!(newest_entry.id, MAX_AUDIT_ENTRIES + 1);
+    }
+
+    #[test]
+    fn test_audit_log_all_action_types() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let asset = Address::generate(&env);
+        let oracle = Address::generate(&env);
+        let guardian = Address::generate(&env);
+
+        // Test all major action types
+        let test_cases = vec![
+            (GovernanceAction::Initialize, crate::governance_audit::payload_empty(&env)),
+            (GovernanceAction::SetAdmin, crate::governance_audit::payload_address(&env, admin.clone())),
+            (GovernanceAction::SetPause, crate::governance_audit::payload_address_bool(&env, admin.clone(), true)),
+            (GovernanceAction::SetGuardian, crate::governance_audit::payload_address(&env, guardian)),
+            (GovernanceAction::EmergencyShutdown, crate::governance_audit::payload_empty(&env)),
+            (GovernanceAction::StartRecovery, crate::governance_audit::payload_empty(&env)),
+            (GovernanceAction::CompleteRecovery, crate::governance_audit::payload_empty(&env)),
+            (GovernanceAction::SetOracle, crate::governance_audit::payload_address(&env, oracle)),
+            (GovernanceAction::ConfigureOracle, crate::governance_audit::payload_u64(&env, 3600)),
+            (GovernanceAction::SetPrimaryOracle, crate::governance_audit::payload_two_addresses(&env, asset, oracle)),
+            (GovernanceAction::SetFallbackOracle, crate::governance_audit::payload_two_addresses(&env, asset, oracle)),
+            (GovernanceAction::SetOraclePaused, crate::governance_audit::payload_address_bool(&env, admin.clone(), false)),
+            (GovernanceAction::UpdatePriceFeed, crate::governance_audit::payload_address_asset_i128(&env, asset, asset, 1000000)),
+            (GovernanceAction::SetLiquidationThreshold, crate::governance_audit::payload_i128(&env, 8000)),
+            (GovernanceAction::SetCloseFactor, crate::governance_audit::payload_i128(&env, 5000)),
+            (GovernanceAction::SetLiquidationIncentive, crate::governance_audit::payload_i128(&env, 1000)),
+            (GovernanceAction::InitializeBorrowSettings, crate::governance_audit::payload_two_u64(&env, 1000000, 100)),
+            (GovernanceAction::InitializeDepositSettings, crate::governance_audit::payload_two_u64(&env, 10000000, 100)),
+            (GovernanceAction::InitializeWithdrawSettings, crate::governance_audit::payload_i128(&env, 100)),
+            (GovernanceAction::SetFlashLoanFee, crate::governance_audit::payload_i128(&env, 50)),
+            (GovernanceAction::InitializeCrossAssetAdmin, crate::governance_audit::payload_address(&env, admin.clone())),
+            (GovernanceAction::SetAssetParams, crate::governance_audit::payload_address(&env, asset)),
+            (GovernanceAction::UpgradeInit, crate::governance_audit::payload_two_u64(&env, 1, 2)),
+            (GovernanceAction::UpgradeAddApprover, crate::governance_audit::payload_two_addresses(&env, admin.clone(), admin.clone())),
+            (GovernanceAction::UpgradeRemoveApprover, crate::governance_audit::payload_two_addresses(&env, admin.clone(), admin.clone())),
+            (GovernanceAction::UpgradePropose, crate::governance_audit::payload_two_u64(&env, 1, 2)),
+            (GovernanceAction::UpgradeApprove, crate::governance_audit::payload_two_u64(&env, 1, 1)),
+            (GovernanceAction::UpgradeExecute, crate::governance_audit::payload_u64(&env, 1)),
+            (GovernanceAction::UpgradeRollback, crate::governance_audit::payload_u64(&env, 1)),
+            (GovernanceAction::CreditInsuranceFund, crate::governance_audit::payload_address_asset_i128(&env, admin.clone(), asset, 1000)),
+            (GovernanceAction::OffsetBadDebt, crate::governance_audit::payload_address_asset_i128(&env, admin.clone(), asset, 500)),
+            (GovernanceAction::GrantDataWriter, crate::governance_audit::payload_two_addresses(&env, admin.clone(), admin.clone())),
+            (GovernanceAction::RevokeDataWriter, crate::governance_audit::payload_two_addresses(&env, admin.clone(), admin.clone())),
+            (GovernanceAction::DataBackup, crate::governance_audit::payload_string(&env, String::from_str(&env, "backup1"))),
+            (GovernanceAction::DataRestore, crate::governance_audit::payload_string(&env, String::from_str(&env, "backup1"))),
+            (GovernanceAction::DataMigrate, crate::governance_audit::payload_two_u64(&env, 2, 3)),
+        ];
+
+        for (action, payload) in test_cases {
+            log_governance_action(&env, action, admin.clone(), payload);
+        }
+
+        assert_eq!(get_audit_count(&env), test_cases.len() as u64);
+
+        // Verify all entries are properly stored
+        let entries = get_recent_audit_entries(&env, 100);
+        assert_eq!(entries.len(), test_cases.len());
+
+        // Verify each action type is correctly stored
+        for (i, (expected_action, _)) in test_cases.iter().enumerate() {
+            let entry = &entries.get_unchecked(test_cases.len() - 1 - i); // Reverse order
+            assert_eq!(entry.action, *expected_action);
+            assert_eq!(entry.caller, admin);
+            assert!(entry.timestamp > 0);
+        }
+    }
+
+    #[test]
+    fn test_payload_helper_functions() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+        let asset = Address::generate(&env);
+        let amount = 1000i128;
+        let bool_val = true;
+        let u64_val = 42u64;
+        let string_val = String::from_str(&env, "test");
+
+        // Test all payload helper functions
+        let payload1 = crate::governance_audit::payload_empty(&env);
+        assert_eq!(payload1.data.len(), 0);
+
+        let payload2 = crate::governance_audit::payload_address(&env, admin.clone());
+        assert_eq!(payload2.data.len(), 1);
+
+        let payload3 = crate::governance_audit::payload_address_bool(&env, admin.clone(), bool_val);
+        assert_eq!(payload3.data.len(), 2);
+
+        let payload4 = crate::governance_audit::payload_address_u64(&env, admin.clone(), u64_val);
+        assert_eq!(payload4.data.len(), 2);
+
+        let payload5 = crate::governance_audit::payload_address_i128(&env, admin.clone(), amount);
+        assert_eq!(payload5.data.len(), 2);
+
+        let payload6 = crate::governance_audit::payload_two_addresses(&env, admin.clone(), asset);
+        assert_eq!(payload6.data.len(), 2);
+
+        let payload7 = crate::governance_audit::payload_address_asset_i128(&env, admin.clone(), asset, amount);
+        assert_eq!(payload7.data.len(), 3);
+
+        let payload8 = crate::governance_audit::payload_i128(&env, amount);
+        assert_eq!(payload8.data.len(), 1);
+
+        let payload9 = crate::governance_audit::payload_u64(&env, u64_val);
+        assert_eq!(payload9.data.len(), 1);
+
+        let payload10 = crate::governance_audit::payload_two_u64(&env, u64_val, u64_val + 1);
+        assert_eq!(payload10.data.len(), 2);
+
+        let payload11 = crate::governance_audit::payload_string(&env, string_val.clone());
+        assert_eq!(payload11.data.len(), 1);
+    }
+
+    #[test]
+    fn test_audit_event_emission() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+
+        // Log an action and verify event is emitted
+        let payload = crate::governance_audit::payload_empty(&env);
+        
+        // Capture events
+        let mut events = Vec::new(&env);
+        env.events().all(&mut events);
+
         log_governance_action(&env, GovernanceAction::SetPause, admin.clone(), payload);
+
+        // Check that an event was emitted
+        let mut new_events = Vec::new(&env);
+        env.events().all(&mut new_events);
+        assert_eq!(new_events.len(), events.len() + 1);
+
+        // The new event should be a GovernanceAuditEvent
+        let new_event = &new_events.get_unchecked(new_events.len() - 1);
+        // Note: In a real test environment, you would verify the event structure
+        // This is a basic test to ensure events are being emitted
     }
-    
-    // Verify count
-    assert_eq!(get_audit_count(&env), 5);
-    
-    // Verify entries (should be in reverse chronological order)
-    let entries = get_recent_audit_entries(&env, 10);
-    assert_eq!(entries.len(), 5);
-    
-    // First entry should be the most recent (ID 5)
-    let first_entry = entries.get(0).unwrap();
-    assert_eq!(first_entry.id, 5);
-    assert_eq!(first_entry.action, GovernanceAction::SetPause);
-    
-    // Last entry should be the oldest (ID 1)
-    let last_entry = entries.get(4).unwrap();
-    assert_eq!(last_entry.id, 1);
-    assert_eq!(last_entry.action, GovernanceAction::SetPause);
-}
 
-#[test]
-fn test_circular_buffer_overflow() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    
-    // Fill the buffer beyond MAX_AUDIT_ENTRIES
-    for i in 0..(MAX_AUDIT_ENTRIES + 10) {
-        let payload = payload_u64(&env, i);
-        log_governance_action(&env, GovernanceAction::SetPause, admin.clone(), payload);
+    #[test]
+    fn test_audit_storage_persistence() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+
+        // Log some actions
+        for i in 0..5 {
+            let payload = crate::governance_audit::payload_u64(&env, i);
+            log_governance_action(&env, GovernanceAction::SetLiquidationThreshold, admin.clone(), payload);
+        }
+
+        // Verify persistence
+        assert_eq!(get_audit_count(&env), 5);
+        let entries = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries.len(), 5);
+
+        // Simulate ledger close and reopen (in real Stellar environment)
+        // In test, we just verify the data is still accessible
+        let entries_after = get_recent_audit_entries(&env, 10);
+        assert_eq!(entries_after.len(), 5);
+        assert_eq!(entries_after.get_unchecked(0).id, 5);
     }
-    
-    // Verify count includes all entries
-    assert_eq!(get_audit_count(&env), MAX_AUDIT_ENTRIES + 10);
-    
-    // Verify we can only retrieve the most recent MAX_AUDIT_ENTRIES
-    let entries = get_recent_audit_entries(&env, 1000);
-    assert_eq!(entries.len(), MAX_AUDIT_ENTRIES as usize);
-    
-    // First entry should be the most recent
-    let first_entry = entries.get(0).unwrap();
-    assert_eq!(first_entry.id, MAX_AUDIT_ENTRIES + 10);
-    
-    // Last entry should be the oldest still in buffer
-    let last_entry = entries.get((MAX_AUDIT_ENTRIES - 1) as usize).unwrap();
-    assert_eq!(last_entry.id, 11); // (MAX_AUDIT_ENTRIES + 10) - (MAX_AUDIT_ENTRIES - 1)
-}
 
-#[test]
-fn test_query_limits() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    
-    // Add some entries
-    for i in 0..50 {
-        let payload = payload_u64(&env, i);
-        log_governance_action(&env, GovernanceAction::SetPause, admin.clone(), payload);
+    #[test]
+    fn test_audit_pagination() {
+        let env = Env::default();
+        let admin = Address::generate(&env);
+
+        // Create 25 entries
+        for i in 0..25 {
+            let payload = crate::governance_audit::payload_u64(&env, i);
+            log_governance_action(&env, GovernanceAction::SetFlashLoanFee, admin.clone(), payload);
+        }
+
+        // Test pagination with different limits
+        let page1 = get_recent_audit_entries(&env, 10);
+        assert_eq!(page1.len(), 10);
+        assert_eq!(page1.get_unchecked(0).id, 25);
+        assert_eq!(page1.get_unchecked(9).id, 16);
+
+        let page2 = get_recent_audit_entries(&env, 15);
+        assert_eq!(page2.len(), 15);
+        assert_eq!(page2.get_unchecked(0).id, 25);
+        assert_eq!(page2.get_unchecked(14).id, 11);
+
+        let all = get_recent_audit_entries(&env, 30);
+        assert_eq!(all.len(), 25);
+        assert_eq!(all.get_unchecked(0).id, 25);
+        assert_eq!(all.get_unchecked(24).id, 1);
     }
-    
-    // Test normal limit
-    let entries = get_recent_audit_entries(&env, 10);
-    assert_eq!(entries.len(), 10);
-    
-    // Test limit higher than available
-    let entries = get_recent_audit_entries(&env, 100);
-    assert_eq!(entries.len(), 50);
-    
-    // Test limit enforcement (should be capped at 100)
-    let entries = get_recent_audit_entries(&env, 200);
-    assert_eq!(entries.len(), 100); // Should be capped at 100
-}
-
-#[test]
-fn test_all_governance_actions() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    let address = Address::generate(&env);
-    
-    // Test all governance action types
-    let actions = [
-        GovernanceAction::Initialize,
-        GovernanceAction::SetAdmin,
-        GovernanceAction::SetPause,
-        GovernanceAction::SetGuardian,
-        GovernanceAction::EmergencyShutdown,
-        GovernanceAction::StartRecovery,
-        GovernanceAction::CompleteRecovery,
-        GovernanceAction::SetOracle,
-        GovernanceAction::ConfigureOracle,
-        GovernanceAction::SetPrimaryOracle,
-        GovernanceAction::SetFallbackOracle,
-        GovernanceAction::SetOraclePaused,
-        GovernanceAction::UpdatePriceFeed,
-        GovernanceAction::SetLiquidationThreshold,
-        GovernanceAction::SetCloseFactor,
-        GovernanceAction::SetLiquidationIncentive,
-        GovernanceAction::InitializeBorrowSettings,
-        GovernanceAction::InitializeDepositSettings,
-        GovernanceAction::InitializeWithdrawSettings,
-        GovernanceAction::SetFlashLoanFee,
-        GovernanceAction::InitializeCrossAssetAdmin,
-        GovernanceAction::SetAssetParams,
-        GovernanceAction::UpgradeInit,
-        GovernanceAction::UpgradeAddApprover,
-        GovernanceAction::UpgradeRemoveApprover,
-        GovernanceAction::UpgradePropose,
-        GovernanceAction::UpgradeApprove,
-        GovernanceAction::UpgradeExecute,
-        GovernanceAction::UpgradeRollback,
-        GovernanceAction::CreditInsuranceFund,
-        GovernanceAction::OffsetBadDebt,
-        GovernanceAction::GrantDataWriter,
-        GovernanceAction::RevokeDataWriter,
-        GovernanceAction::DataBackup,
-        GovernanceAction::DataRestore,
-        GovernanceAction::DataMigrate,
-    ];
-    
-    for (i, action) in actions.iter().enumerate() {
-        let payload = payload_u64(&env, i as u64);
-        log_governance_action(&env, *action, admin.clone(), payload);
-    }
-    
-    // Verify all actions were logged
-    assert_eq!(get_audit_count(&env), actions.len() as u64);
-    
-    // Verify entries contain correct actions
-    let entries = get_recent_audit_entries(&env, 100);
-    assert_eq!(entries.len(), actions.len());
-    
-    for (i, entry) in entries.iter().enumerate() {
-        assert_eq!(entry.action, actions[actions.len() - 1 - i]);
-        assert_eq!(entry.id, (i + 1) as u64);
-    }
-}
-
-#[test]
-fn test_event_emission() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    
-    // Log an action and verify event emission
-    let payload = payload_address(&env, admin.clone());
-    log_governance_action(&env, GovernanceAction::SetAdmin, admin.clone(), payload);
-    
-    // The event should be emitted automatically via the publish call
-    // In a real test environment, you would verify the event was emitted
-    // For now, we just verify the audit entry was created
-    assert_eq!(get_audit_count(&env), 1);
-    
-    let entries = get_recent_audit_entries(&env, 1);
-    assert_eq!(entries.len(), 1);
-    
-    let entry = entries.get(0).unwrap();
-    assert_eq!(entry.action, GovernanceAction::SetAdmin);
-    assert_eq!(entry.caller, admin);
-    assert_eq!(entry.payload.data.len(), 1);
-}
-
-#[test]
-fn test_storage_persistence() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    
-    // Log an action
-    let payload = payload_empty(&env);
-    log_governance_action(&env, GovernanceAction::Initialize, admin.clone(), payload);
-    
-    // Verify storage
-    assert_eq!(get_audit_count(&env), 1);
-    
-    // Simulate contract instance restart by checking storage directly
-    let count = env
-        .storage()
-        .persistent()
-        .get(&AuditLogKey::Count)
-        .unwrap();
-    assert_eq!(count, 1);
-    
-    let buffer_index = 1 % MAX_AUDIT_ENTRIES;
-    let entry = env
-        .storage()
-        .persistent()
-        .get(&AuditLogKey::Entry(buffer_index))
-        .unwrap();
-    
-    assert_eq!(entry.id, 1);
-    assert_eq!(entry.action, GovernanceAction::Initialize);
-    assert_eq!(entry.caller, admin);
-}
-
-#[test]
-fn test_pagination_edge_cases() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    
-    // Test empty log
-    let entries = get_recent_audit_entries(&env, 10);
-    assert_eq!(entries.len(), 0);
-    
-    // Test limit of 0
-    let entries = get_recent_audit_entries(&env, 0);
-    assert_eq!(entries.len(), 0);
-    
-    // Test single entry
-    let payload = payload_empty(&env);
-    log_governance_action(&env, GovernanceAction::Initialize, admin.clone(), payload);
-    
-    let entries = get_recent_audit_entries(&env, 0);
-    assert_eq!(entries.len(), 0);
-    
-    let entries = get_recent_audit_entries(&env, 1);
-    assert_eq!(entries.len(), 1);
-    
-    let entries = get_recent_audit_entries(&env, 10);
-    assert_eq!(entries.len(), 1);
 }

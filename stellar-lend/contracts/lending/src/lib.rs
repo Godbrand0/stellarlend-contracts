@@ -55,7 +55,12 @@ use deposit::{
 use flash_loan::{
     flash_loan as flash_loan_impl, set_flash_loan_fee_bps as set_flash_loan_fee_impl,
 };
-use oracle::{OracleConfig, OracleConfigEvent};
+use oracle::{OracleConfig, OracleConfigEvent, OracleError};
+use governance_audit::{
+    get_audit_count, get_recent_audit_entries, log_governance_action, GovernanceAction,
+    payload_address, payload_address_bool, payload_address_i128, payload_address_u64,
+    payload_empty, payload_i128, payload_string, payload_two_addresses, payload_two_u64,
+};
 use pause::{
     blocks_high_risk_ops, complete_recovery as complete_recovery_logic,
     get_emergency_state as get_emergency_state_logic, get_guardian as get_guardian_logic,
@@ -186,9 +191,9 @@ impl LendingContract {
         
         // Log governance action
         let mut payload_data = Vec::new(&env);
-        payload_data.push_back(admin.clone().into());
-        payload_data.push_back(debt_ceiling.into());
-        payload_data.push_back(min_borrow_amount.into());
+        payload_data.push_back(admin.into_val(&env));
+        payload_data.push_back(debt_ceiling.into_val(&env));
+        payload_data.push_back(min_borrow_amount.into_val(&env));
         let payload = governance_audit::GovernancePayload { data: payload_data };
         log_governance_action(&env, GovernanceAction::Initialize, admin, payload);
         
@@ -259,8 +264,8 @@ impl LendingContract {
         
         // Log governance action
         let mut payload_data = Vec::new(&env);
-        payload_data.push_back((pause_type as u32).into());
-        payload_data.push_back(paused.into());
+        payload_data.push_back((pause_type as u32).into_val(&env));
+        payload_data.push_back(paused.into_val(&env));
         let payload = governance_audit::GovernancePayload { data: payload_data };
         log_governance_action(&env, GovernanceAction::SetPause, admin, payload);
         
@@ -310,7 +315,7 @@ impl LendingContract {
             return Err(BorrowError::Unauthorized);
         }
 
-        trigger_shutdown_logic(&env, caller.clone());
+        trigger_shutdown_logic(&env, caller);
         
         // Log governance action
         let payload = payload_empty(&env);
@@ -329,7 +334,7 @@ impl LendingContract {
         if get_emergency_state_logic(&env) != EmergencyState::Shutdown {
             return Err(BorrowError::ProtocolPaused);
         }
-        start_recovery_logic(&env, admin.clone());
+        start_recovery_logic(&env, admin);
         
         // Log governance action
         let payload = payload_empty(&env);
@@ -345,7 +350,7 @@ impl LendingContract {
         if admin != stored_admin {
             return Err(BorrowError::Unauthorized);
         }
-        complete_recovery_logic(&env, admin.clone());
+        complete_recovery_logic(&env, admin);
         
         // Log governance action
         let payload = payload_empty(&env);
@@ -643,7 +648,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         if is_read_only_logic(&env) {
             return Err(OracleError::OraclePaused);
         }
-        oracle::set_fallback_oracle(&env, caller, asset, fallback_oracle)
+        let result = oracle::set_fallback_oracle(&env, caller, asset, fallback_oracle);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_two_addresses(&env, asset, fallback_oracle);
+            log_governance_action(&env, GovernanceAction::SetFallbackOracle, caller, payload);
+        }
+        result
     }
 
     /// Submit a price update for `asset`.
@@ -664,7 +675,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         if is_read_only_logic(&env) {
             return Err(OracleError::OraclePaused);
         }
-        oracle::update_price_feed(&env, caller, asset, price)
+        let result = oracle::update_price_feed(&env, caller, asset, price);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_address_asset_i128(&env, asset, asset, price);
+            log_governance_action(&env, GovernanceAction::UpdatePriceFeed, caller, payload);
+        }
+        result
     }
 
     /// Get the current price for `asset` (primary â†’ fallback â†’ error).
@@ -681,7 +698,7 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         if is_read_only_logic(&env) {
             return Err(OracleError::OraclePaused);
         }
-        let result = oracle::set_oracle_paused(&env, caller.clone(), paused);
+        let result = oracle::set_oracle_paused(&env, caller, paused);
         if result.is_ok() {
             // Log governance action
             let payload = payload_address_bool(&env, caller, paused);
@@ -735,7 +752,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         admin: Address,
         bps: i128,
     ) -> Result<(), BorrowError> {
-        set_liq_threshold_impl(&env, &admin, bps)
+        let result = set_liq_threshold_impl(&env, &admin, bps);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_i128(&env, bps);
+            log_governance_action(&env, GovernanceAction::SetLiquidationThreshold, admin, payload);
+        }
+        result
     }
 
     /// Returns the close factor in basis points (default 5000 = 50%).
@@ -746,7 +769,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
 
     /// Sets the close factor in basis points (1â€“10000). Admin only.
     pub fn set_close_factor_bps(env: Env, admin: Address, bps: i128) -> Result<(), BorrowError> {
-        set_close_factor_impl(&env, &admin, bps)
+        let result = set_close_factor_impl(&env, &admin, bps);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_i128(&env, bps);
+            log_governance_action(&env, GovernanceAction::SetCloseFactor, admin, payload);
+        }
+        result
     }
 
     /// Returns the liquidation incentive in basis points (default 1000 = 10%).
@@ -760,7 +789,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         admin: Address,
         bps: i128,
     ) -> Result<(), BorrowError> {
-        set_liquidation_incentive_bps_impl(&env, &admin, bps)
+        let result = set_liquidation_incentive_bps_impl(&env, &admin, bps);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_i128(&env, bps);
+            log_governance_action(&env, GovernanceAction::SetLiquidationIncentive, admin, payload);
+        }
+        result
     }
 
     /// Returns the maximum debt that can be liquidated for `user` in one call.
@@ -787,7 +822,16 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         }
         let current_admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
         current_admin.require_auth();
-        init_borrow_settings_impl(&env, debt_ceiling, min_borrow_amount)
+        let result = init_borrow_settings_impl(&env, debt_ceiling, min_borrow_amount);
+        if result.is_ok() {
+            // Log governance action
+            let mut payload_data = Vec::new(&env);
+            payload_data.push_back(debt_ceiling.into_val(&env));
+            payload_data.push_back(min_borrow_amount.into_val(&env));
+            let payload = governance_audit::GovernancePayload { data: payload_data };
+            log_governance_action(&env, GovernanceAction::InitializeBorrowSettings, current_admin, payload);
+        }
+        result
     }
 
     /// Initialize deposit settings (admin only)
@@ -801,7 +845,16 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         }
         let current_admin = get_protocol_admin(&env).ok_or(DepositError::Unauthorized)?;
         current_admin.require_auth();
-        init_deposit_settings_impl(&env, deposit_cap, min_deposit_amount)
+        let result = init_deposit_settings_impl(&env, deposit_cap, min_deposit_amount);
+        if result.is_ok() {
+            // Log governance action
+            let mut payload_data = Vec::new(&env);
+            payload_data.push_back(deposit_cap.into_val(&env));
+            payload_data.push_back(min_deposit_amount.into_val(&env));
+            let payload = governance_audit::GovernancePayload { data: payload_data };
+            log_governance_action(&env, GovernanceAction::InitializeDepositSettings, current_admin, payload);
+        }
+        result
     }
 
     /// Set deposit pause state (admin only)
@@ -865,7 +918,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
     pub fn set_flash_loan_fee_bps(env: Env, fee_bps: i128) -> Result<(), FlashLoanError> {
         let current_admin = get_protocol_admin(&env).ok_or(FlashLoanError::Unauthorized)?;
         current_admin.require_auth();
-        set_flash_loan_fee_impl(&env, fee_bps)
+        let result = set_flash_loan_fee_impl(&env, fee_bps);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_i128(&env, fee_bps);
+            log_governance_action(&env, GovernanceAction::SetFlashLoanFee, current_admin, payload);
+        }
+        result
     }
 
     /// Withdraw collateral from the protocol.
@@ -890,7 +949,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
     ) -> Result<(), WithdrawError> {
         let current_admin = get_protocol_admin(&env).ok_or(WithdrawError::Unauthorized)?;
         current_admin.require_auth();
-        initialize_withdraw_logic(&env, min_withdraw_amount)
+        let result = initialize_withdraw_logic(&env, min_withdraw_amount);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_i128(&env, min_withdraw_amount);
+            log_governance_action(&env, GovernanceAction::InitializeWithdrawSettings, current_admin, payload);
+        }
+        result
     }
 
     /// Set withdraw pause state (admin only).
@@ -935,14 +1000,29 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         required_approvals: u32,
     ) {
         upgrade::UpgradeManager::init(env, admin, current_wasm_hash, required_approvals);
+        
+        // Log governance action
+        let mut payload_data = Vec::new(&env);
+        payload_data.push_back(current_wasm_hash.into_val(&env));
+        payload_data.push_back(required_approvals.into_val(&env));
+        let payload = governance_audit::GovernancePayload { data: payload_data };
+        log_governance_action(&env, GovernanceAction::UpgradeInit, admin, payload);
     }
 
     pub fn upgrade_add_approver(env: Env, caller: Address, approver: Address) {
         upgrade::UpgradeManager::add_approver(env, caller, approver);
+        
+        // Log governance action
+        let payload = payload_two_addresses(&env, caller, approver);
+        log_governance_action(&env, GovernanceAction::UpgradeAddApprover, caller, payload);
     }
 
     pub fn upgrade_remove_approver(env: Env, caller: Address, approver: Address) {
         upgrade::UpgradeManager::remove_approver(env, caller, approver);
+        
+        // Log governance action
+        let payload = payload_two_addresses(&env, caller, approver);
+        log_governance_action(&env, GovernanceAction::UpgradeRemoveApprover, caller, payload);
     }
 
     pub fn upgrade_propose(
@@ -951,19 +1031,43 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         new_wasm_hash: BytesN<32>,
         new_version: u32,
     ) -> u64 {
-        upgrade::UpgradeManager::upgrade_propose(env, caller, new_wasm_hash, new_version)
+        let proposal_id = upgrade::UpgradeManager::upgrade_propose(env, caller, new_wasm_hash, new_version);
+        
+        // Log governance action
+        let mut payload_data = Vec::new(&env);
+        payload_data.push_back(new_wasm_hash.into_val(&env));
+        payload_data.push_back(new_version.into_val(&env));
+        payload_data.push_back(proposal_id.into_val(&env));
+        let payload = governance_audit::GovernancePayload { data: payload_data };
+        log_governance_action(&env, GovernanceAction::UpgradePropose, caller, payload);
+        
+        proposal_id
     }
 
     pub fn upgrade_approve(env: Env, caller: Address, proposal_id: u64) -> u32 {
-        upgrade::UpgradeManager::upgrade_approve(env, caller, proposal_id)
+        let approval_count = upgrade::UpgradeManager::upgrade_approve(env, caller, proposal_id);
+        
+        // Log governance action
+        let payload = payload_two_u64(&env, proposal_id, approval_count as u64);
+        log_governance_action(&env, GovernanceAction::UpgradeApprove, caller, payload);
+        
+        approval_count
     }
 
     pub fn upgrade_execute(env: Env, caller: Address, proposal_id: u64) {
         upgrade::UpgradeManager::upgrade_execute(env, caller, proposal_id);
+        
+        // Log governance action
+        let payload = payload_u64(&env, proposal_id);
+        log_governance_action(&env, GovernanceAction::UpgradeExecute, caller, payload);
     }
 
     pub fn upgrade_rollback(env: Env, caller: Address, proposal_id: u64) {
         upgrade::UpgradeManager::upgrade_rollback(env, caller, proposal_id);
+        
+        // Log governance action
+        let payload = payload_u64(&env, proposal_id);
+        log_governance_action(&env, GovernanceAction::UpgradeRollback, caller, payload);
     }
 
     pub fn upgrade_status(env: Env, proposal_id: u64) -> upgrade::UpgradeStatus {
@@ -992,11 +1096,19 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
 
     pub fn data_grant_writer(env: Env, caller: Address, writer: Address) {
         data_store::DataStore::grant_writer(env, caller, writer);
+        
+        // Log governance action
+        let payload = payload_two_addresses(&env, caller, writer);
+        log_governance_action(&env, GovernanceAction::GrantDataWriter, caller, payload);
     }
 
     #[cfg(not(tarpaulin_include))]
     pub fn data_revoke_writer(env: Env, caller: Address, writer: Address) {
         data_store::DataStore::revoke_writer(env, caller, writer);
+        
+        // Log governance action
+        let payload = payload_two_addresses(&env, caller, writer);
+        log_governance_action(&env, GovernanceAction::RevokeDataWriter, caller, payload);
     }
 
     #[cfg(not(tarpaulin_include))]
@@ -1010,10 +1122,18 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
 
     pub fn data_backup(env: Env, caller: Address, backup_name: soroban_sdk::String) {
         data_store::DataStore::data_backup(env, caller, backup_name);
+        
+        // Log governance action
+        let payload = payload_string(&env, backup_name);
+        log_governance_action(&env, GovernanceAction::DataBackup, caller, payload);
     }
 
     pub fn data_restore(env: Env, caller: Address, backup_name: soroban_sdk::String) {
         data_store::DataStore::data_restore(env, caller, backup_name);
+        
+        // Log governance action
+        let payload = payload_string(&env, backup_name);
+        log_governance_action(&env, GovernanceAction::DataRestore, caller, payload);
     }
 
     pub fn data_migrate_bump_version(
@@ -1023,6 +1143,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         memo: soroban_sdk::String,
     ) {
         data_store::DataStore::data_migrate_bump_version(env, caller, new_version, Some(memo));
+        
+        // Log governance action
+        let mut payload_data = Vec::new(&env);
+        payload_data.push_back(new_version.into_val(&env));
+        payload_data.push_back(memo.into_val(&env));
+        let payload = governance_audit::GovernancePayload { data: payload_data };
+        log_governance_action(&env, GovernanceAction::DataMigrate, caller, payload);
     }
 
     pub fn data_schema_version(env: Env) -> u32 {
@@ -1121,27 +1248,37 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         cross_position_summary(&env, user)
     }
 
-    /// Get recent governance audit entries
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // Governance Audit Log Functions
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    /// Get recent governance audit entries.
     ///
-    /// Returns up to `limit` most recent audit entries in reverse chronological order.
-    /// The limit is enforced to prevent gas exhaustion attacks (max 100).
+    /// Returns up to `limit` most recent audit entries in reverse chronological
+    /// order (newest first). Useful for monitoring and compliance.
     ///
     /// # Arguments
-    /// * `limit` - Maximum number of entries to return
+    /// * `limit` - Maximum number of entries to return (1-100)
     ///
     /// # Returns
     /// Vector of audit entries ordered from newest to oldest
+    ///
+    /// # Security
+    /// This function is read-only and requires no authorization.
     pub fn get_governance_audit_entries(env: Env, limit: u32) -> Vec<governance_audit::AuditEntry> {
         get_recent_audit_entries(&env, limit)
     }
 
-    /// Get the total number of governance audit entries ever recorded
+    /// Get the total count of governance audit entries.
     ///
-    /// This count includes entries that may have been overwritten in the circular
-    /// buffer and is useful for pagination purposes.
+    /// Returns the total number of governance actions that have been logged
+    /// since contract deployment. Useful for pagination.
     ///
     /// # Returns
-    /// Total number of audit entries recorded
+    /// Total count of audit entries
+    ///
+    /// # Security
+    /// This function is read-only and requires no authorization.
     pub fn get_governance_audit_count(env: Env) -> u64 {
         get_audit_count(&env)
     }

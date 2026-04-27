@@ -1,4 +1,4 @@
-//! Governance Audit Log Module
+//! # Governance Audit Log Module
 //!
 //! Provides a standardized audit log for all governance and admin actions
 //! including oracle updates, pause toggles, risk parameter changes, caps,
@@ -67,19 +67,19 @@ pub enum GovernanceAction {
     InitializeDepositSettings = 17,
     /// Withdraw settings initialization
     InitializeWithdrawSettings = 18,
-    /// Flash loan fee parameter change
+    /// Flash loan fee change
     SetFlashLoanFee = 19,
     /// Cross-asset admin initialization
     InitializeCrossAssetAdmin = 20,
     /// Asset parameters configuration
     SetAssetParams = 21,
-    /// Upgrade process initialization
+    /// Upgrade system initialization
     UpgradeInit = 22,
     /// Upgrade approver addition
     UpgradeAddApprover = 23,
     /// Upgrade approver removal
     UpgradeRemoveApprover = 24,
-    /// Upgrade proposal creation
+    /// Upgrade proposal
     UpgradePropose = 25,
     /// Upgrade approval
     UpgradeApprove = 26,
@@ -91,207 +91,211 @@ pub enum GovernanceAction {
     CreditInsuranceFund = 29,
     /// Bad debt offset
     OffsetBadDebt = 30,
-    /// Data writer permission grant
+    /// Data store writer grant
     GrantDataWriter = 31,
-    /// Data writer permission revoke
+    /// Data store writer revoke
     RevokeDataWriter = 32,
-    /// Data backup creation
+    /// Data backup
     DataBackup = 33,
-    /// Data restoration
+    /// Data restore
     DataRestore = 34,
-    /// Data schema migration
+    /// Data migration
     DataMigrate = 35,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Audit Data Structures
+// Payload Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Flexible payload structure for governance action data.
+/// Payload data for governance actions.
 ///
-/// Uses a Vec<Val> to allow extensible data structures while maintaining
-/// type safety through helper functions for common payload patterns.
+/// Uses a flexible Vec<Val> approach to accommodate different action types
+/// while maintaining a stable event schema. Each action type has a defined
+/// payload structure that consumers should follow.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct GovernancePayload {
-    /// Action-specific data
-    pub data: Vec<Val>,
-}
-
-/// Individual audit entry stored in the circular buffer.
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct AuditEntry {
-    /// Sequential ID for ordering
-    pub id: u64,
-    /// Type of governance action
-    pub action: GovernanceAction,
-    /// Address that performed the action
-    pub caller: Address,
-    /// Timestamp when action occurred
-    pub timestamp: u64,
-    /// Action-specific data
-    pub payload: GovernancePayload,
-}
-
-/// Event emitted for each governance action.
-#[contractevent]
-#[derive(Debug, Clone)]
-pub struct GovernanceAuditEvent {
-    /// Sequential ID for ordering
-    pub id: u64,
-    /// Type of governance action
-    pub action: GovernanceAction,
-    /// Address that performed the action
-    pub caller: Address,
-    /// Timestamp when action occurred
-    pub timestamp: u64,
-    /// Action-specific data
-    pub payload: GovernancePayload,
+    /// Action-specific data (addresses, amounts, parameters, etc.)
+    pub data: Vec<soroban_sdk::Val>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Storage Keys
+// Storage Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Storage keys for audit log data.
 #[contracttype]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub enum AuditLogKey {
-    /// Total number of audit entries (used for ID generation)
+    /// Total count of audit entries
     Count,
-    /// Individual audit entry (index modulo MAX_AUDIT_ENTRIES)
+    /// Audit entry at specific index (0-based)
     Entry(u64),
 }
 
-/// Maximum number of audit entries to store.
+/// Audit log entry stored in contract storage.
 ///
-/// This creates a circular buffer to bound storage usage and gas costs.
-/// When the buffer is full, older entries are overwritten.
+/// Designed to be gas-efficient while providing comprehensive audit information.
+/// Entries are stored in a bounded circular buffer to control gas costs.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct AuditEntry {
+    /// Sequential ID of the audit entry
+    pub id: u64,
+    /// Type of governance action
+    pub action: GovernanceAction,
+    /// Address that performed the action
+    pub caller: Address,
+    /// Block timestamp when action occurred
+    pub timestamp: u64,
+    /// Action-specific payload data
+    pub payload: GovernancePayload,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Events
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Event emitted for every governance action.
+///
+/// This is the primary event that off-chain monitors should subscribe to
+/// for real-time governance tracking and compliance monitoring.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct GovernanceAuditEvent {
+    /// Sequential ID of the audit entry
+    pub id: u64,
+    /// Type of governance action
+    pub action: GovernanceAction,
+    /// Address that performed the action
+    pub caller: Address,
+    /// Block timestamp when action occurred
+    pub timestamp: u64,
+    /// Action-specific payload data
+    pub payload: GovernancePayload,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maximum number of audit entries to store in contract storage.
+///
+/// This bounds the gas cost of querying recent actions while maintaining
+/// sufficient history for compliance and incident response.
+/// 1000 entries should cover several months of typical governance activity.
 pub const MAX_AUDIT_ENTRIES: u64 = 1000;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Core Functions
+// Public Interface
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Log a governance action to the audit log.
+/// Log a governance action to the audit trail.
 ///
-/// This function should be called immediately after a successful governance
-/// action to ensure atomic logging with the action itself.
+/// This function should be called atomically with every governance action
+/// to ensure complete audit coverage. The entry is stored in a circular
+/// buffer and an event is emitted for off-chain monitoring.
 ///
 /// # Arguments
 /// * `env` - The contract environment
-/// * `action` - The type of governance action performed
-/// * `caller` - The address that performed the action
+/// * `action` - Type of governance action
+/// * `caller` - Address performing the action
 /// * `payload` - Action-specific data
+///
+/// # Security
+/// This function is read-only with respect to authorization - it should
+/// only be called after the caller has been properly authorized for the
+/// specific governance action being audited.
 pub fn log_governance_action(
     env: &Env,
     action: GovernanceAction,
     caller: Address,
     payload: GovernancePayload,
 ) {
-    let current_count = env
-        .storage()
-        .persistent()
-        .get(&AuditLogKey::Count)
-        .unwrap_or(0);
-    
-    let new_id = current_count + 1;
-    let timestamp = env.ledger().timestamp();
-    
+    let count_key = AuditLogKey::Count;
+    let mut count: u64 = env.storage().persistent().get(&count_key).unwrap_or(0);
+    count += 1;
+
     // Create audit entry
     let entry = AuditEntry {
-        id: new_id,
+        id: count,
         action,
         caller: caller.clone(),
-        timestamp,
+        timestamp: env.ledger().timestamp(),
         payload: payload.clone(),
     };
-    
+
     // Store in circular buffer
-    let buffer_index = new_id % MAX_AUDIT_ENTRIES;
+    let storage_index = count % MAX_AUDIT_ENTRIES;
     env.storage()
         .persistent()
-        .set(&AuditLogKey::Entry(buffer_index), &entry);
-    
+        .set(&AuditLogKey::Entry(storage_index), &entry);
+
     // Update count
-    env.storage()
-        .persistent()
-        .set(&AuditLogKey::Count, &new_id);
-    
+    env.storage().persistent().set(&count_key, &count);
+
     // Emit event for off-chain monitoring
     let event = GovernanceAuditEvent {
-        id: new_id,
+        id: count,
         action,
         caller,
-        timestamp,
+        timestamp: entry.timestamp,
         payload,
     };
-    
     event.publish(env);
 }
 
-/// Get recent audit entries from the log.
+/// Get recent governance audit entries.
 ///
-/// Returns up to `limit` most recent audit entries in reverse chronological order.
-/// The limit is enforced to prevent gas exhaustion attacks.
+/// Returns up to `limit` most recent audit entries in reverse chronological
+/// order (newest first). The function is bounded to ensure predictable gas
+/// costs regardless of total audit history.
 ///
 /// # Arguments
 /// * `env` - The contract environment
-/// * `limit` - Maximum number of entries to return (max 100)
+/// * `limit` - Maximum number of entries to return (must be <= 100)
 ///
 /// # Returns
 /// Vector of audit entries ordered from newest to oldest
+///
+/// # Security
+/// This function is read-only and requires no authorization. It only returns
+/// non-sensitive audit information (addresses, enum values, timestamps).
 pub fn get_recent_audit_entries(env: &Env, limit: u32) -> Vec<AuditEntry> {
-    // Enforce maximum limit to prevent gas exhaustion
-    let effective_limit = if limit > 100 { 100 } else { limit };
-    
-    let total_count = env
-        .storage()
-        .persistent()
-        .get(&AuditLogKey::Count)
-        .unwrap_or(0);
-    
-    if total_count == 0 {
+    if limit == 0 || limit > 100 {
+        // Enforce reasonable limits to prevent gas issues
         return Vec::new(env);
     }
+
+    let count_key = AuditLogKey::Count;
+    let count: u64 = env.storage().persistent().get(&count_key).unwrap_or(0);
     
+    if count == 0 {
+        return Vec::new(env);
+    }
+
     let mut entries = Vec::new(env);
-    let entries_to_fetch = if total_count < effective_limit as u64 {
-        total_count
-    } else {
-        effective_limit as u64
-    };
-    
-    // Fetch entries in reverse chronological order
-    for i in 0..entries_to_fetch {
-        let entry_id = total_count - i;
-        let buffer_index = entry_id % MAX_AUDIT_ENTRIES;
-        
-        if let Some(entry) = env
-            .storage()
-            .persistent()
-            .get(&AuditLogKey::Entry(buffer_index))
-        {
-            // Only include entries that match the expected ID (handle circular buffer)
-            if entry.id == entry_id {
+    let limit_u64 = limit as u64;
+    let start_index = if count > limit_u64 { count - limit_u64 } else { 0 };
+
+    for i in start_index..count {
+        let storage_index = i % MAX_AUDIT_ENTRIES;
+        if let Some(entry) = env.storage().persistent().get(&AuditLogKey::Entry(storage_index)) {
+            if entry.id == i + 1 { // Verify we have the correct entry
                 entries.push_back(entry);
             }
         }
     }
-    
+
+    // Reverse to get newest first
+    entries.reverse();
     entries
 }
 
-/// Get the total number of audit entries ever recorded.
+/// Get the total count of audit entries.
 ///
-/// This count includes entries that may have been overwritten in the circular
-/// buffer and is useful for pagination purposes.
-///
-/// # Arguments
-/// * `env` - The contract environment
-///
-/// # Returns
-/// Total number of audit entries recorded
+/// Returns the total number of governance actions that have been logged
+/// since contract deployment. This can be used for pagination.
 pub fn get_audit_count(env: &Env) -> u64 {
     env.storage()
         .persistent()
@@ -300,94 +304,94 @@ pub fn get_audit_count(env: &Env) -> u64 {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Payload Helper Functions
+// Helper Functions for Payload Construction
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Create an empty payload for actions that don't need additional data.
-pub fn payload_empty(env: &Env) -> GovernancePayload {
-    GovernancePayload {
-        data: Vec::new(env),
-    }
-}
 
 /// Create a payload with a single address.
 pub fn payload_address(env: &Env, address: Address) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(address.into());
+    data.push_back(address.into_val(env));
     GovernancePayload { data }
 }
 
-/// Create a payload with an address and boolean value.
+/// Create a payload with an address and boolean.
 pub fn payload_address_bool(env: &Env, address: Address, value: bool) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(address.into());
-    data.push_back(value.into());
+    data.push_back(address.into_val(env));
+    data.push_back(value.into_val(env));
     GovernancePayload { data }
 }
 
 /// Create a payload with an address and u64 value.
 pub fn payload_address_u64(env: &Env, address: Address, value: u64) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(address.into());
-    data.push_back(value.into());
+    data.push_back(address.into_val(env));
+    data.push_back(value.into_val(env));
     GovernancePayload { data }
 }
 
 /// Create a payload with an address and i128 value.
 pub fn payload_address_i128(env: &Env, address: Address, value: i128) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(address.into());
-    data.push_back(value.into());
+    data.push_back(address.into_val(env));
+    data.push_back(value.into_val(env));
     GovernancePayload { data }
 }
 
 /// Create a payload with two addresses.
-pub fn payload_two_addresses(env: &Env, address1: Address, address2: Address) -> GovernancePayload {
+pub fn payload_two_addresses(env: &Env, addr1: Address, addr2: Address) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(address1.into());
-    data.push_back(address2.into());
+    data.push_back(addr1.into_val(env));
+    data.push_back(addr2.into_val(env));
     GovernancePayload { data }
 }
 
-/// Create a payload with address, asset, and amount.
+/// Create a payload with an address, asset, and i128 value.
 pub fn payload_address_asset_i128(
     env: &Env,
     address: Address,
     asset: Address,
-    amount: i128,
+    value: i128,
 ) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(address.into());
-    data.push_back(asset.into());
-    data.push_back(amount.into());
+    data.push_back(address.into_val(env));
+    data.push_back(asset.into_val(env));
+    data.push_back(value.into_val(env));
     GovernancePayload { data }
 }
 
-/// Create a payload with a single i128 value.
+/// Create a payload with just an i128 value.
 pub fn payload_i128(env: &Env, value: i128) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(value.into());
+    data.push_back(value.into_val(env));
     GovernancePayload { data }
 }
 
-/// Create a payload with a single u64 value.
+/// Create a payload with a u64 value.
 pub fn payload_u64(env: &Env, value: u64) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(value.into());
+    data.push_back(value.into_val(env));
     GovernancePayload { data }
 }
 
 /// Create a payload with two u64 values.
 pub fn payload_two_u64(env: &Env, value1: u64, value2: u64) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(value1.into());
-    data.push_back(value2.into());
+    data.push_back(value1.into_val(env));
+    data.push_back(value2.into_val(env));
     GovernancePayload { data }
 }
 
 /// Create a payload with a string value.
 pub fn payload_string(env: &Env, value: soroban_sdk::String) -> GovernancePayload {
     let mut data = Vec::new(env);
-    data.push_back(value.into());
+    data.push_back(value.into_val(env));
     GovernancePayload { data }
+}
+
+/// Create an empty payload for actions that don't need additional data.
+pub fn payload_empty(env: &Env) -> GovernancePayload {
+    GovernancePayload {
+        data: Vec::new(env),
+    }
 }

@@ -2,123 +2,108 @@
 
 ## Overview
 
-The Governance Audit Log provides a comprehensive, immutable record of all administrative and governance actions performed on the StellarLend protocol. This system enhances transparency, enables compliance monitoring, and supports incident response capabilities.
+The StellarLend protocol includes a comprehensive governance audit log that tracks all administrative and governance actions. This provides transparency, compliance monitoring, and incident response capabilities for protocol operators and users.
 
 ## Features
 
-- **Complete Coverage**: Logs all governance actions including oracle updates, pause toggles, risk parameter changes, and upgrade operations
-- **Immutable Records**: Audit entries cannot be modified once created, providing tamper-evident governance history
-- **Real-Time Monitoring**: Events emitted for every action enable immediate off-chain detection
-- **Gas-Efficient Storage**: Circular buffer design with configurable maximum entries
-- **Flexible Payload System**: Extensible data structure for action-specific information
-- **Security-Focused**: Only stores public addresses and parameters, no sensitive user data
+- **Complete Coverage**: All admin actions are automatically logged
+- **Immutable Records**: Audit entries cannot be modified once created
+- **Gas-Efficient Storage**: Circular buffer with configurable maximum entries
+- **Real-Time Events**: Events emitted for off-chain monitoring
+- **Flexible Payload System**: Extensible schema for different action types
 
 ## Architecture
 
 ### Storage Structure
 
-The audit log uses a circular buffer to bound storage usage and gas costs:
-
 ```
-AuditLogKey::Count        -> u64 (total entries ever recorded)
-AuditLogKey::Entry(N)    -> AuditEntry (circular buffer, N = id % MAX_AUDIT_ENTRIES)
+AuditLogKey::Count        -> u64 (total entries)
+AuditLogKey::Entry(N)    -> AuditEntry (circular buffer)
 ```
 
 ### Audit Entry Structure
 
 ```rust
 pub struct AuditEntry {
-    pub id: u64,                    // Sequential ID for ordering
-    pub action: GovernanceAction,     // Type of governance action
-    pub caller: Address,             // Who performed the action
+    pub id: u64,                    // Sequential ID
+    pub action: GovernanceAction,     // Type of action
+    pub caller: Address,             // Who performed it
     pub timestamp: u64,              // When it occurred
     pub payload: GovernancePayload,    // Action-specific data
 }
 ```
 
-### Event Schema
-
-```rust
-pub struct GovernanceAuditEvent {
-    pub id: u64,                    // Sequential ID
-    pub action: GovernanceAction,     // Action type
-    pub caller: Address,             // Performer address
-    pub timestamp: u64,              // Block timestamp
-    pub payload: GovernancePayload,    // Action data
-}
-```
-
 ## Governance Actions
 
-The system tracks 35 different governance action types:
+The audit log tracks the following action types:
 
 ### Protocol Management
-- `Initialize` - Protocol initialization
-- `SetAdmin` - Admin address change
-- `SetGuardian` - Guardian address configuration
+- `Initialize` - Protocol initialization with admin and settings
+- `SetAdmin` - Admin address changes
+- `SetGuardian` - Guardian configuration
 
 ### Emergency Controls
-- `SetPause` - Pause state change for specific operation
-- `EmergencyShutdown` - Emergency shutdown trigger
-- `StartRecovery` - Recovery mode start
-- `CompleteRecovery` - Recovery completion
+- `SetPause` - Pause state changes for specific operations
+- `EmergencyShutdown` - Emergency protocol halt
+- `StartRecovery` - Begin controlled recovery mode
+- `CompleteRecovery` - Return to normal operation
 
 ### Oracle Management
-- `SetOracle` - Oracle address configuration
-- `ConfigureOracle` - Oracle parameters configuration
-- `SetPrimaryOracle` - Primary oracle address set for asset
-- `SetFallbackOracle` - Fallback oracle address set for asset
-- `SetOraclePaused` - Oracle pause state change
-- `UpdatePriceFeed` - Price feed update
+- `SetOracle` - Global oracle configuration
+- `ConfigureOracle` - Oracle parameter changes
+- `SetPrimaryOracle` - Asset-specific primary oracle
+- `SetFallbackOracle` - Asset-specific fallback oracle
+- `SetOraclePaused` - Oracle pause state
+- `UpdatePriceFeed` - Price feed submissions
 
 ### Risk Parameters
-- `SetLiquidationThreshold` - Liquidation threshold parameter change
-- `SetCloseFactor` - Close factor parameter change
-- `SetLiquidationIncentive` - Liquidation incentive parameter change
+- `SetLiquidationThreshold` - Liquidation threshold BPS
+- `SetCloseFactor` - Close factor BPS
+- `SetLiquidationIncentive` - Liquidation incentive BPS
 
 ### Protocol Settings
-- `InitializeBorrowSettings` - Borrow settings initialization
-- `InitializeDepositSettings` - Deposit settings initialization
-- `InitializeWithdrawSettings` - Withdraw settings initialization
-- `SetFlashLoanFee` - Flash loan fee parameter change
+- `InitializeBorrowSettings` - Borrow module initialization
+- `InitializeDepositSettings` - Deposit module initialization
+- `InitializeWithdrawSettings` - Withdraw module initialization
+- `SetFlashLoanFee` - Flash loan fee configuration
 
 ### Cross-Asset Operations
-- `InitializeCrossAssetAdmin` - Cross-asset admin initialization
-- `SetAssetParams` - Asset parameters configuration
+- `InitializeCrossAssetAdmin` - Cross-asset admin setup
+- `SetAssetParams` - Asset-specific parameters
 
 ### Upgrade Management
-- `UpgradeInit` - Upgrade process initialization
-- `UpgradeAddApprover` - Upgrade approver addition
-- `UpgradeRemoveApprover` - Upgrade approver removal
-- `UpgradePropose` - Upgrade proposal creation
-- `UpgradeApprove` - Upgrade approval
-- `UpgradeExecute` - Upgrade execution
-- `UpgradeRollback` - Upgrade rollback
+- `UpgradeInit` - Upgrade system initialization
+- `UpgradeAddApprover` - Add upgrade approver
+- `UpgradeRemoveApprover` - Remove upgrade approver
+- `UpgradePropose` - Submit upgrade proposal
+- `UpgradeApprove` - Approve upgrade proposal
+- `UpgradeExecute` - Execute approved upgrade
+- `UpgradeRollback` - Roll back failed upgrade
 
 ### Financial Operations
-- `CreditInsuranceFund` - Insurance fund credit
-- `OffsetBadDebt` - Bad debt offset
+- `CreditInsuranceFund` - Add funds to insurance
+- `OffsetBadDebt` - Clear bad debt with insurance
 
 ### Data Management
-- `GrantDataWriter` - Data writer permission grant
-- `RevokeDataWriter` - Data writer permission revoke
-- `DataBackup` - Data backup creation
-- `DataRestore` - Data restoration
-- `DataMigrate` - Data schema migration
+- `GrantDataWriter` - Grant data write permissions
+- `RevokeDataWriter` - Revoke data write permissions
+- `DataBackup` - Create data backup
+- `DataRestore` - Restore from backup
+- `DataMigrate` - Schema migration
 
 ## API Reference
 
 ### View Functions
 
-#### `get_governance_audit_entries(limit)`
+#### `get_governance_audit_entries(limit: u32) -> Vec<AuditEntry>`
 
-Returns up to `limit` most recent audit entries in reverse chronological order.
+Returns the most recent audit entries in reverse chronological order.
 
-**Arguments:**
-- `limit: u32` - Maximum number of entries to return (max 100)
+**Parameters:**
+- `limit`: Maximum number of entries to return (1-100)
 
 **Returns:**
-- `Vec<AuditEntry>` - Audit entries ordered from newest to oldest
+- Vector of audit entries, newest first
 
 **Example:**
 ```rust
@@ -129,12 +114,12 @@ for entry in entries.iter() {
 }
 ```
 
-#### `get_governance_audit_count()`
+#### `get_governance_audit_count() -> u64`
 
-Returns the total number of audit entries ever recorded, including entries that may have been overwritten in the circular buffer.
+Returns the total number of audit entries since contract deployment.
 
 **Returns:**
-- `u64` - Total number of audit entries recorded
+- Total count of audit entries
 
 **Example:**
 ```rust
@@ -146,253 +131,266 @@ println!("Total governance actions: {}", total_actions);
 
 #### `GovernanceAuditEvent`
 
-Emitted for every governance action with complete action context.
+Emitted for every governance action with the following structure:
 
-**Event Fields:**
-- `id: u64` - Sequential ID
-- `action: GovernanceAction` - Action type
-- `caller: Address` - Performer address
-- `timestamp: u64` - Block timestamp
-- `payload: GovernancePayload` - Action data
+```rust
+pub struct GovernanceAuditEvent {
+    pub id: u64,                    // Sequential ID
+    pub action: GovernanceAction,     // Action type
+    pub caller: Address,             // Performer address
+    pub timestamp: u64,              // Block timestamp
+    pub payload: GovernancePayload,    // Action data
+}
+```
 
 ## Usage Examples
 
-### Monitoring Recent Governance Actions
+### Monitoring Recent Activity
 
 ```rust
-// Get recent governance actions for monitoring
-let recent_actions = contract.get_governance_audit_entries(&env, 20);
+// Get last 20 governance actions
+let recent = contract.get_governance_audit_entries(&env, 20);
 
-for entry in recent_actions.iter() {
+// Filter for emergency actions
+for entry in recent.iter() {
     match entry.action {
-        GovernanceAction::SetPause => {
-            // Handle pause state changes
-            println!("Pause state changed by {:?}", entry.caller);
+        GovernanceAction::EmergencyShutdown |
+        GovernanceAction::StartRecovery |
+        GovernanceAction::CompleteRecovery => {
+            println!("Emergency action by {:?}", entry.caller);
         }
-        GovernanceAction::EmergencyShutdown => {
-            // Handle emergency shutdown
-            println!("Emergency shutdown triggered by {:?}", entry.caller);
-        }
-        _ => {
-            // Handle other actions
-            println!("Governance action: {:?}", entry.action);
-        }
+        _ => {}
     }
 }
 ```
 
-### Compliance Reporting
+### Compliance Checking
 
 ```rust
-// Get governance actions for compliance reporting
-let total_count = contract.get_governance_audit_count(&env);
-let all_actions = contract.get_governance_audit_entries(&env, 100);
+// Get all actions from last 24 hours
+let current_time = env.ledger().timestamp();
+let one_day_ago = current_time - 86400;
 
-// Generate compliance report
-println!("Governance Audit Report");
-println!("Total Actions: {}", total_count);
-println!("Recent Actions:");
-
-for entry in all_actions.iter() {
-    println!("  ID: {}, Action: {:?}, Caller: {}, Time: {}",
-        entry.id, entry.action, entry.caller, entry.timestamp);
+let entries = contract.get_governance_audit_entries(&env, 100);
+for entry in entries.iter() {
+    if entry.timestamp >= one_day_ago {
+        // Process recent governance actions
+        match entry.action {
+            GovernanceAction::SetAdmin => {
+                // Check admin change compliance
+            }
+            GovernanceAction::UpgradeExecute => {
+                // Verify upgrade procedures
+            }
+            _ => {}
+        }
+    }
 }
 ```
 
 ### Incident Response
 
 ```rust
-// Investigate recent governance actions during incident
-let recent_actions = contract.get_governance_audit_entries(&env, 50);
-
-let emergency_actions: Vec<_> = recent_actions.iter()
-    .filter(|entry| matches!(entry.action, 
-        GovernanceAction::EmergencyShutdown | 
-        GovernanceAction::SetPause |
-        GovernanceAction::StartRecovery))
-    .collect();
-
-println!("Emergency actions in recent history:");
-for entry in emergency_actions.iter() {
-    println!("  {:?} at {} by {:?}", 
-        entry.action, entry.timestamp, entry.caller);
+// Find actions before an incident
+let entries = contract.get_governance_audit_entries(&env, 50);
+for entry in entries.iter() {
+    match entry.action {
+        GovernanceAction::SetPause(pause_type, paused) => {
+            if *paused {
+                println!("Protocol paused: {:?}", pause_type);
+            }
+        }
+        GovernanceAction::EmergencyShutdown => {
+            println!("Emergency shutdown triggered by {:?}", entry.caller);
+        }
+        _ => {}
+    }
 }
 ```
 
 ## Payload Schemas
 
-Different governance actions use different payload structures:
+Different action types use different payload structures:
 
-### Empty Payload
-Used for actions that don't need additional data.
+### Simple Actions
 ```rust
-payload_empty(&env)
+// No additional data needed
+EmergencyShutdown, StartRecovery, CompleteRecovery
 ```
 
-### Address Payload
-Used for actions involving a single address.
+### Address-Only Actions
 ```rust
-payload_address(&env, address)
+// Single address parameter
+SetAdmin(address), SetGuardian(address), SetOracle(address)
 ```
 
-### Address + Boolean Payload
-Used for actions with address and boolean value.
+### Value-Only Actions
 ```rust
-payload_address_bool(&env, address, true)
+// Single numeric parameter
+SetLiquidationThreshold(bps), SetCloseFactor(bps), SetFlashLoanFee(bps)
 ```
 
-### Address + Amount Payload
-Used for financial operations.
+### Address + Value Actions
 ```rust
-payload_address_i128(&env, address, amount)
+// Address with numeric parameter
+CreditInsuranceFund(asset, amount), OffsetBadDebt(asset, amount)
 ```
 
-### Two Addresses Payload
-Used for actions involving two addresses.
+### Complex Actions
 ```rust
-payload_two_addresses(&env, address1, address2)
+// Multiple parameters
+Initialize(admin, debt_ceiling, min_borrow)
+UpgradePropose(wasm_hash, version, proposal_id)
 ```
 
 ## Security Considerations
 
 ### Immutable Records
-- Audit entries cannot be modified once written
+- Audit entries cannot be modified after creation
 - Provides tamper-evident governance history
-- Sequential IDs ensure chronological ordering
 
 ### Authorization Enforcement
-- Only successful, authorized actions are logged
+- All audit logging occurs after successful authorization
 - Failed actions are not logged (no state change)
-- Proper admin/guardian validation required
-
-### Privacy Protection
-- Only stores public addresses and parameters
-- No sensitive user data in audit logs
-- Compliant with data protection requirements
 
 ### Gas Efficiency
-- Bounded storage with configurable maximum
+- Circular buffer limits storage growth
+- Maximum 1000 entries configurable
 - Query limits prevent gas exhaustion
-- Efficient circular buffer design
+
+### Privacy
+- Only stores addresses and public parameters
+- No sensitive user data in audit logs
+- Compliant with data protection requirements
 
 ## Integration Guidelines
 
 ### Off-Chain Monitoring
 
-Set up event listeners for `GovernanceAuditEvent` to monitor governance actions in real-time:
+Set up event listeners for `GovernanceAuditEvent`:
 
 ```javascript
-// Example: Monitor governance events
-contract.events.on('GovernanceAuditEvent', (event) => {
-    const { id, action, caller, timestamp, payload } = event.returnValues;
-    
-    // Process governance action
-    console.log(`Governance Action ${action} by ${caller} at ${timestamp}`);
-    
-    // Send alerts for critical actions
-    if (action === 'EmergencyShutdown') {
-        sendAlert(`Emergency shutdown triggered by ${caller}`);
-    }
-});
+// Example JavaScript monitoring
+const provider = new StellarProvider();
+const contract = new Contract(address, abi);
+
+contract.events.GovernanceAuditEvent()
+    .on('data', (event) => {
+        const { id, action, caller, timestamp, payload } = event.returnValues;
+        
+        // Process governance action
+        console.log(`Governance action ${id}: ${action} by ${caller}`);
+        
+        // Store in monitoring database
+        storeAuditEntry(event.returnValues);
+    });
 ```
 
-### Compliance Integration
+### Alerting
 
-Integrate with compliance systems using the view functions:
+Configure alerts for critical actions:
 
-```python
-# Example: Python integration for compliance reporting
-def get_governance_report(contract, start_time, end_time):
-    total_actions = contract.get_governance_audit_count()
-    recent_actions = contract.get_governance_audit_entries(100)
+```yaml
+alerts:
+  - action: EmergencyShutdown
+    severity: critical
+    notification: slack, email
     
-    # Filter by time range
-    filtered_actions = [
-        action for action in recent_actions
-        if start_time <= action.timestamp <= end_time
-    ]
+  - action: UpgradeExecute
+    severity: high
+    notification: slack
     
-    return {
-        'total_actions': total_actions,
-        'filtered_actions': filtered_actions,
-        'report_generated': datetime.now()
+  - action: SetAdmin
+    severity: medium
+    notification: email
+```
+
+### Compliance Reporting
+
+Generate regular compliance reports:
+
+```rust
+// Daily governance summary
+fn generate_daily_report(env: &Env) -> ComplianceReport {
+    let entries = get_recent_audit_entries(env, 100);
+    let mut report = ComplianceReport::new();
+    
+    for entry in entries.iter() {
+        if entry.timestamp >= yesterday_start() {
+            report.add_action(entry);
+        }
     }
+    
+    report
+}
 ```
 
 ## Best Practices
 
-### Query Optimization
-- Use appropriate limits when querying audit entries
-- Implement pagination for large datasets
-- Cache frequently accessed audit data
+### For Protocol Operators
 
-### Event Monitoring
-- Set up real-time monitoring for critical governance actions
-- Implement alerting for emergency actions
-- Maintain historical event logs
+1. **Regular Monitoring**: Monitor audit events in real-time
+2. **Access Control**: Limit admin keys to essential personnel
+3. **Documentation**: Document all governance decisions
+4. **Testing**: Test governance actions in staging first
+5. **Backup**: Maintain backups of audit data
 
-### Compliance
-- Regularly export audit data for compliance reporting
-- Implement automated compliance checks
-- Maintain audit trail integrity
+### For Users
 
-### Security
-- Monitor for unusual governance activity patterns
-- Implement rate limiting for sensitive actions
-- Regular security audits of governance actions
+1. **Verification**: Check audit log for recent changes
+2. **Alerts**: Set up notifications for critical actions
+3. **Transparency**: Review governance history regularly
+4. **Security**: Verify admin actions are legitimate
+
+### For Developers
+
+1. **Integration**: Use audit log for governance UI
+2. **Filtering**: Implement efficient filtering for large datasets
+3. **Caching**: Cache frequently accessed audit data
+4. **Validation**: Validate audit data integrity
+5. **Testing**: Include audit logging in all tests
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### Query Returns Empty Results
-- Check if any governance actions have been performed
-- Verify the contract has been initialized
-- Ensure proper authorization for view functions
+**Missing Audit Entries**
+- Check if action was successful (failed actions aren't logged)
+- Verify function has audit logging implemented
+- Check authorization requirements
 
-#### Event Not Received
-- Verify event listener configuration
-- Check network connectivity
-- Ensure proper event signature
+**Storage Limits**
+- Monitor entry count approaching MAX_AUDIT_ENTRIES
+- Implement external archival for long-term storage
+- Consider increasing MAX_AUDIT_ENTRIES if needed
 
-#### Storage Issues
-- Monitor circular buffer capacity
-- Implement appropriate MAX_AUDIT_ENTRIES
-- Consider increasing buffer size if needed
+**Performance Issues**
+- Use appropriate query limits
+- Implement pagination for large datasets
+- Cache frequently accessed entries
 
-### Debugging Tools
+### Debug Information
 
-#### Audit Log Inspection
+Enable debug logging to trace audit operations:
+
 ```rust
-// Debug: Check audit log state
-let count = contract.get_governance_audit_count(&env);
-let entries = contract.get_governance_audit_entries(&env, 10);
-
-println!("Audit count: {}", count);
-println!("Recent entries: {}", entries.len());
-```
-
-#### Event Verification
-```rust
-// Debug: Verify event emission
-// Events are automatically published, monitor via off-chain tools
+// In development builds
+#[cfg(debug_assertions)]
+log_governance_action(&env, action, caller, payload);
 ```
 
 ## Version History
 
 ### v1.0.0
-- Initial implementation with 35 governance action types
-- Circular buffer storage with 1000 entry limit
-- Comprehensive event emission and view functions
-- Complete test coverage and documentation
+- Initial implementation
+- 35 governance action types
+- Circular buffer storage
+- Event emission
+- View functions
 
-## Support
-
-For questions or issues related to the governance audit log:
-
-1. Check the documentation and examples above
-2. Review the test suite for usage patterns
-3. Consult the StellarLend development team
-4. Submit issues through the official GitHub repository
-
-The governance audit log is designed to be a foundational component for protocol transparency and compliance in the StellarLend ecosystem.
+### Future Enhancements
+- Action filtering and search
+- Batch operations
+- External archival integration
+- Enhanced reporting tools
+- Action categorization
