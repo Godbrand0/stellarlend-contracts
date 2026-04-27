@@ -53,6 +53,9 @@ pub struct WithdrawEvent {
 /// facade layer: granular withdraw pause, global `All`, legacy flag, and shutdown (but not
 /// recovery) blocking.
 fn ensure_withdraw_allowed(env: &Env) -> Result<(), WithdrawError> {
+    if pause::is_read_only(env) {
+        return Err(WithdrawError::WithdrawPaused);
+    }
     if legacy_withdraw_paused(env) {
         return Err(WithdrawError::WithdrawPaused);
     }
@@ -187,6 +190,9 @@ pub fn initialize_withdraw_settings(
     env: &Env,
     min_withdraw_amount: i128,
 ) -> Result<(), WithdrawError> {
+    if pause::is_read_only(env) {
+        return Err(WithdrawError::WithdrawPaused);
+    }
     env.storage()
         .persistent()
         .set(&WithdrawDataKey::MinWithdrawAmount, &min_withdraw_amount);

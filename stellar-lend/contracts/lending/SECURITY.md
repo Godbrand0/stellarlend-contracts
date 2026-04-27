@@ -221,6 +221,7 @@ Set once at `initialize()` and stored in **instance storage**.  Cannot be cleare
 | `set_oracle` / `set_primary_oracle` / `set_fallback_oracle` / `configure_oracle` / `set_oracle_paused` | Price-feed governance |
 | `set_liquidation_threshold_bps` / `set_close_factor_bps` / `set_liquidation_incentive_bps` | Risk parameter tuning |
 | `set_flash_loan_fee_bps` | Flash-loan revenue policy |
+| `set_read_only` | Protocol-level state freeze |
 | `start_recovery` / `complete_recovery` | Emergency lifecycle management |
 | `upgrade_init` / `upgrade_propose` / `upgrade_approve` / `upgrade_execute` | Upgrade governance |
 
@@ -306,3 +307,11 @@ Recovery ──(admin only)──> Normal
 * In **Shutdown** state, `blocks_high_risk_ops()` returns `true`, gating `borrow`, `flash_loan`, and `deposit`.
 * In **Recovery** state, users may `repay` and `withdraw` but not borrow more or deposit.
 * Transitions are one-way through the intended flow; there is no shortcut from Shutdown directly back to Normal.
+
+### Read-Only Mode (Incident Response)
+
+* **Purpose**: A lightweight, reversible switch to freeze protocol state.
+* **Mechanism**: When `is_read_only()` is `true`, all user-facing mutations (deposit, borrow, repay, withdraw, liquidate) and critical admin mutations (oracle updates) are blocked.
+* **Precedence**: Overrides all granular pause flags and emergency states.
+* **View Functions**: Remain available, allowing for transparent auditing during incidents.
+* **Authorized**: Only the protocol `admin` can toggle Read-Only mode.

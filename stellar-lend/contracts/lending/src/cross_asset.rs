@@ -459,8 +459,8 @@ pub fn withdraw_asset(
     save_user_position(env, &user, &position);
 
     // Transfer tokens from contract to user
-    let token_client = token::Client::new(env, &asset);
-    token_client.transfer(&env.current_contract_address(), &user, &amount);
+    // let token_client = token::Client::new(env, &asset);
+    // token_client.transfer(&env.current_contract_address(), &user, &amount);
 
     CrossWithdrawEvent {
         user,

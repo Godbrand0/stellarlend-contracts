@@ -1,4 +1,6 @@
 #![allow(unused)]
+use crate::admin::require_admin;
+use crate::risk_management::is_emergency_paused;
 use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Symbol, Val, Vec, I256};
 
 /// Errors that can occur during risk parameter management

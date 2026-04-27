@@ -51,10 +51,10 @@ use oracle::{OracleConfig};
 use pause::{
     blocks_high_risk_ops, complete_recovery as complete_recovery_logic,
     get_emergency_state as get_emergency_state_logic, get_guardian as get_guardian_logic,
-    get_pause_state as get_pause_state_logic, is_paused, is_recovery,
-    set_guardian as set_guardian_logic, set_pause as set_pause_impl,
-    start_recovery as start_recovery_logic, trigger_shutdown as trigger_shutdown_logic,
-    EmergencyState, PauseType,
+    get_pause_state as get_pause_state_logic, is_paused, is_read_only as is_read_only_logic,
+    is_recovery, set_guardian as set_guardian_logic, set_pause as set_pause_impl,
+    set_read_only as set_read_only_impl, start_recovery as start_recovery_logic,
+    trigger_shutdown as trigger_shutdown_logic, EmergencyState, PauseType,
 };
 use token_receiver::receive as receive_impl;
 
@@ -97,6 +97,8 @@ mod oracle_test;
 mod oracle_staleness_test;
 #[cfg(test)]
 mod pause_test;
+#[cfg(test)]
+mod read_only_test;
 #[cfg(test)]
 mod token_receiver_test;
 #[cfg(test)]
@@ -198,9 +200,25 @@ impl LendingContract {
         Ok(())
     }
 
+    /// Toggle protocol-level read-only mode (admin only).
+    pub fn set_read_only(env: Env, admin: Address, read_only: bool) -> Result<(), BorrowError> {
+        ensure_admin(&env, &admin)?;
+        set_read_only_impl(&env, admin, read_only);
+        Ok(())
+    }
+
+    /// Return true if the protocol is currently in read-only mode.
+    pub fn is_read_only(env: Env) -> bool {
+        is_read_only_logic(&env)
+    }
+
     /// Configure guardian address authorized to trigger emergency shutdown.
     pub fn set_guardian(env: Env, admin: Address, guardian: Address) -> Result<(), BorrowError> {
-        ensure_admin(&env, &admin)?;
+        admin.require_auth();
+        let stored_admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
+        if admin != stored_admin {
+            return Err(BorrowError::Unauthorized);
+        }
         set_guardian_logic(&env, admin, guardian);
         Ok(())
     }
@@ -212,15 +230,25 @@ impl LendingContract {
 
     /// Trigger emergency shutdown (admin or guardian).
     pub fn emergency_shutdown(env: Env, caller: Address) -> Result<(), BorrowError> {
-        ensure_shutdown_authorized(&env, &caller)?;
         caller.require_auth();
+        let admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
+        let guardian = get_guardian_logic(&env);
+
+        if caller != admin && Some(caller.clone()) != guardian {
+            return Err(BorrowError::Unauthorized);
+        }
+
         trigger_shutdown_logic(&env, caller);
         Ok(())
     }
 
     /// Move from hard shutdown into controlled user recovery.
     pub fn start_recovery(env: Env, admin: Address) -> Result<(), BorrowError> {
-        ensure_admin(&env, &admin)?;
+        admin.require_auth();
+        let stored_admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
+        if admin != stored_admin {
+            return Err(BorrowError::Unauthorized);
+        }
         if get_emergency_state_logic(&env) != EmergencyState::Shutdown {
             return Err(BorrowError::ProtocolPaused);
         }
@@ -230,7 +258,11 @@ impl LendingContract {
 
     /// Return protocol to normal operation after recovery procedures.
     pub fn complete_recovery(env: Env, admin: Address) -> Result<(), BorrowError> {
-        ensure_admin(&env, &admin)?;
+        admin.require_auth();
+        let stored_admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
+        if admin != stored_admin {
+            return Err(BorrowError::Unauthorized);
+        }
         complete_recovery_logic(&env, admin);
         Ok(())
     }
@@ -258,7 +290,10 @@ impl LendingContract {
     pub fn repay(env: Env, user: Address, asset: Address, amount: i128) -> Result<(), BorrowError> {
         let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
         user.require_auth();
-        if is_paused(&env, PauseType::Repay) || (!is_recovery(&env) && blocks_high_risk_ops(&env)) {
+        if is_read_only_logic(&env)
+            || is_paused(&env, PauseType::Repay)
+            || (!is_recovery(&env) && blocks_high_risk_ops(&env))
+        {
             return Err(BorrowError::ProtocolPaused);
         }
         borrow_repay(&env, user, asset, amount)
@@ -273,7 +308,10 @@ impl LendingContract {
     ) -> Result<(), BorrowError> {
         let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
         user.require_auth();
-        if is_paused(&env, PauseType::Deposit) || blocks_high_risk_ops(&env) {
+        if is_read_only_logic(&env)
+            || is_paused(&env, PauseType::Deposit)
+            || blocks_high_risk_ops(&env)
+        {
             return Err(BorrowError::ProtocolPaused);
         }
         borrow_deposit(&env, user, asset, amount)
@@ -305,7 +343,10 @@ impl LendingContract {
     ) -> Result<(), BorrowError> {
         let _guard = reentrancy::ReentrancyGuard::new(&env).map_err(|_| BorrowError::Reentrancy)?;
         liquidator.require_auth();
-        if is_paused(&env, PauseType::Liquidation) || blocks_high_risk_ops(&env) {
+        if is_read_only_logic(&env)
+            || is_paused(&env, PauseType::Liquidation)
+            || blocks_high_risk_ops(&env)
+        {
             return Err(BorrowError::ProtocolPaused);
         }
 
@@ -341,7 +382,14 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), BorrowError> {
-        ensure_admin(&env, &caller)?;
+        caller.require_auth();
+        let admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
+        if caller != admin {
+            return Err(BorrowError::Unauthorized);
+        }
+        if is_read_only_logic(&env) {
+            return Err(BorrowError::ProtocolPaused);
+        }
         credit_insurance_impl(&env, &asset, amount)
     }
 
@@ -352,7 +400,14 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), BorrowError> {
-        ensure_admin(&env, &caller)?;
+        caller.require_auth();
+        let admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
+        if caller != admin {
+            return Err(BorrowError::Unauthorized);
+        }
+        if is_read_only_logic(&env) {
+            return Err(BorrowError::ProtocolPaused);
+        }
         offset_bad_debt_impl(&env, &asset, amount)
     }
 
@@ -414,6 +469,9 @@ impl LendingContract {
 
     /// Set oracle address for price feeds (admin only).
     pub fn set_oracle(env: Env, admin: Address, oracle: Address) -> Result<(), BorrowError> {
+        if is_read_only_logic(&env) {
+            return Err(BorrowError::ProtocolPaused);
+        }
         set_oracle_impl(&env, &admin, oracle)
     }
 
@@ -427,6 +485,9 @@ impl LendingContract {
         caller: Address,
         config: OracleConfig,
     ) -> Result<(), OracleError> {
+        if is_read_only_logic(&env) {
+            return Err(OracleError::OraclePaused);
+        }
         oracle::configure_oracle(&env, caller, config)
     }
 
@@ -441,6 +502,9 @@ impl LendingContract {
         asset: Address,
         primary_oracle: Address,
     ) -> Result<(), OracleError> {
+        if is_read_only_logic(&env) {
+            return Err(OracleError::OraclePaused);
+        }
         oracle::set_primary_oracle(&env, caller, asset, primary_oracle)
     }
 
@@ -455,6 +519,9 @@ impl LendingContract {
         asset: Address,
         fallback_oracle: Address,
     ) -> Result<(), OracleError> {
+        if is_read_only_logic(&env) {
+            return Err(OracleError::OraclePaused);
+        }
         oracle::set_fallback_oracle(&env, caller, asset, fallback_oracle)
     }
 
@@ -473,6 +540,9 @@ impl LendingContract {
         asset: Address,
         price: i128,
     ) -> Result<(), OracleError> {
+        if is_read_only_logic(&env) {
+            return Err(OracleError::OraclePaused);
+        }
         oracle::update_price_feed(&env, caller, asset, price)
     }
 
@@ -487,6 +557,9 @@ impl LendingContract {
 
     /// Pause or unpause oracle price updates (admin only).
     pub fn set_oracle_paused(env: Env, caller: Address, paused: bool) -> Result<(), OracleError> {
+        if is_read_only_logic(&env) {
+            return Err(OracleError::OraclePaused);
+        }
         oracle::set_oracle_paused(&env, caller, paused)
     }
 
@@ -582,6 +655,9 @@ impl LendingContract {
         debt_ceiling: i128,
         min_borrow_amount: i128,
     ) -> Result<(), BorrowError> {
+        if is_read_only_logic(&env) {
+            return Err(BorrowError::ProtocolPaused);
+        }
         let current_admin = get_protocol_admin(&env).ok_or(BorrowError::Unauthorized)?;
         current_admin.require_auth();
         init_borrow_settings_impl(&env, debt_ceiling, min_borrow_amount)
@@ -593,6 +669,9 @@ impl LendingContract {
         deposit_cap: i128,
         min_deposit_amount: i128,
     ) -> Result<(), DepositError> {
+        if is_read_only_logic(&env) {
+            return Err(DepositError::DepositPaused);
+        }
         let current_admin = get_protocol_admin(&env).ok_or(DepositError::Unauthorized)?;
         current_admin.require_auth();
         init_deposit_settings_impl(&env, deposit_cap, min_deposit_amount)
@@ -607,9 +686,8 @@ impl LendingContract {
     ///
     /// # Errors
     /// Returns [`DepositError::Unauthorized`] if the caller is not the admin.
-    pub fn set_deposit_paused(env: Env, paused: bool) -> Result<(), DepositError> {
-        let admin = get_protocol_admin(&env).ok_or(DepositError::Unauthorized)?;
-        admin.require_auth();
+    pub fn set_deposit_paused(env: Env, admin: Address, paused: bool) -> Result<(), DepositError> {
+        ensure_admin(&env, &admin).map_err(|_| DepositError::Unauthorized)?;
         set_pause_impl(&env, admin, PauseType::Deposit, paused);
         Ok(())
     }
@@ -637,7 +715,8 @@ impl LendingContract {
         amount: i128,
         params: Bytes,
     ) -> Result<(), FlashLoanError> {
-        if is_paused(&env, PauseType::All) || blocks_high_risk_ops(&env) {
+        if is_read_only_logic(&env) || is_paused(&env, PauseType::All) || blocks_high_risk_ops(&env)
+        {
             return Err(FlashLoanError::ProtocolPaused);
         }
         flash_loan_impl(&env, receiver, asset, amount, params)
@@ -682,9 +761,12 @@ impl LendingContract {
     ///
     /// # Errors
     /// Returns [`WithdrawError::Unauthorized`] if the caller is not the admin.
-    pub fn set_withdraw_paused(env: Env, paused: bool) -> Result<(), WithdrawError> {
-        let admin = get_protocol_admin(&env).ok_or(WithdrawError::Unauthorized)?;
-        admin.require_auth();
+    pub fn set_withdraw_paused(
+        env: Env,
+        admin: Address,
+        paused: bool,
+    ) -> Result<(), WithdrawError> {
+        ensure_admin(&env, &admin).map_err(|_| WithdrawError::Unauthorized)?;
         set_pause_impl(&env, admin, PauseType::Withdraw, paused);
         Ok(())
     }
@@ -831,6 +913,9 @@ impl LendingContract {
         asset: Address,
         params: AssetParams,
     ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
         cross_set_asset_params(&env, asset, params)
     }
 
@@ -841,6 +926,9 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
         cross_deposit_collateral(&env, user, asset, amount)
     }
 
@@ -851,6 +939,9 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
         cross_borrow_asset(&env, user, asset, amount)
     }
 
@@ -861,6 +952,9 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
         cross_repay_asset(&env, user, asset, amount)
     }
 
@@ -871,6 +965,9 @@ impl LendingContract {
         asset: Address,
         amount: i128,
     ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
         cross_withdraw_asset(&env, user, asset, amount)
     }
 

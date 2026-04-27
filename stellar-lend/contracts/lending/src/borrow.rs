@@ -159,6 +159,19 @@ pub fn borrow(
         return Err(BorrowError::DebtCeilingReached);
     }
 
+    // [Issue #492] Enforce deposit cap for new collateral
+    if collateral_amount > 0 {
+        let current_deposits = crate::deposit::get_total_deposits(env);
+        let cap = crate::deposit::get_deposit_cap(env);
+        let next_deposits = current_deposits
+            .checked_add(collateral_amount)
+            .ok_or(BorrowError::Overflow)?;
+        if next_deposits > cap {
+            return Err(BorrowError::ExceedsDepositCap);
+        }
+        crate::deposit::set_total_deposits(env, next_deposits);
+    }
+
     debt_position.borrowed_amount = debt_position
         .borrowed_amount
         .checked_add(amount)
@@ -433,6 +446,17 @@ pub fn deposit(env: &Env, user: Address, asset: Address, amount: i128) -> Result
     if amount <= 0 {
         return Err(BorrowError::InvalidAmount);
     }
+    // [Issue #492] Enforce deposit cap
+    let current_deposits = crate::deposit::get_total_deposits(env);
+    let cap = crate::deposit::get_deposit_cap(env);
+    let next_deposits = current_deposits
+        .checked_add(amount)
+        .ok_or(BorrowError::Overflow)?;
+    if next_deposits > cap {
+        return Err(BorrowError::ExceedsDepositCap);
+    }
+    crate::deposit::set_total_deposits(env, next_deposits);
+
     let mut collateral_position = get_collateral_position(env, &user);
     if collateral_position.amount == 0 {
         collateral_position.asset = asset.clone();
