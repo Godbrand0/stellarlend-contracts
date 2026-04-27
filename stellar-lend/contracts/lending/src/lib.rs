@@ -58,6 +58,9 @@ use pause::{
 };
 use token_receiver::receive as receive_impl;
 
+mod interest_rate;
+pub use interest_rate::{InterestRateConfig, InterestRateError};
+
 mod views;
 use views::{
     get_collateral_balance as view_collateral_balance,
