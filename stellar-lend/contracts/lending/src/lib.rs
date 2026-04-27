@@ -10,6 +10,7 @@ mod constants;
 mod cross_asset;
 mod deposit;
 mod flash_loan;
+mod governance_audit;
 mod liquidate;
 mod oracle;
 mod pause;
@@ -21,6 +22,11 @@ mod errors;
 mod errors_test;
 
 use errors::{BorrowError, CrossAssetError, DepositError, FlashLoanError, OracleError, WithdrawError};
+use governance_audit::{
+    get_audit_count, get_recent_audit_entries, log_governance_action, GovernanceAction,
+    payload_address, payload_address_bool, payload_address_i128, payload_address_u64,
+    payload_empty, payload_i128, payload_string, payload_two_addresses, payload_two_u64,
+};
 
 use borrow::{
     borrow as borrow_impl, credit_insurance_fund as credit_insurance_impl,
@@ -94,6 +100,8 @@ mod cross_asset_view_invariants_test;
 mod deposit_test;
 #[cfg(test)]
 mod emergency_shutdown_test;
+#[cfg(test)]
+mod governance_audit_test;
 #[cfg(test)]
 mod emergency_lifecycle_conformance_test;
 #[cfg(test)]
@@ -175,19 +183,40 @@ impl LendingContract {
         }
         set_protocol_admin(&env, &admin);
         init_borrow_settings_impl(&env, debt_ceiling, min_borrow_amount)?;
+        
+        // Log governance action
+        let mut payload_data = Vec::new(&env);
+        payload_data.push_back(admin.clone().into());
+        payload_data.push_back(debt_ceiling.into());
+        payload_data.push_back(min_borrow_amount.into());
+        let payload = governance_audit::GovernancePayload { data: payload_data };
+        log_governance_action(&env, GovernanceAction::Initialize, admin, payload);
+        
         Ok(())
     }
 
     /// Register an asset in the allowlist (admin only).
     pub fn register_asset(env: Env, admin: Address, asset: Address) -> Result<(), BorrowError> {
         ensure_admin(&env, &admin)?;
-        asset_registry::register(&env, &asset)
+        let result = asset_registry::register(&env, &asset);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_address(&env, asset);
+            log_governance_action(&env, GovernanceAction::SetAssetParams, admin, payload);
+        }
+        result
     }
 
     /// Remove an asset from the allowlist (admin only).
     pub fn deregister_asset(env: Env, admin: Address, asset: Address) -> Result<(), BorrowError> {
         ensure_admin(&env, &admin)?;
-        asset_registry::deregister(&env, &asset)
+        let result = asset_registry::deregister(&env, &asset);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_address(&env, asset);
+            log_governance_action(&env, GovernanceAction::SetAssetParams, admin, payload);
+        }
+        result
     }
 
     /// Query whether an asset is registered (read-only).
@@ -227,6 +256,14 @@ impl LendingContract {
     ) -> Result<(), BorrowError> {
         ensure_admin(&env, &admin)?;
         set_pause_impl(&env, admin, pause_type, paused);
+        
+        // Log governance action
+        let mut payload_data = Vec::new(&env);
+        payload_data.push_back((pause_type as u32).into());
+        payload_data.push_back(paused.into());
+        let payload = governance_audit::GovernancePayload { data: payload_data };
+        log_governance_action(&env, GovernanceAction::SetPause, admin, payload);
+        
         Ok(())
     }
 
@@ -250,6 +287,11 @@ impl LendingContract {
             return Err(BorrowError::Unauthorized);
         }
         set_guardian_logic(&env, admin, guardian);
+        
+        // Log governance action
+        let payload = payload_address(&env, guardian);
+        log_governance_action(&env, GovernanceAction::SetGuardian, admin, payload);
+        
         Ok(())
     }
 
@@ -268,7 +310,12 @@ impl LendingContract {
             return Err(BorrowError::Unauthorized);
         }
 
-        trigger_shutdown_logic(&env, caller);
+        trigger_shutdown_logic(&env, caller.clone());
+        
+        // Log governance action
+        let payload = payload_empty(&env);
+        log_governance_action(&env, GovernanceAction::EmergencyShutdown, caller, payload);
+        
         Ok(())
     }
 
@@ -282,7 +329,12 @@ impl LendingContract {
         if get_emergency_state_logic(&env) != EmergencyState::Shutdown {
             return Err(BorrowError::ProtocolPaused);
         }
-        start_recovery_logic(&env, admin);
+        start_recovery_logic(&env, admin.clone());
+        
+        // Log governance action
+        let payload = payload_empty(&env);
+        log_governance_action(&env, GovernanceAction::StartRecovery, admin, payload);
+        
         Ok(())
     }
 
@@ -293,7 +345,12 @@ impl LendingContract {
         if admin != stored_admin {
             return Err(BorrowError::Unauthorized);
         }
-        complete_recovery_logic(&env, admin);
+        complete_recovery_logic(&env, admin.clone());
+        
+        // Log governance action
+        let payload = payload_empty(&env);
+        log_governance_action(&env, GovernanceAction::CompleteRecovery, admin, payload);
+        
         Ok(())
     }
 
@@ -624,7 +681,13 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         if is_read_only_logic(&env) {
             return Err(OracleError::OraclePaused);
         }
-        oracle::set_oracle_paused(&env, caller, paused)
+        let result = oracle::set_oracle_paused(&env, caller.clone(), paused);
+        if result.is_ok() {
+            // Log governance action
+            let payload = payload_address_bool(&env, caller, paused);
+            log_governance_action(&env, GovernanceAction::SetOraclePaused, caller, payload);
+        }
+        result
     }
 
     /// Set a per-asset maximum staleness override (admin only).
@@ -764,6 +827,18 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
     ) -> DepositCollateral {
         get_deposit_collateral_impl(&env, &user, &asset)
     }
+    /// Set protocol admin (admin only)
+    pub fn set_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), BorrowError> {
+        ensure_admin(&env, &current_admin)?;
+        set_protocol_admin(&env, &new_admin);
+        
+        // Log governance action
+        let payload = payload_address(&env, new_admin);
+        log_governance_action(&env, GovernanceAction::SetAdmin, current_admin, payload);
+        
+        Ok(())
+    }
+
     /// Get protocol admin
     #[cfg(not(tarpaulin_include))]
     pub fn get_admin(env: Env) -> Option<Address> {
@@ -1044,6 +1119,31 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         user: Address,
     ) -> Result<PositionSummary, CrossAssetError> {
         cross_position_summary(&env, user)
+    }
+
+    /// Get recent governance audit entries
+    ///
+    /// Returns up to `limit` most recent audit entries in reverse chronological order.
+    /// The limit is enforced to prevent gas exhaustion attacks (max 100).
+    ///
+    /// # Arguments
+    /// * `limit` - Maximum number of entries to return
+    ///
+    /// # Returns
+    /// Vector of audit entries ordered from newest to oldest
+    pub fn get_governance_audit_entries(env: Env, limit: u32) -> Vec<governance_audit::AuditEntry> {
+        get_recent_audit_entries(&env, limit)
+    }
+
+    /// Get the total number of governance audit entries ever recorded
+    ///
+    /// This count includes entries that may have been overwritten in the circular
+    /// buffer and is useful for pagination purposes.
+    ///
+    /// # Returns
+    /// Total number of audit entries recorded
+    pub fn get_governance_audit_count(env: Env) -> u64 {
+        get_audit_count(&env)
     }
 }
 
