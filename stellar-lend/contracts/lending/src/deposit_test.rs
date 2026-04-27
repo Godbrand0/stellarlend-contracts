@@ -71,8 +71,17 @@ fn test_deposit_below_minimum() {
 fn test_deposit_paused() {
     let env = Env::default();
     env.mock_all_auths();
-    let (client, _admin, user, asset) = setup_deposit(&env);
-    client.set_deposit_paused(&true);
+
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+
+    let user = Address::generate(&env);
+    let asset = Address::generate(&env);
+
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000_000, &1000);
+    client.initialize_deposit_settings(&1_000_000_000, &100);
+    client.set_deposit_paused(&admin, &true);
 
     let result = client.try_deposit(&user, &asset, &10_000);
     assert_eq!(result, Err(Ok(DepositError::DepositPaused)));
@@ -118,11 +127,11 @@ fn test_deposit_pause_unpause() {
     env.mock_all_auths();
     let (client, _admin, user, asset) = setup_deposit(&env);
 
-    client.set_deposit_paused(&true);
+    client.set_deposit_paused(&admin, &true);
     let result = client.try_deposit(&user, &asset, &10_000);
     assert_eq!(result, Err(Ok(DepositError::DepositPaused)));
 
-    client.set_deposit_paused(&false);
+    client.set_deposit_paused(&admin, &false);
     let balance = client.deposit(&user, &asset, &10_000);
     assert_eq!(balance, 10_000);
 }
