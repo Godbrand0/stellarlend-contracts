@@ -1188,6 +1188,18 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
         cross_set_asset_params(&env, asset, params)
     }
 
+    /// Set borrow cap for a specific asset (admin only)
+    pub fn set_borrow_cap(
+        env: Env,
+        asset: Address,
+        cap: i128,
+    ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
+        cross_set_borrow_cap(&env, asset, cap)
+    }
+
     /// Deposit collateral for a specific asset
     pub fn deposit_collateral_asset(
         env: Env,
