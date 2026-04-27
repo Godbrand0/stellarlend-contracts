@@ -93,6 +93,7 @@ pub use crate::errors::CrossAssetError;
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct AssetParamsSetEvent {
     pub asset: Address,
     pub ltv: i128,
@@ -102,6 +103,7 @@ pub struct AssetParamsSetEvent {
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct CrossDepositEvent {
     pub user: Address,
     pub asset: Address,
@@ -110,6 +112,7 @@ pub struct CrossDepositEvent {
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct CrossBorrowEvent {
     pub user: Address,
     pub asset: Address,
@@ -118,6 +121,7 @@ pub struct CrossBorrowEvent {
 
 #[contractevent]
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct CrossRepayEvent {
     pub user: Address,
     pub asset: Address,
