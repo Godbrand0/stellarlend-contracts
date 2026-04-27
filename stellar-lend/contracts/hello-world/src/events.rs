@@ -6,6 +6,52 @@ use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 use crate::types::{AssetStatus, ProposalType, VoteType};
 
 // ============================================================================
+// Event Schema Versioning
+//
+// All versioned event structs (those with a `schema_version` field) MUST use
+// this constant. Indexers and integrators should read `schema_version` from
+// each event payload to determine the decoding strategy.
+//
+// Upgrade policy:
+//   - Additive field additions: bump EVENT_SCHEMA_VERSION, keep old fields.
+//   - Breaking changes: introduce a new struct (e.g. FooEventV2) and emit
+//     both the old and new struct for one upgrade cycle, then retire the old.
+//   - The `SchemaVersionEvent` is emitted once during `initialize` so
+//     indexers can anchor the starting version for a given contract instance.
+// ============================================================================
+
+/// Current event schema version.
+///
+/// Increment this constant whenever a versioned event struct gains or removes
+/// a field. All structs that carry a `schema_version: u32` field must be
+/// populated with this value at emit time.
+pub const EVENT_SCHEMA_VERSION: u32 = 1;
+
+/// Emitted once during contract initialisation.
+///
+/// Indexers should persist this value and use it to select the correct
+/// decoding path for all subsequent versioned events from this contract.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct SchemaVersionEvent {
+    /// The schema version active at the time of initialisation.
+    pub version: u32,
+    /// Ledger timestamp of the initialisation call.
+    pub timestamp: u64,
+}
+
+/// Emit the schema version anchor event.
+///
+/// Call this exactly once inside the contract `initialize` function.
+pub fn emit_schema_version(e: &Env, timestamp: u64) {
+    SchemaVersionEvent {
+        version: EVENT_SCHEMA_VERSION,
+        timestamp,
+    }
+    .publish(e);
+}
+
+// ============================================================================
 // Core Lending Events (Existing)
 // ============================================================================
 
