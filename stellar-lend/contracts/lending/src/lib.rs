@@ -50,16 +50,12 @@ use deposit::{
 use flash_loan::{
     flash_loan as flash_loan_impl, set_flash_loan_fee_bps as set_flash_loan_fee_impl,
 };
-<<<<<<< HEAD
-use oracle::{OracleConfig, OracleError};
+use oracle::{OracleConfig, OracleConfigEvent, OracleError};
 use governance_audit::{
     get_audit_count, get_recent_audit_entries, log_governance_action, GovernanceAction,
     payload_address, payload_address_bool, payload_address_i128, payload_address_u64,
     payload_empty, payload_i128, payload_string, payload_two_addresses, payload_two_u64,
 };
-=======
-use oracle::{OracleConfig, OracleConfigEvent};
->>>>>>> 0a5469ca6c2af658f1c8e17c5572d774ce62d3ac
 use pause::{
     blocks_high_risk_ops, complete_recovery as complete_recovery_logic,
     get_emergency_state as get_emergency_state_logic, get_guardian as get_guardian_logic,
