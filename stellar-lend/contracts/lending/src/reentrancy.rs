@@ -1,4 +1,6 @@
-//! # Reentrancy Protection for Lending Contract
+#![cfg(not(tarpaulin_include))]
+#![allow(unexpected_cfgs)]
+//! Reentrancy protection for same-transaction nested calls.
 //!
 //! Soroban executes contract invocations synchronously within a single invocation tree. A
 //! token `transfer` or `transfer_from` can therefore call back into this contract before the
@@ -9,12 +11,9 @@
 //! pause-switch, or collateral checks. It is a defense-in-depth layer for fund-moving entry
 //! points that perform external contract calls.
 
-#![allow(unexpected_cfgs)]
+use soroban_sdk::{contracttype, Env};
 
-use soroban_sdk::{contracttype, Env, Symbol};
-
-/// Standardized error code for reentrancy rejection.
-/// This matches the pattern used across the protocol.
+/// Standardized error code used by operation-specific error enums for reentrancy rejection.
 pub const REENTRANCY_ERROR_CODE: u32 = 7;
 
 /// Temporary storage key for the reentrancy lock.
@@ -24,7 +23,7 @@ pub const REENTRANCY_ERROR_CODE: u32 = 7;
 /// migrations.
 #[derive(Clone)]
 #[contracttype]
-pub enum ReentrancyDataKey {
+enum ReentrancyDataKey {
     LockV1,
 }
 
@@ -63,21 +62,6 @@ impl<'a> ReentrancyGuard<'a> {
 
         Ok(Self { env })
     }
-
-    /// Attempts to acquire the reentrancy guard without panicking.
-    ///
-    /// Returns `None` if the lock is already held.
-    pub fn try_new(env: &'a Env) -> Option<Self> {
-        if is_locked(env) {
-            return None;
-        }
-
-        env.storage()
-            .temporary()
-            .set(&ReentrancyDataKey::LockV1, &true);
-
-        Some(Self { env })
-    }
 }
 
 impl Drop for ReentrancyGuard<'_> {
@@ -95,27 +79,6 @@ impl core::fmt::Debug for ReentrancyGuard<'_> {
     }
 }
 
-/// Checks if the reentrancy lock is currently held.
-pub fn is_locked(env: &Env) -> bool {
+pub(crate) fn is_locked(env: &Env) -> bool {
     env.storage().temporary().has(&ReentrancyDataKey::LockV1)
-}
-
-/// Helper macro to acquire reentrancy guard at the start of a function.
-/// Returns early with error if guard cannot be acquired.
-#[macro_export]
-macro_rules! require_no_reentrancy {
-    ($env:expr, $error:expr) => {{
-        if $crate::reentrancy::is_locked($env) {
-            return Err($error);
-        }
-    }};
-}
-
-/// Helper macro to acquire reentrancy guard using RAII pattern.
-/// Automatically releases the guard when the function exits.
-#[macro_export]
-macro_rules! reentrancy_guard {
-    ($env:expr, $error:expr) => {{
-        $crate::reentrancy::ReentrancyGuard::new($env).map_err(|_| $error)?
-    }};
 }
