@@ -432,10 +432,20 @@ fn test_withdraw_emits_event() {
     client.withdraw(&user, &asset, &20_000);
 
     let events = env.events().all();
+<<<<<<< HEAD
+    let raw = events.events();
+    assert!(!raw.is_empty());
+    if let soroban_sdk::xdr::ContractEventBody::V0(body) = &raw.last().unwrap().body {
+        if let Some(soroban_sdk::xdr::ScVal::Symbol(sym)) = body.topics.first() {
+            assert_eq!(sym.to_utf8_string_lossy(), "withdraw_event");
+        }
+    }
+=======
     let last_event = events.events().last().unwrap();
 
     // let topic: Symbol = Symbol::from_val(&env, &last_event.1.get(0).unwrap());
     // assert_eq!(topic, Symbol::new(&env, "withdraw_event"));
+>>>>>>> origin
 }
 
 // --- Edge cases ---

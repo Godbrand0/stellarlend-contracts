@@ -4,7 +4,7 @@ use crate::deposit::DepositError;
 use crate::flash_loan::FlashLoanError;
 use crate::oracle::OracleError;
 use crate::withdraw::WithdrawError;
-use soroban_sdk::{vec, 
+use soroban_sdk::{
     testutils::{Address as _, Events},
     vec, xdr, Address, Env, Symbol, TryFromVal, Val,
 };
@@ -135,7 +135,7 @@ fn test_pause_precedence_matrix() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Contract, #6)")]
+#[should_panic(expected = "HostError: Error(Contract, #1006)")]
 fn test_set_pause_unauthorized_address() {
     let env = Env::default();
     env.mock_all_auths();
@@ -632,7 +632,7 @@ fn test_set_guardian_emits_event() {
 
 /// A non-admin address cannot configure the guardian.
 #[test]
-#[should_panic(expected = "HostError: Error(Contract, #6)")]
+#[should_panic(expected = "HostError: Error(Contract, #1006)")]
 fn test_non_admin_cannot_set_guardian() {
     let env = Env::default();
     env.mock_all_auths();

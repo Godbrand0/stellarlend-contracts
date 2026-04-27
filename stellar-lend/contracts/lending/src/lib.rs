@@ -87,6 +87,8 @@ mod borrow_withdraw_sequence_adversarial_test;
 // #[cfg(test)]
 // mod cross_asset_test;
 #[cfg(test)]
+mod cross_asset_view_invariants_test;
+#[cfg(test)]
 mod deposit_test;
 #[cfg(test)]
 mod emergency_shutdown_test;
@@ -145,6 +147,12 @@ mod upgrade_test;
 mod zero_amount_semantics_test;
 #[cfg(test)]
 mod guardian_scope_test;
+#[cfg(test)]
+mod liquidation_boundary_test;
+#[cfg(test)]
+mod multi_user_contention_test;
+#[cfg(test)]
+mod stress_test;
 
 #[contract]
 pub struct LendingContract;

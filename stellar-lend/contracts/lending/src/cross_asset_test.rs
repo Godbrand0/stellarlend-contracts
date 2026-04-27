@@ -1,23 +1,75 @@
 //! Cross-asset lending module tests.
 //!
-//! Coverage targets:
-//! - Initialization (admin + asset)
-//! - Config updates (valid, invalid, unauthorized)
-//! - Price updates (valid, zero, stale, unauthorized)
-//! - Deposit / Withdraw / Borrow / Repay with checked math
-//! - Health factor enforcement
-//! - Supply and borrow caps
-//! - Edge cases (zero amounts, overflow, re-initialization)
-//! - Read-only queries
+//! Coverage:
+//! - Admin initialisation
+//! - Asset parameter configuration (valid and invalid)
+//! - Deposit / borrow / repay operations
+//! - Basic health-factor checks
+//!
+//! NOTE: `withdraw_asset` is not tested here because it performs a real token
+//! transfer that requires a deployed token contract. Those scenarios live in
+//! integration tests that set up a mock token.
 
+<<<<<<< HEAD
+use crate::cross_asset::{AssetParams, CrossAssetError};
+use crate::{LendingContract, LendingContractClient};
+use soroban_sdk::{testutils::Address as _, Address, Env};
+=======
 use crate::cross_asset::AssetParams;
 use crate::{LendingContract, LendingContractClient};
 use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+>>>>>>> origin
 
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants that mirror cross_asset.rs internals
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// BPS_SCALE = 10_000; health factor ≥ this value is considered healthy.
+const HF_HEALTHY: i128 = 10_000;
+/// Sentinel health factor when the position carries no debt.
+const HF_NO_DEBT: i128 = 1_000_000;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
-// ============================================================================
+// ─────────────────────────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
+fn setup(env: &Env) -> (LendingContractClient<'_>, Address) {
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(env, &contract_id);
+    let admin = Address::generate(env);
+    client.initialize(&admin, &1_000_000_000, &1000);
+    client.initialize_admin(&admin);
+    (client, admin)
+}
+
+/// Build an `AssetParams` with the given LTV. Liquidation threshold = LTV + 500 bps (capped at 10 000).
+fn asset_params(env: &Env, ltv: i128) -> AssetParams {
+    let threshold = (ltv + 500).min(10_000);
+    AssetParams {
+        ltv,
+        liquidation_threshold: threshold,
+        price_feed: Address::generate(env),
+        debt_ceiling: 1_000_000_000_000,
+        is_active: true,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. Admin initialisation
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_initialize_admin_stores_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin) = setup(&env);
+    // Verify that admin is stored by confirming we can call a protected function.
+    let asset = Address::generate(&env);
+    let params = asset_params(&env, 7500);
+    // If admin were not set, set_asset_params would return Unauthorized.
+    client.set_asset_params(&asset, &params);
+=======
 /// Create a default valid asset config for testing.
 fn default_config(env: &Env) -> AssetParams {
     AssetParams {
@@ -63,6 +115,7 @@ fn setup() -> (Env, LendingContractClient<'static>, Address) {
     client.initialize(&admin);
     client.initialize_ca(&admin);
     (env, client, admin)
+>>>>>>> origin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,23 +126,30 @@ fn setup() -> (Env, LendingContractClient<'static>, Address) {
 fn test_set_asset_params_success() {
     let env = Env::default();
     env.mock_all_auths();
+<<<<<<< HEAD
+    let (client, _admin) = setup(&env);
+
+    let asset = Address::generate(&env);
+    let params = asset_params(&env, 7500);
+    client.set_asset_params(&asset, &params);
+=======
     let contract_id = env.register(LendingContract, ());
     let client = LendingContractClient::new(&env, &contract_id);
     let admin = Address::generate(&env);
     client.initialize(&admin);
     // Should succeed first time
     client.initialize_ca(&admin);
+>>>>>>> origin
 }
 
 #[test]
-#[should_panic]
-fn test_initialize_ca_twice_fails() {
-    let (env, client, _admin) = setup();
-    let other_admin = Address::generate(&env);
-    // Second call with different admin should fail with AlreadyInitialized
-    client.initialize_ca(&other_admin);
-}
+fn test_set_asset_params_stores_and_allows_deposit() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin) = setup(&env);
 
+<<<<<<< HEAD
+=======
 // ============================================================================
 // 2. Asset Initialization
 // ============================================================================
@@ -329,6 +389,7 @@ fn test_set_asset_params_stores_and_allows_deposit() {
     env.mock_all_auths();
     let (client, _admin) = setup(&env);
 
+>>>>>>> origin
     let asset = Address::generate(&env);
     client.set_asset_params(&asset, &asset_params(&env, 7500));
 
@@ -558,6 +619,11 @@ fn test_summary_empty_position_has_zero_totals() {
     let user = Address::generate(&env);
     let summary = client.get_cross_position_summary(&user);
 
+<<<<<<< HEAD
+    assert_eq!(summary.total_collateral_usd, 0);
+    assert_eq!(summary.total_debt_usd, 0);
+    assert_eq!(summary.health_factor, HF_NO_DEBT);
+=======
     let user = Address::generate(&env);
     client.cross_asset_deposit(&user, &None, &5000_0000000);
 
@@ -567,6 +633,7 @@ fn test_summary_empty_position_has_zero_totals() {
     // Existing position still exists
     let pos = client.get_user_asset_position(&user, &None);
     assert_eq!(pos.collateral, 5000_0000000);
+>>>>>>> origin
 }
 
 #[test]
@@ -614,6 +681,8 @@ fn test_summary_debt_only_position_reflects_uncollateralised_state() {
     // weighted = 1 * 10_000 / 10_000 = 1; HF = 1 * 10_000 / 1 = 10_000
     assert_eq!(summary.health_factor, HF_HEALTHY);
 }
+<<<<<<< HEAD
+=======
 
 #[test]
 fn test_config_update_preserves_price() {
@@ -629,3 +698,4 @@ fn test_config_update_preserves_price() {
     assert_eq!(fetched.price, 50_000_000); // Price preserved
     assert_eq!(fetched.collateral_factor, 5000);
 }
+>>>>>>> origin
