@@ -421,5 +421,7 @@ mod liquidate_test;
 mod math_safety_test;
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod amm_invariant_test;
 
 //

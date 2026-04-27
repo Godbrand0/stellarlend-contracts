@@ -32,7 +32,7 @@ use borrow::{
     set_admin as set_protocol_admin, set_close_factor_bps as set_close_factor_impl,
     set_liquidation_incentive_bps as set_liquidation_incentive_bps_impl,
     set_liquidation_threshold_bps as set_liq_threshold_impl, set_oracle as set_oracle_impl,
-    BorrowCollateral, DebtPosition,
+    BorrowCollateral, DebtPosition, OracleSetEvent,
 };
 use cross_asset::{
     borrow_asset as cross_borrow_asset, deposit_collateral_asset as cross_deposit_collateral,
@@ -47,7 +47,7 @@ use deposit::{
 use flash_loan::{
     flash_loan as flash_loan_impl, set_flash_loan_fee_bps as set_flash_loan_fee_impl,
 };
-use oracle::{OracleConfig};
+use oracle::{OracleConfig, OracleConfigEvent};
 use pause::{
     blocks_high_risk_ops, complete_recovery as complete_recovery_logic,
     get_emergency_state as get_emergency_state_logic, get_guardian as get_guardian_logic,

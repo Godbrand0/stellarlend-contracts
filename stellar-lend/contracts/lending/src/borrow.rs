@@ -30,6 +30,7 @@ pub enum BorrowDataKey {
     LiquidationIncentiveBps,
     InsuranceFundBalance(Address),
     TotalBadDebt(Address),
+    BorrowMinAmount,
 }
 
 #[contracttype]
@@ -79,6 +80,14 @@ pub struct BadDebtEvent {
     pub asset: Address,
     pub amount: i128,
     pub remaining_bad_debt: i128,
+    pub timestamp: u64,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct OracleSetEvent {
+    pub admin: Address,
+    pub oracle: Address,
     pub timestamp: u64,
 }
 
@@ -196,7 +205,10 @@ pub fn borrow(
     Ok(())
 }
 
-fn get_min_borrow_amount(env: &Env) -> i128 {
+fn get_min_borrow_amount(env: &Env, asset: &Address) -> i128 {
+    if let Some(min) = env.storage().instance().get(&BorrowDataKey::BorrowMinAmountPerAsset(asset.clone())) {
+        return min;
+    }
     env.storage()
         .instance()
         .get(&BorrowDataKey::BorrowMinAmount)
@@ -246,6 +258,14 @@ pub fn set_oracle(env: &Env, admin: &Address, oracle: Address) -> Result<(), Bor
     env.storage()
         .instance()
         .set(&BorrowDataKey::OracleAddress, &oracle);
+
+    OracleSetEvent {
+        admin: admin.clone(),
+        oracle,
+        timestamp: env.ledger().timestamp(),
+    }
+    .publish(env);
+
     Ok(())
 }
 
@@ -404,7 +424,7 @@ pub fn initialize_borrow_settings(
         .set(&BorrowDataKey::BorrowDebtCeiling, &debt_ceiling);
     env.storage()
         .instance()
-        .set(&BorrowDataKey::BorrowMinAmountPerAsset(asset), &min_borrow_amount);
+        .set(&BorrowDataKey::BorrowMinAmount, &min_borrow_amount);
     Ok(())
 }
 
