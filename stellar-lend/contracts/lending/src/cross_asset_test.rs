@@ -10,9 +10,15 @@
 //! transfer that requires a deployed token contract. Those scenarios live in
 //! integration tests that set up a mock token.
 
+<<<<<<< HEAD
 use crate::cross_asset::{AssetParams, CrossAssetError};
 use crate::{LendingContract, LendingContractClient};
 use soroban_sdk::{testutils::Address as _, Address, Env};
+=======
+use crate::cross_asset::AssetParams;
+use crate::{LendingContract, LendingContractClient};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+>>>>>>> origin
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants that mirror cross_asset.rs internals
@@ -27,6 +33,7 @@ const HF_NO_DEBT: i128 = 1_000_000;
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 fn setup(env: &Env) -> (LendingContractClient<'_>, Address) {
     let contract_id = env.register(LendingContract, ());
     let client = LendingContractClient::new(env, &contract_id);
@@ -62,6 +69,53 @@ fn test_initialize_admin_stores_admin() {
     let params = asset_params(&env, 7500);
     // If admin were not set, set_asset_params would return Unauthorized.
     client.set_asset_params(&asset, &params);
+=======
+/// Create a default valid asset config for testing.
+fn default_config(env: &Env) -> AssetParams {
+    AssetParams {
+        asset: None,
+        collateral_factor: 7500,        // 75% LTV
+        liquidation_threshold: 8000,    // 80%
+        reserve_factor: 1000,           // 10%
+        max_supply: 10_000_000_000_000, // 1M (7 decimals)
+        max_borrow: 5_000_000_000_000,  // 500K
+        can_collateralize: true,
+        can_borrow: true,
+        borrow_factor: 10000,
+        price: 10_000_000, // $1.00 (7 decimals)
+        price_updated_at: env.ledger().timestamp(),
+    }
+}
+
+/// Create a token-backed asset config for testing.
+fn token_config(env: &Env, addr: &Address) -> AssetParams {
+    let price = 20_000_000;
+    AssetParams {
+        asset: Some(addr.clone()),
+        collateral_factor: 6000,     // 60% LTV
+        liquidation_threshold: 7000, // 70%
+        reserve_factor: 2000,        // 20%
+        max_supply: 5_000_000_000_000,
+        max_borrow: 2_500_000_000_000,
+        can_collateralize: true,
+        can_borrow: true,
+        borrow_factor: 10000,
+        price,
+        price_updated_at: env.ledger().timestamp(),
+    }
+}
+
+/// Set up env + contract + admin, initialize both modules.
+fn setup() -> (Env, LendingContractClient<'static>, Address) {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+    client.initialize_ca(&admin);
+    (env, client, admin)
+>>>>>>> origin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -72,7 +126,257 @@ fn test_initialize_admin_stores_admin() {
 fn test_set_asset_params_success() {
     let env = Env::default();
     env.mock_all_auths();
+<<<<<<< HEAD
     let (client, _admin) = setup(&env);
+
+    let asset = Address::generate(&env);
+    let params = asset_params(&env, 7500);
+    client.set_asset_params(&asset, &params);
+=======
+    let contract_id = env.register(LendingContract, ());
+    let client = LendingContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+    // Should succeed first time
+    client.initialize_ca(&admin);
+>>>>>>> origin
+}
+
+#[test]
+fn test_set_asset_params_stores_and_allows_deposit() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin) = setup(&env);
+
+<<<<<<< HEAD
+=======
+// ============================================================================
+// 2. Asset Initialization
+// ============================================================================
+
+#[test]
+fn test_initialize_asset_success() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    let fetched = client.get_asset_config(&None);
+    assert_eq!(fetched.collateral_factor, 7500);
+    assert_eq!(fetched.liquidation_threshold, 8000);
+    assert_eq!(fetched.price, 10_000_000);
+}
+
+#[test]
+fn test_initialize_token_asset_success() {
+    let (env, client, _admin) = setup();
+    let token_addr = Address::generate(&env);
+    let config = token_config(&env, &token_addr);
+    client.initialize_asset(&Some(token_addr.clone()), &config);
+
+    let fetched = client.get_asset_config(&Some(token_addr));
+    assert_eq!(fetched.collateral_factor, 6000);
+    assert_eq!(fetched.price, 20_000_000);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_twice_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+    // Re-initialization should fail
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_invalid_ltv_above_10000() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.collateral_factor = 10_001; // Out of bounds
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_negative_ltv() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.collateral_factor = -1;
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_ltv_exceeds_liquidation_threshold() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.collateral_factor = 9000;
+    config.liquidation_threshold = 8000; // LTV > threshold
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_zero_price() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.price = 0;
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_negative_price() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.price = -5;
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_negative_max_supply() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.max_supply = -100;
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+#[should_panic]
+fn test_initialize_asset_invalid_reserve_factor() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.reserve_factor = 10_001;
+    client.initialize_asset(&None, &config);
+}
+
+#[test]
+fn test_initialize_asset_zero_caps_unlimited() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.max_supply = 0; // unlimited
+    config.max_borrow = 0; // unlimited
+    client.initialize_asset(&None, &config);
+
+    let fetched = client.get_asset_config(&None);
+    assert_eq!(fetched.max_supply, 0);
+    assert_eq!(fetched.max_borrow, 0);
+}
+
+#[test]
+fn test_initialize_asset_edge_ltv_equals_threshold() {
+    let (env, client, _admin) = setup();
+    let mut config = default_config(&env);
+    config.collateral_factor = 8000;
+    config.liquidation_threshold = 8000; // Equal is allowed
+    client.initialize_asset(&None, &config);
+}
+
+// ============================================================================
+// 3. Config Updates
+// ============================================================================
+
+#[test]
+fn test_update_asset_config_success() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    client.update_asset_config(
+        &None,
+        &Some(6000), // new LTV
+        &Some(7000), // new threshold
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+
+    let fetched = client.get_asset_config(&None);
+    assert_eq!(fetched.collateral_factor, 6000);
+    assert_eq!(fetched.liquidation_threshold, 7000);
+    // Unchanged fields preserved
+    assert_eq!(fetched.reserve_factor, 1000);
+    assert!(fetched.can_collateralize);
+}
+
+#[test]
+fn test_update_asset_config_partial_update() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    // Only update can_borrow
+    client.update_asset_config(&None, &None, &None, &None, &None, &None, &Some(false));
+
+    let fetched = client.get_asset_config(&None);
+    assert!(!fetched.can_borrow);
+    assert_eq!(fetched.collateral_factor, 7500); // Unchanged
+}
+
+#[test]
+#[should_panic]
+fn test_update_asset_config_ltv_above_threshold_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    // Try to set LTV > current threshold (8000)
+    client.update_asset_config(
+        &None,
+        &Some(9000), // LTV 90% > threshold 80%
+        &None,       // Keep threshold at 8000
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+}
+
+#[test]
+#[should_panic]
+fn test_update_asset_config_out_of_bounds_fails() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    client.update_asset_config(
+        &None,
+        &Some(10_001), // Out of bounds
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+}
+
+#[test]
+#[should_panic]
+fn test_update_asset_config_unconfigured_asset_fails() {
+    let (_env, client, _admin) = setup();
+    // Asset not initialized
+    client.update_asset_config(&None, &Some(5000), &None, &None, &None, &None, &None);
+}
+
+// ============================================================================
+// 4. Price Updates
+// ============================================================================
+
+#[test]
+fn test_update_asset_price_success() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    client.update_asset_price(&None, &20_000_000); // $2.00
+
+    let fetched = client.get_asset_config(&None);
+    assert_eq!(fetched.price, 20_000_000);
+}
 
     let asset = Address::generate(&env);
     let params = asset_params(&env, 7500);
@@ -85,6 +389,7 @@ fn test_set_asset_params_stores_and_allows_deposit() {
     env.mock_all_auths();
     let (client, _admin) = setup(&env);
 
+>>>>>>> origin
     let asset = Address::generate(&env);
     client.set_asset_params(&asset, &asset_params(&env, 7500));
 
@@ -314,9 +619,21 @@ fn test_summary_empty_position_has_zero_totals() {
     let user = Address::generate(&env);
     let summary = client.get_cross_position_summary(&user);
 
+<<<<<<< HEAD
     assert_eq!(summary.total_collateral_usd, 0);
     assert_eq!(summary.total_debt_usd, 0);
     assert_eq!(summary.health_factor, HF_NO_DEBT);
+=======
+    let user = Address::generate(&env);
+    client.cross_asset_deposit(&user, &None, &5000_0000000);
+
+    // Disable collateral
+    client.update_asset_config(&None, &None, &None, &None, &None, &None, &None, &None);
+
+    // Existing position still exists
+    let pos = client.get_user_asset_position(&user, &None);
+    assert_eq!(pos.collateral, 5000_0000000);
+>>>>>>> origin
 }
 
 #[test]
@@ -364,3 +681,21 @@ fn test_summary_debt_only_position_reflects_uncollateralised_state() {
     // weighted = 1 * 10_000 / 10_000 = 1; HF = 1 * 10_000 / 1 = 10_000
     assert_eq!(summary.health_factor, HF_HEALTHY);
 }
+<<<<<<< HEAD
+=======
+
+#[test]
+fn test_config_update_preserves_price() {
+    let (env, client, _admin) = setup();
+    let config = default_config(&env);
+    client.initialize_asset(&None, &config);
+
+    client.update_asset_price(&None, &50_000_000); // $5.00
+
+    client.update_asset_config(&None, &Some(5000), &Some(6000), &None, &None, &None, &None);
+
+    let fetched = client.get_asset_config(&None);
+    assert_eq!(fetched.price, 50_000_000); // Price preserved
+    assert_eq!(fetched.collateral_factor, 5000);
+}
+>>>>>>> origin

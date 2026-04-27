@@ -188,6 +188,45 @@ Example:
 - **Result**: Transaction fails
 - **Reason**: Remaining collateral ($15k) × 0.75 = $11.25k < $14k debt
 
+### Withdrawal Boundary Constraints
+
+The protocol enforces deterministic withdrawal limits precisely at the collateral ratio boundaries. These boundaries ensure that no withdrawal can leave a position undercollateralized or liquidatable.
+
+#### Deterministic Edge Cases
+
+1. **Exact Capacity Withdrawal**
+   - **Position**: $100 Collateral (80% LTV), $80 Debt.
+   - **Boundary**: Weighted Collateral ($80) == Debt ($80).
+   - **Constraint**: Any withdrawal of > 0 units will fail.
+   - **Rounding**: Even a withdrawal of 1 atomic unit (10^-7) is rejected if it drops the weighted value below the debt.
+
+2. **Multi-Asset Weighted Boundary**
+   - **Position**: $50 Asset A (80% LTV) + $50 Asset B (60% LTV). Total Weighted = $40 + $30 = $70.
+   - **Debt**: $70.
+   - **Constraint**: Withdrawal from Asset A is blocked. Withdrawal from Asset B is blocked.
+   - **Buffer**: Repaying $1 of debt allows withdrawing up to $1 / 0.8 = $1.25 of Asset A.
+
+3. **Price Move Boundary**
+   - **Position**: 1 ETH @ $2000 (80% LTV). Weighted = $1600. Debt = $1500.
+   - **Event**: ETH price drops to $1875.
+   - **New Weighted**: $1875 * 0.8 = $1500.
+   - **Result**: Position hits the withdrawal boundary. All further withdrawals are blocked until debt is repaid or price recovers.
+
+### Security Notes
+
+1. **Prevention of Undercollateralized Withdrawals**
+   - Every withdrawal operation triggers a full `health_factor` re-calculation using real-time oracle prices.
+   - The operation is atomic: if the post-withdrawal `health_factor` is < 1.0 (10000), the entire transaction reverts.
+   - This prevents users from "gaming" rounding errors or price lags to extract more value than their collateral supports.
+
+2. **Oracle Reliability**
+   - Withdrawal constraints are only as strong as the price feed.
+   - If an oracle update is stale or missing, the protocol enters a fail-safe mode where withdrawals (and borrows) are blocked to prevent state corruption.
+
+3. **Rounding Direction**
+   - To maintain protocol safety, the system always rounds **down** for collateral value and **up** for debt value.
+   - This conservative rounding ensures that at the boundary, the protocol always errs on the side of over-collateralization.
+
 ## Invariants
 
 ### System-Wide Invariants
@@ -319,6 +358,7 @@ Result:
 
 ## View Guarantees
 
+<<<<<<< HEAD
 The following guarantees hold for `get_cross_position_summary` and all other read-only view functions. These are verified by the invariant test suite in `cross_asset_view_invariants_test.rs`.
 
 ### G-1 — Read-only (no state mutation)
@@ -397,6 +437,51 @@ Because view functions are read-only and deterministic, there is no mechanism th
 | LTV = 0 | `weighted_collateral = 0`; borrow rejected by health check |
 | Overpayment of debt | Capped at outstanding balance; `total_debt_usd` goes to 0 |
 | Same asset in collateral and debt | Counted independently in both totals (no netting) |
+=======
+Read-only methods that surface position state — `get_user_position`,
+`get_collateral_balance`, `get_debt_balance`, `get_collateral_value`,
+`get_debt_value`, `get_health_factor`, `get_max_liquidatable_amount`, and
+`get_liquidation_incentive_amount` — are pinned by the invariant test suite
+in `stellar-lend/contracts/lending/src/views_test.rs`. The properties below
+hold for every user, asset configuration, and ordering of view calls.
+
+### Consistency
+
+- The unified `get_user_position(user)` summary returns field-for-field exactly
+  what the individual getters return for the same `user` at the same ledger
+  height.
+- View output is a pure function of `(storage, oracle, ledger height)`.
+  Repeated calls must yield bit-identical results, and the order of view
+  calls must not change any answer.
+
+### Risk-parameter isolation
+
+Adjusting `liquidation_threshold_bps` may move `health_factor` but must not
+move `collateral_balance`, `collateral_value`, `debt_balance`, or `debt_value`.
+The first four are functions of raw state and oracle output only.
+
+### Missing-asset and missing-oracle handling
+
+- A user with no recorded position returns a default summary: zero balances,
+  zero values, and `health_factor == HEALTH_FACTOR_NO_DEBT`.
+- When the oracle is unconfigured, every value-bearing field reads as `0`
+  consistently and `get_max_liquidatable_amount` returns `0` so callers
+  cannot liquidate without price data.
+
+### Rounding and ordering
+
+- Health-factor division truncates toward zero. `health_factor ==
+  HEALTH_FACTOR_SCALE` (exactly 1.0) is treated as healthy.
+- `get_liquidation_incentive_amount(repay)` is monotonic non-decreasing in
+  `repay`. Negative or zero amounts return `0`.
+
+### Security: no view-based exploitation
+
+Views never mutate state, never charge fees, and trigger only the read-only
+oracle lookup. Integrators MUST NOT rely on a view's value beyond the ledger
+height at which it was observed — oracle prices and risk parameters can
+change.
+>>>>>>> origin
 
 ## Conclusion
 
