@@ -29,7 +29,7 @@ use soroban_sdk::{contracterror, contracttype, Address, Env, IntoVal, Map, Symbo
 use crate::events::{
     emit_analytics_updated, emit_borrower_health_v1, emit_deposit, emit_position_updated,
     emit_user_activity_tracked, AnalyticsUpdatedEvent, BorrowerHealthEventV1, DepositEvent,
-    PositionUpdatedEvent, UserActivityTrackedEvent,
+    PositionUpdatedEvent, UserActivityTrackedEvent, EVENT_SCHEMA_VERSION,
 };
 
 /// Errors that can occur during deposit operations
@@ -529,7 +529,7 @@ pub fn emit_position_updated_event(
     emit_borrower_health_v1(
         env,
         BorrowerHealthEventV1 {
-            schema_version: 1,
+            schema_version: EVENT_SCHEMA_VERSION,
             user: user.clone(),
             operation,
             collateral: position.collateral,
