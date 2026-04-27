@@ -72,8 +72,6 @@ pub fn ms_set_admins(
     Ok(())
 }
 
-}
-
 /// Creates a proposal to update the minimum collateral ratio.
 ///
 /// The proposer must be a registered admin. Once created,
