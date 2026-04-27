@@ -123,6 +123,19 @@ mod race_tests;
 mod proposal_race_test;
 #[cfg(test)]
 mod upgrade_migration_safety_test;
+// #[cfg(test)]
+// mod upgrade_test;
+// #[cfg(test)]
+// mod withdraw_test;
+// 
+// #[cfg(test)]
+// mod bad_debt_test;
+// #[cfg(test)]
+// mod liquidation_boundary_test;
+// #[cfg(test)]
+// mod multi_user_contention_test;
+// #[cfg(test)]
+// mod stress_test;
 #[cfg(test)]
 mod upgrade_test;
 // #[cfg(test)]
@@ -859,7 +872,7 @@ impl LendingContract {
 
     #[cfg(not(tarpaulin_include))]
     pub fn data_store_init(env: Env, admin: Address) {
-        if env.storage().persistent().has(&data_store::StoreKey::Admin) {
+        if env.storage().persistent().has(&data_store::StoreKey::StoreAdmin) {
             return;
         }
         data_store::DataStore::init(env, admin);

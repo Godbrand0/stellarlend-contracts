@@ -161,8 +161,8 @@ pub enum CrossAssetDataKey {
     UserPosition(Address),
     TotalAssetDebt(Address),
     MinBorrowAmount,
-    Paused,
-    Admin,
+    CrossAssetPaused,
+    CrossAssetAdmin,
 }
 
 #[contracttype]
@@ -498,7 +498,7 @@ fn check_admin(env: &Env) -> Result<(), CrossAssetError> {
     let admin: Address = env
         .storage()
         .persistent()
-        .get(&CrossAssetDataKey::Admin)
+        .get(&CrossAssetDataKey::CrossAssetAdmin)
         .ok_or(CrossAssetError::Unauthorized)?;
     admin.require_auth();
     Ok(())
@@ -637,5 +637,5 @@ pub fn initialize_admin(env: &Env, admin: Address) {
     admin.require_auth();
     env.storage()
         .persistent()
-        .set(&CrossAssetDataKey::Admin, &admin);
+        .set(&CrossAssetDataKey::CrossAssetAdmin, &admin);
 }
