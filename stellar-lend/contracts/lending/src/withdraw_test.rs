@@ -38,6 +38,7 @@ fn setup_with_deposit(
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&100);
+    client.register_asset(&admin, asset);
     client.deposit(user, asset, &deposit_amount);
 }
 
@@ -127,6 +128,7 @@ fn test_withdraw_below_minimum() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&5000);
+    client.register_asset(&admin, &asset);
     client.deposit(&user, &asset, &50_000);
 
     let result = client.try_withdraw(&user, &asset, &1000);
@@ -157,6 +159,7 @@ fn test_withdraw_no_deposit() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&100);
+    client.register_asset(&admin, &asset);
 
     let result = client.try_withdraw(&user, &asset, &1000);
     assert_eq!(result, Err(Ok(WithdrawError::InsufficientCollateral)));
@@ -209,7 +212,10 @@ fn test_withdraw_ratio_violation_with_debt() {
     // Deposit 100,000 collateral
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
 
-    // Contract already initialized in setup_with_deposit
+    // Contract already initialized in setup_with_deposit; register additional assets
+    let admin = client.get_admin().unwrap();
+    client.register_asset(&admin, &borrow_asset);
+    client.register_asset(&admin, &collateral_asset);
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
 
     // Try to withdraw 90,000 -> remaining 10,000 vs debt 10,000 * 1.5 = 15,000 -> fail
@@ -227,6 +233,11 @@ fn test_withdraw_ratio_valid_with_debt() {
 
     // Deposit 100,000 collateral
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
+
+    // Register additional assets
+    let admin = client.get_admin().unwrap();
+    client.register_asset(&admin, &borrow_asset);
+    client.register_asset(&admin, &collateral_asset);
 
     // Borrow 10,000 against 15,000 collateral
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
@@ -246,6 +257,11 @@ fn test_withdraw_ratio_boundary_exact_150_percent() {
 
     // Deposit 100,000
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
+
+    // Register additional assets
+    let admin = client.get_admin().unwrap();
+    client.register_asset(&admin, &borrow_asset);
+    client.register_asset(&admin, &collateral_asset);
 
     // Borrow 10,000 (min collateral = 10,000 * 1.5 = 15,000)
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
@@ -267,6 +283,11 @@ fn test_withdraw_ratio_boundary_just_below() {
 
     // Deposit 30,000
     setup_with_deposit(&env, &client, &user, &asset, 30_000);
+
+    // Register additional assets
+    let admin = client.get_admin().unwrap();
+    client.register_asset(&admin, &borrow_asset);
+    client.register_asset(&admin, &collateral_asset);
 
     // Borrow 10,000 (min collateral = 15,000)
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
@@ -301,6 +322,11 @@ fn test_withdraw_max_with_debt() {
 
     // Deposit 100,000
     setup_with_deposit(&env, &client, &user, &asset, 100_000);
+
+    // Register additional assets
+    let admin = client.get_admin().unwrap();
+    client.register_asset(&admin, &borrow_asset);
+    client.register_asset(&admin, &collateral_asset);
 
     // Borrow 10,000 (min collateral = 15,000)
     client.borrow(&user, &borrow_asset, &10_000, &collateral_asset, &15_000);
@@ -424,6 +450,7 @@ fn test_withdraw_minimum_amount_boundary() {
     client.initialize(&admin, &1_000_000_000, &1000);
     client.initialize_deposit_settings(&1_000_000_000, &100);
     client.initialize_withdraw_settings(&500);
+    client.register_asset(&admin, &asset);
     client.deposit(&user, &asset, &50_000);
 
     // Below minimum — should fail

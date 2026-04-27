@@ -247,12 +247,39 @@ pub fn get_health_factor(env: &Env, user: &Address) -> i128 {
 
 /// Returns the maximum debt amount that can be liquidated for `user` in one call.
 ///
-/// Returns 0 when:
-/// - User has no debt
-/// - Position is healthy (health factor ≥ 1.0, i.e. ≥ `HEALTH_FACTOR_SCALE`)
-/// - Oracle is not configured (health factor cannot be computed)
+/// This is the primary view function for liquidation bots and frontends to determine
+/// how much of a borrower's debt can be repaid in a single `liquidate` call.
+/// The value is consistent with the close-factor cap enforced inside `liquidate_position`.
 ///
-/// Formula: `total_debt * close_factor_bps / 10000`
+/// ## Returns 0 when
+/// - User has no outstanding debt (`borrowed_amount + interest_accrued == 0`)
+/// - Position is healthy (health factor ≥ `HEALTH_FACTOR_SCALE`, i.e. ≥ 1.0)
+/// - Oracle is not configured or returns no fresh price (health factor cannot be computed)
+///
+/// ## Formula
+/// ```text
+/// total_debt  = borrowed_amount + interest_accrued
+/// max_liq     = floor(total_debt * close_factor_bps / 10_000)
+/// ```
+///
+/// ## Rounding and unit scales
+/// - All amounts are in raw token units (no decimal assumption by the contract).
+/// - Oracle price uses 8-decimal fixed-point: `100_000_000 = 1.0`.
+/// - BPS scale: `10_000 = 100%`.
+/// - Division is integer floor: `floor(10_001 * 5_000 / 10_000) = 5_000`, not 5_000.5.
+/// - Interest accrual in `borrow.rs` uses ceiling-up rounding; the stored
+///   `interest_accrued` field already reflects that rounding before this view reads it.
+///
+/// ## Consistency with `liquidate`
+/// `liquidate_position` calls this function internally to derive the close-factor cap,
+/// so the value returned here is exactly the amount that will be repaid when
+/// `liquidate` is called with an amount larger than the cap.
+///
+/// ## Cross-asset positions
+/// This function reads only the simplified single-asset borrow position
+/// (`get_user_debt` / `get_user_collateral`). Cross-asset positions tracked by
+/// the `cross_asset` module are not reflected here; use `get_cross_position_summary`
+/// for those.
 ///
 /// # Security
 /// Read-only; no state change. Relies on oracle for health factor; 0 is returned

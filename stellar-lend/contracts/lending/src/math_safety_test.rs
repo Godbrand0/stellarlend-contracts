@@ -200,6 +200,18 @@ fn test_borrow_amount_zero_fails() {
     let asset = Address::generate(&env);
     let coll_asset = Address::generate(&env);
 
+    // Register assets in the registry so we reach the amount check
+    env.as_contract(&contract_id, || {
+        env.storage().persistent().set(
+            &crate::asset_registry::RegistryKey::AssetRegistry(asset.clone()),
+            &true,
+        );
+        env.storage().persistent().set(
+            &crate::asset_registry::RegistryKey::AssetRegistry(coll_asset.clone()),
+            &true,
+        );
+    });
+
     let res = env.as_contract(&contract_id, || {
         crate::borrow::borrow(
             &env,
@@ -240,6 +252,15 @@ fn test_borrow_math_exhaustion() {
     // Initial setup for protocol variables to allow tests
     env.as_contract(&contract_id, || {
         crate::borrow::initialize_borrow_settings(&env, i128::MAX, 1).unwrap();
+        // Register assets in the registry
+        env.storage().persistent().set(
+            &crate::asset_registry::RegistryKey::AssetRegistry(asset.clone()),
+            &true,
+        );
+        env.storage().persistent().set(
+            &crate::asset_registry::RegistryKey::AssetRegistry(coll_asset.clone()),
+            &true,
+        );
     });
 
     // Overflow check on collateral ratio (borrow amount too large)

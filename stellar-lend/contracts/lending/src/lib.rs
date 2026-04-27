@@ -165,6 +165,23 @@ impl LendingContract {
         Ok(())
     }
 
+    /// Register an asset in the allowlist (admin only).
+    pub fn register_asset(env: Env, admin: Address, asset: Address) -> Result<(), BorrowError> {
+        ensure_admin(&env, &admin)?;
+        asset_registry::register(&env, &asset)
+    }
+
+    /// Remove an asset from the allowlist (admin only).
+    pub fn deregister_asset(env: Env, admin: Address, asset: Address) -> Result<(), BorrowError> {
+        ensure_admin(&env, &admin)?;
+        asset_registry::deregister(&env, &asset)
+    }
+
+    /// Query whether an asset is registered (read-only).
+    pub fn is_asset_registered(env: Env, asset: Address) -> bool {
+        asset_registry::is_registered(&env, &asset)
+    }
+
     /// Borrow assets against deposited collateral
     pub fn borrow(
         env: Env,

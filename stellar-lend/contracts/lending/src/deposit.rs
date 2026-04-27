@@ -54,6 +54,9 @@ pub fn deposit(
     asset: Address,
     amount: i128,
 ) -> Result<i128, DepositError> {
+    crate::asset_registry::require_registered_asset(env, &asset)
+        .map_err(|_| DepositError::AssetNotSupported)?;
+
     user.require_auth();
 
     if pause::is_paused(env, PauseType::Deposit) {

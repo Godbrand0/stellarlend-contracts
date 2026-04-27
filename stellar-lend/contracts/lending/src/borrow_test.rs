@@ -22,6 +22,8 @@ fn setup_test(
     let collateral_asset = Address::generate(env);
 
     client.initialize(&admin, &1_000_000_000, &1000);
+    client.register_asset(&admin, &asset);
+    client.register_asset(&admin, &collateral_asset);
     (client, admin, user, asset, collateral_asset)
 }
 
@@ -108,6 +110,8 @@ fn test_borrow_below_minimum() {
     let collateral_asset = Address::generate(&env);
 
     client.initialize(&admin, &1_000_000_000, &5000);
+    client.register_asset(&admin, &asset);
+    client.register_asset(&admin, &collateral_asset);
 
     let result = client.try_borrow(&user, &asset, &1000, &collateral_asset, &2000);
     assert_eq!(result, Err(Ok(BorrowError::BelowMinimumBorrow)));
@@ -126,6 +130,8 @@ fn test_borrow_debt_ceiling() {
     let collateral_asset = Address::generate(&env);
 
     client.initialize(&admin, &50_000, &1000);
+    client.register_asset(&admin, &asset);
+    client.register_asset(&admin, &collateral_asset);
 
     let result = client.try_borrow(&user, &asset, &100_000, &collateral_asset, &200_000);
     assert_eq!(result, Err(Ok(BorrowError::DebtCeilingReached)));
@@ -253,6 +259,8 @@ fn test_overflow_protection() {
     let collateral_asset = Address::generate(&env);
 
     client.initialize(&admin, &i128::MAX, &1000);
+    client.register_asset(&admin, &asset);
+    client.register_asset(&admin, &collateral_asset);
 
     // First borrow with reasonable amount
     client.borrow(&user, &asset, &1_000_000, &collateral_asset, &2_000_000);
@@ -330,20 +338,13 @@ fn test_coverage_extremes() {
     client.upgrade_init(&admin, &current_hash, &1);
 
     // 1. View Error Paths (Oracle zero/negative)
-    // We can't easily mock the oracle to return 0 mid-test without registering a new one
-    // but we can try to hit the "unconfigured" or "invalid" paths.
     let _ = client.get_max_liquidatable_amount(&user);
     let _ = client.get_health_factor(&user);
 
     // 2. Withdrawal Overflow Paths (Massive numbers)
-    // Setting up a debt that would overflow when multiplied by 1.5
     client.deposit_collateral(&user, &asset, &1000);
     client.data_store_init(&admin);
-    // Use data_save to inject a massive debt directly into storage to bypass borrow checks
     client.data_grant_writer(&admin, &admin);
-    // The key for user debt in borrow module is BorrowDataKey::BorrowUserDebt(user)
-    // We'd need to know the exact serialization.
-    // Instead, let's just use regular borrow with a very large amount if ceiling allows.
     client.initialize_borrow_settings(&i128::MAX, &1);
     client.initialize_deposit_settings(&i128::MAX, &0);
     client.borrow(&user, &asset, &1_000_000_000, &asset, &2_000_000_000);
