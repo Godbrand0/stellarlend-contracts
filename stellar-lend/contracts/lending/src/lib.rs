@@ -1,9 +1,9 @@
-#[cfg(test)]
-mod math_safety_test;
 #![no_std]
 #![allow(deprecated)]
 #![allow(clippy::absurd_extreme_comparisons)]
 #![allow(unexpected_cfgs)]
+#[cfg(test)]
+mod math_safety_test;
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Val, Vec};
 mod borrow;
 mod constants;
@@ -46,7 +46,7 @@ use cross_asset::{
     borrow_asset as cross_borrow_asset, deposit_collateral_asset as cross_deposit_collateral,
     get_cross_position_summary as cross_position_summary, initialize_admin as cross_init_admin,
     repay_asset as cross_repay_asset, set_asset_params as cross_set_asset_params,
-    withdraw_asset as cross_withdraw_asset, AssetParams, PositionSummary,
+    set_borrow_cap as cross_set_borrow_cap, withdraw_asset as cross_withdraw_asset, AssetParams, PositionSummary,
 };
 use deposit::{
     deposit as deposit_impl, get_user_collateral as get_deposit_collateral_impl,
@@ -94,6 +94,8 @@ pub use stellarlend_common::upgrade::{UpgradeError, UpgradeStage, UpgradeStatus}
 
 #[cfg(test)]
 mod borrow_test;
+#[cfg(test)]
+mod borrow_cap_test;
 #[cfg(test)]
 mod borrow_withdraw_sequence_adversarial_test;
 // cross_asset_test targets a different contract API; disabled until migrated
@@ -551,8 +553,6 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
 
     interest_256.to_i128().unwrap_or(i128::MAX)
 }
-
-    }
 
     /// Get user's collateral position (borrow module)
     pub fn get_user_collateral(env: Env, user: Address) -> BorrowCollateral {
@@ -1186,6 +1186,18 @@ pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
             return Err(CrossAssetError::ProtocolPaused);
         }
         cross_set_asset_params(&env, asset, params)
+    }
+
+    /// Set borrow cap for a specific asset (admin only)
+    pub fn set_borrow_cap(
+        env: Env,
+        asset: Address,
+        cap: i128,
+    ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
+        cross_set_borrow_cap(&env, asset, cap)
     }
 
     /// Deposit collateral for a specific asset
