@@ -178,7 +178,20 @@ fn is_stale(env: &Env, asset: &Address, last_updated: u64) -> bool {
     age > effective_max_staleness(env, asset)
 }
 
-impl MarketState {
+/// Result returned by view functions for off-chain consumption.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProtocolReport {
+    pub asset: Address,
+    pub total_deposits: i128,
+    pub total_borrows: i128,
+    pub reserves: i128,
+    pub bad_debt: i128,
+    pub utilisation_bps: i128, // borrows / deposits * 10_000
+    pub is_solvent: bool,
+}
+
+impl ProtocolReport {
     /// Solvency invariant: net assets must never be negative.
     /// net_assets = reserves + total_deposits - total_borrows - bad_debt
     pub fn check_solvency_invariant(&self) -> bool {
@@ -195,19 +208,6 @@ impl MarketState {
     pub fn check_reserves_non_negative(&self) -> bool {
         self.reserves >= 0
     }
-}
-
-/// Result returned by view functions for off-chain consumption.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProtocolReport {
-    pub asset: Address,
-    pub total_deposits: i128,
-    pub total_borrows: i128,
-    pub reserves: i128,
-    pub bad_debt: i128,
-    pub utilisation_bps: i128, // borrows / deposits * 10_000
-    pub is_solvent: bool,
 }
 
 /// Submit a price update for `asset`.

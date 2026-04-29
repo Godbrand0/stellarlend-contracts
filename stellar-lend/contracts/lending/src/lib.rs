@@ -2,8 +2,8 @@
 #![allow(deprecated)]
 #![allow(clippy::absurd_extreme_comparisons)]
 #![allow(unexpected_cfgs)]
-
-
+#[cfg(test)]
+mod math_safety_test;
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Val, Vec};
 mod borrow;
 mod constants;
@@ -23,6 +23,7 @@ mod governance;
 mod storage;
 mod types;
 mod errors;
+mod validation;
 #[cfg(test)]
 mod errors_test;
 
@@ -51,7 +52,7 @@ use cross_asset::{
     borrow_asset as cross_borrow_asset, deposit_collateral_asset as cross_deposit_collateral,
     get_cross_position_summary as cross_position_summary, initialize_admin as cross_init_admin,
     repay_asset as cross_repay_asset, set_asset_params as cross_set_asset_params,
-    withdraw_asset as cross_withdraw_asset, AssetParams, PositionSummary,
+    set_borrow_cap as cross_set_borrow_cap, withdraw_asset as cross_withdraw_asset, AssetParams, PositionSummary,
 };
 use deposit::{
     deposit as deposit_impl, get_user_collateral as get_deposit_collateral_impl,
@@ -95,6 +96,8 @@ pub use stellarlend_common::upgrade::{UpgradeError, UpgradeStage, UpgradeStatus}
 
 #[cfg(test)]
 mod borrow_test;
+#[cfg(test)]
+mod borrow_cap_test;
 #[cfg(test)]
 mod borrow_withdraw_sequence_adversarial_test;
 // cross_asset_test targets a different contract API; disabled until migrated
@@ -517,6 +520,36 @@ impl LendingContract {
     position.interest_accrued = position.interest_accrued.saturating_add(accrued);
     position
 }
+pub(crate) fn calculate_interest(env: &Env, position: &DebtPosition) -> i128 {
+    if position.borrowed_amount == 0 {
+        return 0;
+    }
+
+    let time_elapsed = env
+        .ledger()
+        .timestamp()
+        .saturating_sub(position.last_update);
+
+    let borrowed_256 = I256::from_i128(env, position.borrowed_amount);
+    let rate_256 = I256::from_i128(env, INTEREST_RATE_PER_YEAR);
+    let time_256 = I256::from_i128(env, time_elapsed as i128);
+
+    let denominator =
+        I256::from_i128(env, 10000).mul(&I256::from_i128(env, SECONDS_PER_YEAR as i128));
+
+    let numerator = borrowed_256.mul(&rate_256).mul(&time_256);
+
+    let interest_256 = if numerator > I256::from_i128(env, 0) {
+        numerator
+            .add(&denominator.sub(&I256::from_i128(env, 1)))
+            .div(&denominator)
+    } else {
+        numerator.div(&denominator)
+    };
+
+    interest_256.to_i128().unwrap_or(i128::MAX)
+}
+
     /// Get user's collateral position (borrow module)
 
     pub fn get_user_collateral(env: Env, user: Address) -> BorrowCollateral {
@@ -1164,6 +1197,18 @@ impl LendingContract {
             return Err(CrossAssetError::ProtocolPaused);
         }
         cross_set_asset_params(&env, asset, params)
+    }
+
+    /// Set borrow cap for a specific asset (admin only)
+    pub fn set_borrow_cap(
+        env: Env,
+        asset: Address,
+        cap: i128,
+    ) -> Result<(), CrossAssetError> {
+        if is_read_only_logic(&env) {
+            return Err(CrossAssetError::ProtocolPaused);
+        }
+        cross_set_borrow_cap(&env, asset, cap)
     }
 
     /// Deposit collateral for a specific asset
